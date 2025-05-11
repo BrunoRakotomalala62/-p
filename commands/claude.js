@@ -6,7 +6,7 @@ const sendMessage = require('../handles/sendMessage'); // Importer la fonction s
 const userSessionIds = {};
 
 // URL de base pour l'API Sonnet 3.7
-const API_BASE_URL = 'https://renzsuperb.onrender.com/api/sonnet-3.7';
+const API_BASE_URL = 'https://zaikyoov3-up.up.railway.app/api/sonnet-3.7';
 
 // Stockage des images en attente
 const pendingImages = {};
