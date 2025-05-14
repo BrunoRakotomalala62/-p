@@ -51,7 +51,7 @@ module.exports = async (senderId, prompt, api) => {
             
             // Créer une réponse formatée et stylisée
             const formattedReply = `
-✅EDUCATION AMPINGA D'OR🇲🇬
+📺📝 WIKIPEDIA 📊📒
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 📚 *WIKIPEDIA* - ${content.toUpperCase()} 📚
 
@@ -59,7 +59,7 @@ ${summary}
 
 🔗 *Source* : ${pageUrl}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | ❤️AMPING D'OR❤️
+🧠 Powered by 👉@Bruno | ❤️ wikipédia ❤️
 `;
 
             // Diviser le message en plusieurs parties si nécessaire
