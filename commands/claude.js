@@ -121,6 +121,9 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             
             // Appel à l'API avec l'image
             response = await axios.get(apiUrl);
+            
+            // Supprimer l'image de la mémoire après utilisation pour éviter la réutilisation incorrecte
+            delete pendingImages[senderId];
         } else {
             // Appel à l'API sans image (texte seulement)
             const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&system=2`;
