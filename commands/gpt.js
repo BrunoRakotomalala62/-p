@@ -5,8 +5,8 @@ const sendMessage = require('../handles/sendMessage'); // Importer la fonction s
 // Stockage des IDs de session par utilisateur pour maintenir les conversations continues
 const userSessionIds = {};
 
-// URL de base pour l'API Sonnet 3.7
-const API_BASE_URL = 'https://renzsuperb.onrender.com/api/gpt-4o-all';
+// URL de base pour l'API GPT-4.5 Preview
+const API_BASE_URL = 'https://zaikyoov3-up.up.railway.app/api/openai-gpt-4.5-preview';
 
 // Stockage des images en attente
 const pendingImages = {};
@@ -94,18 +94,19 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             const imageUrl = pendingImages[senderId];
             
             // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&img=${encodeURIComponent(imageUrl)}`;
+            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&imgs=${encodeURIComponent(imageUrl)}&system=2`;
             
             // Appel à l'API avec l'image
             response = await axios.get(apiUrl);
         } else {
             // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}`;
+            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&system=2`;
             response = await axios.get(apiUrl);
         }
         
         // Récupérer la réponse de l'API
-        const { reply, session_id, author } = response.data;
+        const { response: reply, author } = response.data;
+        const session_id = userSessionIds[senderId]; // Maintenir l'ID de session existant
         
         // Mettre à jour l'ID de session si nécessaire
         if (session_id) {
