@@ -117,13 +117,13 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             const imageUrl = pendingImages[senderId];
             
             // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&img=${encodeURIComponent(imageUrl)}`;
+            const apiUrl = `${API_BASE_URL}?prompt=Decrivez+cette+photo&uid=1&imgs=https%3A%2F%2Fwww.thispersondoesnotexist.com&system=2`;
             
             // Appel à l'API avec l'image
             response = await axios.get(apiUrl);
         } else {
             // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}`;
+            const apiUrl = `${API_BASE_URL}?prompt=Decrivez+cette+photo&uid=1&imgs=https%3A%2F%2Fwww.thispersondoesnotexist.com&system=2`;
             response = await axios.get(apiUrl);
         }
         
