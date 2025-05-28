@@ -128,7 +128,8 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         }
         
         // Récupérer la réponse de l'API
-        const { reply, session_id, author } = response.data;
+        const { reply, response: apiResponse, session_id, author } = response.data;
+        const finalReply = reply || apiResponse;
         
         // Mettre à jour l'ID de session si nécessaire
         if (session_id) {
@@ -143,7 +144,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 ${prompt}
 
 ✨ *Réponse:* 
-${reply.replace(/^([A-Z][^:]+):(.*)$/gm, '**$1**:$2')
+${finalReply.replace(/^([A-Z][^:]+):(.*)$/gm, '**$1**:$2')
        .replace(/^(- [A-Z][^:]+):(.*)$/gm, '**$1**:$2')
        .replace(/^(#+ .+)$/gm, '**$1**')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
