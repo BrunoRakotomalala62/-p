@@ -1,12 +1,11 @@
-
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage'); // Importer la fonction sendMessage
 
 // Stockage des IDs de session par utilisateur pour maintenir les conversations continues
 const userSessionIds = {};
 
-// URL de base pour l'API Sonnet 3.7
-const API_BASE_URL = 'https://zaikyoov3-up.up.railway.app/api/gpt-4.5-preview';
+// URL de base pour l'API Ronald
+const API_BASE_URL = 'https://ronald-api-v1.vercel.app/api/ronald';
 
 // Stockage des images en attente
 const pendingImages = {};
@@ -71,7 +70,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             delete pendingImages[senderId];
             return { skipCommandCheck: true };
         }
-        
+
         // Initialiser l'ID de session si ce n'est pas déjà fait
         if (!userSessionIds[senderId]) {
             userSessionIds[senderId] = senderId; // Utiliser senderId comme ID de session
@@ -87,61 +86,32 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             return { skipCommandCheck: true };
         }
 
-        // Si le prompt est vide (commande 'claude' sans texte)
+        // Si le prompt est vide (commande 'bruno' sans texte)
         if (!prompt || prompt.trim() === '') {
-            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Bruno, votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
+            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Bruno, votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question!");
             return;
         }
 
         // Envoyer un message d'attente stylisé
         await sendMessage(senderId, "✨🧠 Analyse en cours... Bruno réfléchit à votre requête avec intelligence artificielle supérieure! ⏳💫");
 
-        let response;
+        // Construire l'URL de l'API Ronald
+        const apiUrl = `${API_BASE_URL}?message=${encodeURIComponent(prompt)}`;
 
-        // Vérifier si nous avons une image en attente pour cet utilisateur
-        if (pendingImages[senderId]) {
-            const imageUrl = pendingImages[senderId];
-
-            // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&img=${encodeURIComponent(imageUrl)}`;
-
-            // Appel à l'API avec l'image
-            response = await axios.get(apiUrl);
-        } else {
-            // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}`;
-            response = await axios.get(apiUrl);
-        }
+        // Appel à l'API Ronald
+        const response = await axios.get(apiUrl);
 
         // Récupérer la réponse de l'API
-        const { reply, session_id, author } = response.data;
+        const { response: reply, operator, powered_by } = response.data;
 
-        // Mettre à jour l'ID de session si nécessaire
-        if (session_id) {
-            userSessionIds[senderId] = session_id;
-        }
-
-        // Créer une réponse formatée et stylisée
-        const formattedReply = `
-✅ Bruno MADAGASCAR🇲🇬
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-💬 *Votre question:* 
-${prompt}
-
-✨ *Réponse:* 
-${reply}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | AI BRUNO
-`;
+        // Créer une réponse formatée selon le nouveau format demandé
+        const formattedReply = `📝 REPONSE DE BRUNO 🤖\n${reply}`;
 
         // Envoyer la réponse formatée en utilisant la nouvelle fonction
         await sendLongMessage(senderId, formattedReply);
 
-        // Si c'était une demande liée à une image, on peut maintenant la conserver
-        // pour les futures questions mais on ne la mentionne plus dans les messages
-
     } catch (error) {
-        console.error("Erreur lors de l'appel à l'API Claude Sonnet:", error);
+        console.error("Erreur lors de l'appel à l'API Ronald:", error);
 
         // Message d'erreur stylisé
         await sendMessage(senderId, `
@@ -162,6 +132,6 @@ ou contactez l'administrateur.
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "Bruno",
-    description: "Discutez avec Bruno, une IA avancée capable d'analyser du texte et des images.",
-    usage: "Envoyez 'gpt4 <question>' pour discuter avec Bruno, ou envoyez une image suivie de questions à son sujet."
+    description: "Discutez avec Bruno, une IA avancée propulsée par Ronald IA - LLaMA 3 via Groq.",
+    usage: "Envoyez 'bruno <question>' pour discuter avec Bruno."
 };
