@@ -22,6 +22,8 @@ async function sendLongMessage(senderId, message) {
 
     // Diviser le message en plusieurs parties intelligemment
     let startIndex = 0;
+    let partNumber = 1;
+    const totalParts = Math.ceil(message.length / MAX_MESSAGE_LENGTH);
 
     while (startIndex < message.length) {
         let endIndex = startIndex + MAX_MESSAGE_LENGTH;
@@ -29,7 +31,7 @@ async function sendLongMessage(senderId, message) {
         // Si on n'est pas à la fin du message
         if (endIndex < message.length) {
             // Chercher le dernier séparateur (point, virgule, espace) avant la limite
-            const separators = ['. ', ', ', ' ', '! ', '? ', '.\n', ',\n', '!\n', '?\n', '\n\n', '\n'];
+            const separators = ['\n\n', '\n', '. ', ', ', ' • ', '• ', ' : ', ' - ', ' ', '! ', '? ', '.\n', ',\n', '!\n', '?\n'];
             let bestBreakPoint = -1;
 
             // Chercher du point le plus proche de la fin jusqu'au début
@@ -51,12 +53,23 @@ async function sendLongMessage(senderId, message) {
         }
 
         // Extraire la partie du message
-        const messagePart = message.substring(startIndex, endIndex);
+        let messagePart = message.substring(startIndex, endIndex);
+        
+        // Ajouter un indicateur de partie si le message est divisé
+        if (totalParts > 1) {
+            if (partNumber === 1) {
+                messagePart = `${messagePart}\n\n📄 Partie ${partNumber}/${totalParts}`;
+            } else {
+                messagePart = `📄 Partie ${partNumber}/${totalParts}\n\n${messagePart}`;
+            }
+        }
+        
         await sendMessage(senderId, messagePart);
         await new Promise(resolve => setTimeout(resolve, 1000));  // Pause de 1s entre chaque message
 
         // Passer à la partie suivante
         startIndex = endIndex;
+        partNumber++;
     }
 }
 
@@ -101,8 +114,17 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         // Appel à l'API Ronald
         const response = await axios.get(apiUrl);
 
-        // Récupérer la réponse de l'API
-        const { response: reply, operator, powered_by } = response.data;
+        // Récupérer la réponse de l'API (vérifier la structure de la réponse)
+        let reply = '';
+        if (response.data.response) {
+            reply = response.data.response;
+        } else if (response.data.message) {
+            reply = response.data.message;
+        } else if (response.data.reply) {
+            reply = response.data.reply;
+        } else {
+            reply = JSON.stringify(response.data); // Fallback pour voir la structure
+        }
 
         // Créer une réponse formatée selon le nouveau format demandé
         const formattedReply = `📝 REPONSE DE BRUNO 🤖\n${reply}`;
