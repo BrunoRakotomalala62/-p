@@ -93,7 +93,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         }
 
         // Envoyer un message d'attente stylisé
-        await sendMessage(senderId, "✨🧠 Analyse en cours... Bruno réfléchit à votre requête avec intelligence artificielle supérieure! ⏳💫");
+        await sendMessage(senderId, "✨🧠 Analyse en cours... ⏳💫");
 
         // Construire l'URL de l'API Ronald
         const apiUrl = `${API_BASE_URL}?message=${encodeURIComponent(prompt)}`;
