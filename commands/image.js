@@ -1,49 +1,69 @@
+
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage'); // Importer la fonction sendMessage
 
-const sendImageFromPrompt = async (senderId, prompt) => {
-    // Envoyer un message de confirmation que la requête est en cours de traitement
-    await sendMessage(senderId, `Message reçu, je prépare votre image...`);
-
+module.exports = async (senderId, prompt) => {
     try {
-        // Construire l'URL de l'API avec le prompt
-        const apiUrl = `https://team-calyx.onrender.com/gen?prompt=${encodeURIComponent(prompt)}`;
-        
-        // Appeler l'API pour générer l'image
+        // Envoyer un message de confirmation que le message a été reçu
+        await sendMessage(senderId, "Message reçu, je prépare une réponse...");
+
+        // Vérifier si l'utilisateur a fourni un terme de recherche
+        if (!prompt || prompt.trim() === '') {
+            await sendMessage(senderId, "Veuillez fournir un terme de recherche pour trouver des images.");
+            return;
+        }
+
+        // Déterminer s'il s'agit d'une requête pour des images
+        const query = encodeURIComponent(prompt.trim());
+        const apiUrl = `https://orc-six-v2.vercel.app/pinterest?search=${query}`;
+
+        // Envoyer un message de confirmation de recherche
+        await sendMessage(senderId, "Recherche en cours... Je vais vous envoyer les images.");
+
+        // Appeler l'API de recherche d'images Pinterest
         const response = await axios.get(apiUrl);
-        console.log('Réponse de l\'API:', response.data); // Afficher la réponse de l'API
 
-        // Vérifier si la réponse contient une URL d'image
-        if (response.data && response.data.image_url) { // Modifiez cette ligne selon la structure de votre réponse
-            const imageUrl = response.data.image_url;
+        // Récupérer les images de la réponse de l'API
+        const images = response.data.data;
 
-            // Envoyer l'image à l'utilisateur
-            await sendMessage(senderId, { files: [imageUrl] }); // Envoi de l'image en tant que fichier
+        // Vérifier si des images sont retournées
+        if (images && images.length > 0) {
+            // Boucler sur chaque image avec un intervalle d'une seconde entre chaque envoi
+            for (let i = 0; i < images.length; i++) {
+                const imageUrl = images[i];
+
+                // Envoyer un message avec l'image
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: 'image',
+                        payload: {
+                            url: imageUrl,
+                            is_reusable: true
+                        }
+                    }
+                });
+
+                // Attendre une seconde avant d'envoyer la prochaine image
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // Envoyer un message final une fois toutes les images envoyées
+            await sendMessage(senderId, `Toutes les images pour "${prompt}" ont été envoyées. (${images.length} images trouvées)`);
         } else {
-            await sendMessage(senderId, 'Désolé, je n\'ai pas pu trouver l\'image.');
+            // Si aucune image n'est trouvée, informer l'utilisateur
+            await sendMessage(senderId, `Aucune image trouvée pour "${prompt}".`);
         }
     } catch (error) {
-        console.error('Erreur lors de l\'appel à l\'API de génération d\'images:', error);
-        await sendMessage(senderId, 'Désolé, une erreur s\'est produite lors de la génération de l\'image.');
+        console.error("Erreur lors de la récupération des images:", error);
+
+        // Envoyer un message d'erreur à l'utilisateur en cas de problème
+        await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande d'images.");
     }
-};
-
-module.exports = async (senderId, userText) => {
-    // Vérifier si l'utilisateur a fourni un prompt
-    const prompt = userText.trim();
-
-    if (prompt) {
-        // Envoyer l'image à partir du prompt
-        await sendImageFromPrompt(senderId, prompt);
-        return;
-    }
-
-    await sendMessage(senderId, 'Veuillez fournir un prompt pour générer une image.');
 };
 
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "image",  // Le nom de la commande
-    description: "Demandez une image en envoyant un prompt.",  // Description de la commande
-    usage: "Envoyez simplement un texte pour obtenir une image."  // Comment utiliser la commande
+    description: "Recherche et envoie des images Pinterest basées sur le texte saisi.",  // Description de la commande
+    usage: "Envoyez 'image <recherche>' pour trouver des images sur Pinterest."  // Comment utiliser la commande
 };
