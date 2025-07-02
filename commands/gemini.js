@@ -8,7 +8,7 @@ const pendingImages = {};
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
         const API_ENDPOINT = "https://kaiz-apis.gleeze.com/api/gemini-vision";
-        const API_KEY = ""; // Votre clé API Kaiz
+        const API_KEY = "669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225"; // Votre clé API Kaiz
         const UID = Math.floor(Math.random() * 1000000).toString(); // UID aléatoire
 
         // Vérifier si nous avons affaire à un attachement image
