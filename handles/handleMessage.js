@@ -4,6 +4,7 @@ const sendMessage = require('./sendMessage');
 const axios = require('axios');
 const { checkSubscription } = require('../utils/subscription');
 const geminiModule = require('../auto/gemini');
+const { handleAutoDownload } = require('../commands/autodl');
 
 // Charger toutes les commandes du dossier 'commands'
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -257,9 +258,11 @@ const handleMessage = async (event, api) => {
         }
     }
 
-    // Si aucune commande n'est active ou détectée, ALORS utiliser auto/gemini.js
-    // Vérifier d'abord si une commande est déjà active
-    if (!activeCommands[senderId]) {
+    // Vérifier d'abord s'il s'agit d'un lien vidéo pour téléchargement automatique
+    const isVideoLinkHandled = await handleAutoDownload(senderId, userText, api);
+    
+    // Si ce n'était pas un lien vidéo et qu'aucune commande n'est active, utiliser auto/gemini.js
+    if (!isVideoLinkHandled && !activeCommands[senderId]) {
         await geminiModule.handleTextMessage(senderId, userText);
     }
 };
