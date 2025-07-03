@@ -171,7 +171,8 @@ const handleMessage = async (event, api) => {
             }
             return;
         }
-        // Si ce ne sont pas des images, continuer le traitement normal (ne pas retourner ici)
+        // Si ce ne sont pas des images, continuer le traitement normal
+        // Ne pas afficher de message d'erreur si ce sont d'autres types de pièces jointes
     }
 
     // Vérifier si l'utilisateur a envoyé un message texte
