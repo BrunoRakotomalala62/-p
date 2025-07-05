@@ -1,0 +1,30 @@
+{
+  "user_ask": "actualités du jour à Madagascar du 02 juillet 2025?",
+  "mode": "general",
+  "answer": {
+    "llm_response": "### Actualités Économiques\nÀ compter du 1er juillet 2025, les intérêts des crédits bancaires seront soumis à une TVA de 20 %, mettant fin à une exonération en vigueur depuis 2006 ((1)).\n\n### Actualités Politiques\nLe Président Andry Rajoelina a réitéré ses engagements en promettant qu'« aucune commune ne sera laissée pour compte » lors de son déplacement dans les districts de Vohibato et Lalangina, dans la province de Fianarantsoa ((4)). Cette déclaration s'ajoute à une longue liste de promesses formulées pendant son premier mandat, dont les résultats sur le terrain ne sont pas toujours visibles ((4)).",
+    "references": [
+      {
+        "title": "Madagascar-Tribune.com",
+        "url": "https://www.madagascar-tribune.com/",
+        "hostname": "madagascar-tribune.com",
+        "faviconUrl": "https://www.google.com/s2/favicons?domain=https://www.madagascar-tribune.com&sz=128",
+        "imageUrl": "https://www.madagascar-tribune.com/local/cache-vignettes/L103xH54/a0228130c8228bd8f100c4318a3150-9c220.png",
+        "description": "À compter du 1er juillet 2025, les intérêts des crédits bancaires seront soumis à une TVA de 20 %, mettant fin à une exonération en vigueur depuis 2006.",
+        "date": "2025-07-05",
+        "searchEngine": "google",
+        "searchQuery": "actualités du jour Madagascar 02 juillet 2025"
+      }
+    ],
+    "followUpQuestion": {
+      "status": "complete",
+      "queries": [
+        "Quelles sont les implications de la **TVA de 20%** sur les crédits bancaires pour les entreprises malgaches",
+        "Comment cette nouvelle mesure affectera-t-elle le **secteur immobilier** à Madagascar",
+        "Quels sont les **secteurs économiques** les plus touchés par cette augmentation de la TVA",
+        "Quelles sont les réactions des **banques commerciales** face à cette nouvelle taxation",
+        "Quelles sont les **promesses spécifiques** du Président Rajoelina pour les districts de Vohibato et Lalangina"
+      ]
+    }
+  }
+}
