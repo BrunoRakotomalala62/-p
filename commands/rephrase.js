@@ -15,11 +15,16 @@ module.exports = async (senderId, prompt) => {
         const originalPhrase = response.data["phrase réel"];
         const rephrasedText = response.data.paraphrase;
 
+        // Traduire la reformulation en français avec MyMemory API
+        const translationApiUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(rephrasedText)}&langpair=en|fr`;
+        const translationResponse = await axios.get(translationApiUrl);
+        const frenchTranslation = translationResponse.data.responseData.translatedText;
+
         // Attendre 2 secondes avant d'envoyer la réponse
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Formatter et envoyer la réponse
-        const reply = `📝 **Reformulation terminée :**\n\n🔸 **Texte original :** ${originalPhrase}\n🔸 **Reformulation :** ${rephrasedText}`;
+        // Formatter et envoyer la réponse avec traduction
+        const reply = `📝 **Reformulation terminée :**\n\n🔸 **Texte original :** ${originalPhrase}\n🔸 **Reformulation :** ${rephrasedText}\n🔸 **Traduction en français :** ${frenchTranslation}`;
         
         await sendMessage(senderId, reply);
     } catch (error) {
