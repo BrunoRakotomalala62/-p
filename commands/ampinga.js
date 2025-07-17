@@ -134,36 +134,24 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         // Ajouter le message de l'utilisateur à l'historique
         conversationHistory[senderId].messages.push({ role: 'user', content: prompt });
 
-        // Vérifier si l'utilisateur a une image en attente ou a déjà envoyé une image
-        if (pendingImages[senderId] || conversationHistory[senderId].hasImage) {
-            const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl;
-            
-            // Construire un prompt qui prend en compte l'historique de conversation pour la continuité
-            let contextualPrompt = prompt;
-            if (conversationHistory[senderId].messages.length > 1) {
-                // Inclure un peu de contexte pour les questions de suivi
-                contextualPrompt = `En référence à l'image précédente et à notre conversation, ${prompt}`;
-            }
-            
-            // Appeler l'API avec l'image et la question
-            const apiUrl = `http://sgp1.hmvhostings.com:25721/geminiv?prompt=${encodeURIComponent(contextualPrompt)}&image_url=${encodeURIComponent(imageUrl)}`;
-            apiResponse = await axios.get(apiUrl);
-            response = apiResponse.data.answer;
-        } else {
-            // Construire un prompt qui prend en compte l'historique de conversation
-            let contextualPrompt = prompt;
-            if (conversationHistory[senderId].messages.length > 1) {
-                // Extraire les 3 derniers messages pour le contexte (ou moins s'il y en a moins)
-                const recentMessages = conversationHistory[senderId].messages.slice(-3);
-                const context = recentMessages.map(msg => `${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`).join('\n');
-                contextualPrompt = `Étant donné le contexte de notre conversation: \n${context}\n\nRépondre à: ${prompt}`;
-            }
-            
-            // Appeler l'API normale pour les questions sans image
-            const apiUrl = `http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(contextualPrompt)}`;
-            apiResponse = await axios.get(apiUrl);
-            response = apiResponse.data.answer;
+        // Construire un prompt qui prend en compte l'historique de conversation
+        let contextualPrompt = prompt;
+        if (conversationHistory[senderId].messages.length > 1) {
+            // Extraire les 3 derniers messages pour le contexte (ou moins s'il y en a moins)
+            const recentMessages = conversationHistory[senderId].messages.slice(-3);
+            const context = recentMessages.map(msg => `${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`).join('\n');
+            contextualPrompt = `Étant donné le contexte de notre conversation: \n${context}\n\nRépondre à: ${prompt}`;
         }
+        
+        // Si l'utilisateur a une image en attente, inclure cette information dans le prompt
+        if (pendingImages[senderId] || conversationHistory[senderId].hasImage) {
+            contextualPrompt = `En référence à l'image précédente et à notre conversation, ${contextualPrompt}`;
+        }
+        
+        // Appeler la nouvelle API rapido.zetsu.xyz
+        const apiUrl = `https://rapido.zetsu.xyz/api/gpt4o?query=${encodeURIComponent(contextualPrompt)}&uid=${userSessions[senderId].uid}`;
+        apiResponse = await axios.get(apiUrl);
+        response = apiResponse.data.response;
 
         // Ajouter la réponse à l'historique
         conversationHistory[senderId].messages.push({ role: 'assistant', content: response });
