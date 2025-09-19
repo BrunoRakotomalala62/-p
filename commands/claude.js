@@ -5,8 +5,8 @@ const sendMessage = require('../handles/sendMessage'); // Importer la fonction s
 // Stockage des IDs de session par utilisateur pour maintenir les conversations continues
 const userSessionIds = {};
 
-// URL de base pour l'API GPT-4.5 Preview
-const API_BASE_URL = 'https://zaikyoov3-up.up.railway.app/api/anthropic-claude-3-opus';
+// URL de base pour l'API Claude mise à jour
+const API_BASE_URL = 'https://rapido.zetsu.xyz/api/anthropic';
 
 // Stockage des images en attente
 const pendingImages = {};
@@ -80,12 +80,12 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
         // Si le prompt est vide (commande 'claude' sans texte)
         if (!prompt || prompt.trim() === '') {
-            await sendMessage(senderId, "🤖✨ Bonjour! Je suis gpt4 , votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
+            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Claude, votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
             return;
         }
 
         // Envoyer un message d'attente stylisé
-        await sendMessage(senderId, "✨🧠 Analyse en cours... Gpt4 réfléchit à votre requête avec intelligence artificielle supérieure! ⏳💫");
+        await sendMessage(senderId, "✨🧠 Analyse en cours... Claude réfléchit à votre requête avec intelligence artificielle supérieure! ⏳💫");
 
         let response;
 
@@ -94,28 +94,22 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             const imageUrl = pendingImages[senderId];
 
             // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&imgs=${encodeURIComponent(imageUrl)}&system=2`;
+            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-opus-4-20250514&image=${encodeURIComponent(imageUrl)}&system=&max_tokens=3000`;
 
             // Appel à l'API avec l'image
             response = await axios.get(apiUrl);
         } else {
             // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&system=2`;
+            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-opus-4-20250514&system=&max_tokens=3000`;
             response = await axios.get(apiUrl);
         }
 
         // Récupérer la réponse de l'API
-        const { response: reply, author } = response.data;
-        const session_id = userSessionIds[senderId]; // Maintenir l'ID de session existant
-
-        // Mettre à jour l'ID de session si nécessaire
-        if (session_id) {
-            userSessionIds[senderId] = session_id;
-        }
+        const { response: reply } = response.data;
 
         // Créer une réponse formatée et stylisée
         const formattedReply = `
-✅GPT-4 MADAGASCAR🇲🇬
+✅CLAUDE MADAGASCAR🇲🇬
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 💬 *Votre question:* 
 ${prompt}
@@ -123,7 +117,7 @@ ${prompt}
 ✨ *Réponse:* 
 ${reply}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | Gpt 4
+🧠 Powered by 👉@Bruno | Claude AI
 `;
 
         // Envoyer la réponse formatée en utilisant la nouvelle fonction
@@ -133,7 +127,7 @@ ${reply}
         // pour les futures questions mais on ne la mentionne plus dans les messages
 
     } catch (error) {
-        console.error("Erreur lors de l'appel à l'API Claude Sonnet:", error);
+        console.error("Erreur lors de l'appel à l'API Claude:", error);
 
         // Message d'erreur stylisé
         await sendMessage(senderId, `
@@ -153,7 +147,7 @@ ou contactez l'administrateur.
 
 // Ajouter les informations de la commande
 module.exports.info = {
-    name: "gpt",
-    description: "Discutez avec Gpt 4, une IA avancée capable d'analyser du texte et des images.",
-    usage: "Envoyez 'gpt <question>' pour discuter avec Claude, ou envoyez une image suivie de questions à son sujet."
+    name: "claude",
+    description: "Discutez avec Claude, une IA avancée capable d'analyser du texte et des images.",
+    usage: "Envoyez 'claude <question>' pour discuter avec Claude, ou envoyez une image suivie de questions à son sujet."
 };
