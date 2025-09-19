@@ -11,6 +11,47 @@ const API_BASE_URL = 'https://rapido.zetsu.xyz/api/anthropic';
 // Stockage des images en attente
 const pendingImages = {};
 
+// Fonction pour découper un message long en morceaux
+function splitMessageIntoChunks(message, maxLength = 2000) {
+    const chunks = [];
+    let startIndex = 0;
+    
+    while (startIndex < message.length) {
+        let endIndex = startIndex + maxLength;
+        
+        // Si on n'est pas à la fin du message
+        if (endIndex < message.length) {
+            // Chercher le dernier séparateur (point, virgule, espace) avant la limite
+            const separators = ['. ', '! ', '? ', ', ', '\n\n', '\n', ' • ', '• ', ' : ', ' - ', ' ', '/', ')', ']'];
+            let bestBreakPoint = -1;
+            
+            // Chercher du point le plus proche de la fin jusqu'au début
+            for (const separator of separators) {
+                // Chercher le dernier séparateur dans la plage
+                const lastSeparator = message.lastIndexOf(separator, endIndex);
+                if (lastSeparator > startIndex && (bestBreakPoint === -1 || lastSeparator > bestBreakPoint)) {
+                    bestBreakPoint = lastSeparator + (separator === '\n' || separator === '\n\n' ? 1 : separator.length);
+                }
+            }
+            
+            // Si un séparateur a été trouvé, utiliser ce point de coupure
+            if (bestBreakPoint !== -1) {
+                endIndex = bestBreakPoint;
+            }
+        } else {
+            // Si c'est la dernière partie, prendre jusqu'à la fin
+            endIndex = message.length;
+        }
+        
+        // Extraire la partie du message
+        const messagePart = message.substring(startIndex, endIndex);
+        chunks.push(messagePart);
+        startIndex = endIndex;
+    }
+    
+    return chunks;
+}
+
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
     const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères par message Facebook
@@ -21,43 +62,16 @@ async function sendLongMessage(senderId, message) {
         return;
     }
 
-    // Diviser le message en plusieurs parties intelligemment
-    let startIndex = 0;
+    // Découper le message en morceaux
+    const chunks = splitMessageIntoChunks(message, MAX_MESSAGE_LENGTH);
 
-    while (startIndex < message.length) {
-        let endIndex = startIndex + MAX_MESSAGE_LENGTH;
-
-        // Si on n'est pas à la fin du message
-        if (endIndex < message.length) {
-            // Chercher le dernier séparateur (point, virgule, espace) avant la limite
-            const separators = ['. ', ', ', ' ', '! ', '? ', '.\n', ',\n', '!\n', '?\n', '\n\n', '\n'];
-            let bestBreakPoint = -1;
-
-            // Chercher du point le plus proche de la fin jusqu'au début
-            for (const separator of separators) {
-                // Chercher le dernier séparateur dans la plage
-                const lastSeparator = message.lastIndexOf(separator, endIndex);
-                if (lastSeparator > startIndex && (bestBreakPoint === -1 || lastSeparator > bestBreakPoint)) {
-                    bestBreakPoint = lastSeparator + separator.length;
-                }
-            }
-
-            // Si un séparateur a été trouvé, utiliser ce point de coupure
-            if (bestBreakPoint !== -1) {
-                endIndex = bestBreakPoint;
-            }
-        } else {
-            // Si c'est la dernière partie, prendre jusqu'à la fin
-            endIndex = message.length;
+    // Envoyer chaque morceau successivement
+    for (let i = 0; i < chunks.length; i++) {
+        await sendMessage(senderId, chunks[i]);
+        // Petite pause entre les messages pour éviter de surcharger l'utilisateur
+        if (i < chunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
-
-        // Extraire la partie du message
-        const messagePart = message.substring(startIndex, endIndex);
-        await sendMessage(senderId, messagePart);
-        await new Promise(resolve => setTimeout(resolve, 1000));  // Pause de 1s entre chaque message
-
-        // Passer à la partie suivante
-        startIndex = endIndex;
     }
 }
 
@@ -123,11 +137,11 @@ ${reply}
 🧠 Powered by 👉@Bruno | Claude AI
 `;
 
-        // Envoyer la réponse formatée en utilisant la nouvelle fonction
+        // Envoyer la réponse formatée en utilisant la fonction de découpage dynamique
         await sendLongMessage(senderId, formattedReply);
 
-        // Si c'était une demande liée à une image, on peut maintenant la conserver
-        // pour les futures questions mais on ne la mentionne plus dans les messages
+        // Conserver l'image en attente pour permettre la conversation continue
+        // L'image reste disponible pour les prochaines questions de l'utilisateur
 
     } catch (error) {
         console.error("Erreur lors de l'appel à l'API Claude:", error);
