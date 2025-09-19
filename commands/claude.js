@@ -104,8 +104,11 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             response = await axios.get(apiUrl);
         }
 
+        // Debug: afficher la structure de la réponse
+        console.log("Structure de la réponse API:", JSON.stringify(response.data, null, 2));
+        
         // Récupérer la réponse de l'API
-        const { response: reply } = response.data;
+        const reply = response.data.result || response.data.response || response.data.message || response.data.content || "Aucune réponse reçue de l'API";
 
         // Créer une réponse formatée et stylisée
         const formattedReply = `
