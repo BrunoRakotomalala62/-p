@@ -104,8 +104,28 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             response = await axios.get(apiUrl);
         }
         
-        // Récupérer la réponse de l'API
-        const { response: reply } = response.data;
+        // Débogage : afficher la structure de la réponse
+        console.log('Structure complète de la réponse API:', JSON.stringify(response.data, null, 2));
+        
+        // Récupérer la réponse de l'API avec plusieurs tentatives
+        let reply;
+        if (response.data.response) {
+            reply = response.data.response;
+        } else if (response.data.content) {
+            reply = response.data.content;
+        } else if (response.data.message) {
+            reply = response.data.message;
+        } else if (response.data.text) {
+            reply = response.data.text;
+        } else if (typeof response.data === 'string') {
+            reply = response.data;
+        } else {
+            // Si aucune propriété connue n'est trouvée, utiliser la première valeur non-vide
+            const keys = Object.keys(response.data);
+            reply = keys.length > 0 ? response.data[keys[0]] : 'Réponse vide reçue de l\'API';
+        }
+        
+        console.log('Réponse extraite:', reply);
         
         // Créer une réponse formatée et stylisée
         const formattedReply = `
