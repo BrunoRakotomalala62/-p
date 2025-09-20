@@ -149,7 +149,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         }
         
         // Appeler la nouvelle API rapido.zetsu.xyz
-        const apiUrl = `https://rapido.zetsu.xyz/api/anthropic?q=${encodeURIComponent(contextualPrompt)}&uid=${userSessions[senderId].uid}`;
+        const apiUrl = `https://rapido.zetsu.xyz/api/anthropic?q=${encodeURIComponent(contextualPrompt)}&uid=${userSessions[senderId].uid}&model=claude-3-7-sonnet-20250219&system=&max_token=3000`;
         apiResponse = await axios.get(apiUrl);
         response = apiResponse.data.response;
 
