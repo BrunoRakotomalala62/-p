@@ -46,7 +46,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         const imageUrl = pendingImages[senderId];
         
         // Construire l'URL de l'API avec l'image
-        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-3-7-sonnet-20250219&image=${encodeURIComponent(imageUrl)}&system=&max_tokens=3000`;
+        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-3-7-sonnet-20250219&image=${encodeURIComponent(imageUrl)}&system=&max_token=3000`;
         
         // Appel à l'API avec l'image
         const response = await axios.get(apiUrl);
@@ -56,17 +56,21 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         
         // Récupérer la réponse de l'API
         let reply;
-        if (response.data.response) {
+        
+        // Vérifier d'abord si response.data existe et contient une réponse
+        if (response.data && response.data.response) {
             reply = response.data.response;
-        } else if (response.data.content) {
+        } else if (response.data && response.data.content) {
             reply = response.data.content;
-        } else if (response.data.message) {
+        } else if (response.data && response.data.message) {
             reply = response.data.message;
-        } else if (response.data.text) {
+        } else if (response.data && response.data.text) {
             reply = response.data.text;
         } else if (typeof response.data === 'string') {
             reply = response.data;
         } else {
+            // Afficher la structure complète pour déboguer
+            console.log('Structure de response.data:', JSON.stringify(response.data, null, 2));
             reply = 'Réponse vide reçue de l\'API';
         }
         
