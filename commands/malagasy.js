@@ -29,11 +29,7 @@ module.exports = async (senderId, prompt) => {
             // Formater la réponse
             const formattedReply = `🇲🇬✅ FITIAVANA MLG ✅🇲🇬
 
-${reply}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | Claude AI Malagasy
-`;
+${reply}`;
 
             // Envoyer la réponse
             await sendMessage(senderId, formattedReply);
