@@ -2,6 +2,9 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
+// Stockage des IDs de session par utilisateur pour maintenir les conversations continues
+const userSessionIds = {};
+
 // URL de base pour l'API Claude Malagasy
 const API_BASE_URL = 'https://apis-keith.vercel.app/ai/claudeai';
 
@@ -16,8 +19,14 @@ module.exports = async (senderId, prompt) => {
         // Envoyer un message d'attente
         await sendMessage(senderId, "⏳ Création d'une histoire en malgache...");
 
-        // Construire l'URL de l'API
-        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}`;
+        // Récupérer ou créer un ID de session pour cet utilisateur
+        let sessionId = userSessionIds[senderId];
+
+        // Construire l'URL de l'API avec le sessionId si disponible
+        let apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}`;
+        if (sessionId) {
+            apiUrl += `&uid=${sessionId}`;
+        }
         
         // Appel à l'API
         const response = await axios.get(apiUrl);
@@ -26,6 +35,16 @@ module.exports = async (senderId, prompt) => {
         if (response.data && response.data.result && response.data.result.response) {
             const reply = response.data.result.response;
             
+            // Stocker le sessionId si présent dans la réponse
+            if (response.data.result.sessionId) {
+                userSessionIds[senderId] = response.data.result.sessionId;
+            } else if (response.data.sessionId) {
+                userSessionIds[senderId] = response.data.sessionId;
+            } else if (!sessionId) {
+                // Générer un sessionId simple si l'API n'en renvoie pas
+                userSessionIds[senderId] = `session_${senderId}_${Date.now()}`;
+            }
+            
             // Formater la réponse
             const formattedReply = `🇲🇬✅ FITIAVANA MLG ✅🇲🇬
 
@@ -33,6 +52,7 @@ ${reply}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧠 Powered by 👉@Bruno | Claude AI Malagasy
+💬 Conversation continue activée
 `;
 
             // Envoyer la réponse
@@ -60,6 +80,6 @@ Veuillez réessayer dans quelques instants.
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "malagasy",
-    description: "Génère des histoires et répond à vos questions en malgache avec Claude AI.",
+    description: "Génère des histoires et répond à vos questions en malgache avec Claude AI. Conversation continue activée.",
     usage: "Envoyez 'malagasy <votre question en malgache>' par exemple: 'malagasy milaza angano iray'"
 };
