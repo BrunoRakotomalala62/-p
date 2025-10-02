@@ -5,6 +5,24 @@ const sendMessage = require('../handles/sendMessage');
 // Stockage des images en attente par utilisateur
 const pendingImages = {};
 
+// Fonction pour télécharger l'image et la convertir en base64
+async function downloadImageAsBase64(imageUrl) {
+    try {
+        const response = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000
+        });
+        
+        const base64 = Buffer.from(response.data, 'binary').toString('base64');
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        
+        return `data:${contentType};base64,${base64}`;
+    } catch (error) {
+        console.error('Erreur lors du téléchargement de l\'image:', error.message);
+        throw new Error('Impossible de télécharger l\'image');
+    }
+}
+
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
     const MAX_MESSAGE_LENGTH = 2000;
@@ -71,13 +89,22 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         if (pendingImages[senderId]) {
             const imageUrl = pendingImages[senderId];
             
-            // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${senderId}&model=claude-3-7-sonnet-20250219&image=${encodeURIComponent(imageUrl)}&system=&max_tokens=3000`;
-            
-            response = await axios.get(apiUrl);
-            
-            // Supprimer l'image après utilisation
-            delete pendingImages[senderId];
+            try {
+                // Télécharger et convertir l'image en base64
+                const base64Image = await downloadImageAsBase64(imageUrl);
+                
+                // Construire l'URL de l'API avec l'image en base64
+                const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${senderId}&model=claude-3-7-sonnet-20250219&image=${encodeURIComponent(base64Image)}&system=&max_tokens=3000`;
+                
+                response = await axios.get(apiUrl);
+                
+                // Supprimer l'image après utilisation
+                delete pendingImages[senderId];
+            } catch (imageError) {
+                delete pendingImages[senderId];
+                await sendMessage(senderId, "❌ Désolé, je n'ai pas pu accéder à votre image. Veuillez réessayer avec une autre image.");
+                return;
+            }
         } else {
             // Appel à l'API sans image (texte seulement)
             const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${senderId}&model=claude-3-7-sonnet-20250219&system=&max_tokens=3000`;
