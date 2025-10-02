@@ -84,8 +84,20 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             response = await axios.get(apiUrl);
         }
         
-        // Récupérer la réponse de l'API
-        const reply = response.data.response;
+        // Récupérer la réponse de l'API (gérer différents formats de réponse)
+        let reply = response.data.response || response.data.message || response.data.result || response.data.text || response.data;
+        
+        // Si c'est un objet, essayer de le convertir en chaîne
+        if (typeof reply === 'object') {
+            reply = JSON.stringify(reply, null, 2);
+        }
+        
+        // Vérifier si la réponse est valide
+        if (!reply || reply === 'undefined' || reply === '{}') {
+            console.error('Réponse API invalide:', response.data);
+            await sendMessage(senderId, "⚠️ Désolé, je n'ai pas pu obtenir une réponse valide de l'API. Veuillez réessayer.");
+            return;
+        }
         
         // Créer une réponse formatée
         const formattedReply = `😊BOT😊\n${reply}`;
