@@ -161,7 +161,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             console.log('Réponse API avec image:', JSON.stringify(apiResponse.data, null, 2));
             
             // Vérifier spécifiquement le champ 'response'
-            if (apiResponse.data && apiResponse.data.response) {
+            if (apiResponse.data && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
                 response = apiResponse.data.response;
             } else {
                 console.error('Structure de réponse inattendue:', apiResponse.data);
@@ -181,7 +181,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             console.log('Réponse API textuelle:', JSON.stringify(apiResponse.data, null, 2));
             
             // Vérifier spécifiquement le champ 'response'
-            if (apiResponse.data && apiResponse.data.response) {
+            if (apiResponse.data && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
                 response = apiResponse.data.response;
             } else {
                 console.error('Structure de réponse inattendue:', apiResponse.data);
