@@ -106,8 +106,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             conversationHistory[senderId].imageUrl = imageUrl;
             
             // Envoyer un message demandant une question sur l'image
-            const imageReceivedMessage = formatResponse("✨📸 J'ai bien reçu votre magnifique image! Quelle est votre question concernant ce visuel? Je suis impatient d'analyser cette photo avec vous! 🔍🖼️✨");
-            await sendLongMessage(senderId, imageReceivedMessage);
+            await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quel questions avez vous posé sur cette image? ❤️");
             return { skipCommandCheck: true };
         }
 
@@ -122,7 +121,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
         // Vérifier si une session existe pour l'utilisateur, sinon en créer une
         if (!userSessions[senderId]) {
-            userSessions[senderId] = { uid: Math.random().toString(36).substring(7) };
+            userSessions[senderId] = { uid: senderId };
         }
 
         // Envoyer un message de confirmation que le message a été reçu
@@ -131,29 +130,28 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         let response;
         let apiResponse;
 
-        // Ajouter le message de l'utilisateur à l'historique
-        conversationHistory[senderId].messages.push({ role: 'user', content: prompt });
-
-        // Construire un prompt qui prend en compte l'historique de conversation
-        let contextualPrompt = prompt;
-        if (conversationHistory[senderId].messages.length > 1) {
-            // Extraire les 3 derniers messages pour le contexte (ou moins s'il y en a moins)
-            const recentMessages = conversationHistory[senderId].messages.slice(-3);
-            const context = recentMessages.map(msg => `${msg.role === 'user' ? 'Utilisateur' : 'Assistant'}: ${msg.content}`).join('\n');
-            contextualPrompt = `Étant donné le contexte de notre conversation: \n${context}\n\nRépondre à: ${prompt}`;
-        }
-        
-        // Si l'utilisateur a une image en attente, inclure cette information dans le prompt
+        // Si l'utilisateur a une image en attente, utiliser l'API avec image
         if (pendingImages[senderId] || conversationHistory[senderId].hasImage) {
-            contextualPrompt = `En référence à l'image précédente et à notre conversation, ${contextualPrompt}`;
+            const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl;
+            const apiUrl = `https://claody7.vercel.app/claude?question=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${userSessions[senderId].uid}`;
+            
+            apiResponse = await axios.get(apiUrl);
+            response = apiResponse.data.response;
+            
+            // Supprimer l'image de pendingImages après avoir répondu
+            if (pendingImages[senderId]) {
+                delete pendingImages[senderId];
+            }
+        } else {
+            // Utiliser l'API textuelle
+            const apiUrl = `https://claody7.vercel.app/Claude?question=${encodeURIComponent(prompt)}&uid=${userSessions[senderId].uid}`;
+            
+            apiResponse = await axios.get(apiUrl);
+            response = apiResponse.data.response;
         }
-        
-        // Appeler la nouvelle API rapido.zetsu.xyz
-        const apiUrl = `https://rapido.zetsu.xyz/api/anthropic?q=${encodeURIComponent(contextualPrompt)}&uid=${userSessions[senderId].uid}&model=claude-3-7-sonnet-20250219&system=&max_token=3000`;
-        apiResponse = await axios.get(apiUrl);
-        response = apiResponse.data.response;
 
-        // Ajouter la réponse à l'historique
+        // Ajouter le message de l'utilisateur et la réponse à l'historique
+        conversationHistory[senderId].messages.push({ role: 'user', content: prompt });
         conversationHistory[senderId].messages.push({ role: 'assistant', content: response });
 
         // Attendre 2 secondes avant d'envoyer la réponse
@@ -163,11 +161,6 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         const formattedResponse = formatResponse(response);
         await sendLongMessage(senderId, formattedResponse);
 
-        // Supprimer l'image de pendingImages après avoir répondu à la question
-        // Mais la garder dans l'historique pour la conversation continue
-        if (pendingImages[senderId]) {
-            delete pendingImages[senderId];
-        }
     } catch (error) {
         console.error('Erreur lors de l\'appel à l\'API:', error);
 
