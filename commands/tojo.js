@@ -115,10 +115,23 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
                 
                 console.log('Réponse API avec image:', JSON.stringify(apiResponse.data, null, 2));
                 
-                if (apiResponse.data && apiResponse.data.response && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
-                    response = apiResponse.data.response;
+                // Vérifier différents formats de réponse possibles
+                if (apiResponse.data) {
+                    if (apiResponse.data.response && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
+                        response = apiResponse.data.response;
+                    } else if (apiResponse.data.result && typeof apiResponse.data.result === 'string' && apiResponse.data.result.trim() !== '') {
+                        response = apiResponse.data.result;
+                    } else if (apiResponse.data.message && typeof apiResponse.data.message === 'string' && apiResponse.data.message.trim() !== '') {
+                        response = apiResponse.data.message;
+                    } else if (typeof apiResponse.data === 'string' && apiResponse.data.trim() !== '') {
+                        response = apiResponse.data;
+                    } else {
+                        console.error('Structure de réponse inattendue:', apiResponse.data);
+                        console.error('Clés disponibles:', Object.keys(apiResponse.data));
+                        response = 'Aucune réponse reçue de l\'API. Veuillez réessayer.';
+                    }
                 } else {
-                    console.error('Structure de réponse inattendue:', apiResponse.data);
+                    console.error('Pas de données dans la réponse');
                     response = 'Aucune réponse reçue de l\'API. Veuillez réessayer.';
                 }
             } catch (imageApiError) {
@@ -138,10 +151,23 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             apiResponse = await axios.get(apiUrl, { timeout: 30000 });
             console.log('Réponse API textuelle:', JSON.stringify(apiResponse.data, null, 2));
             
-            if (apiResponse.data && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
-                response = apiResponse.data.response;
+            // Vérifier différents formats de réponse possibles
+            if (apiResponse.data) {
+                if (apiResponse.data.response && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
+                    response = apiResponse.data.response;
+                } else if (apiResponse.data.result && typeof apiResponse.data.result === 'string' && apiResponse.data.result.trim() !== '') {
+                    response = apiResponse.data.result;
+                } else if (apiResponse.data.message && typeof apiResponse.data.message === 'string' && apiResponse.data.message.trim() !== '') {
+                    response = apiResponse.data.message;
+                } else if (typeof apiResponse.data === 'string' && apiResponse.data.trim() !== '') {
+                    response = apiResponse.data;
+                } else {
+                    console.error('Structure de réponse inattendue:', apiResponse.data);
+                    console.error('Clés disponibles:', Object.keys(apiResponse.data));
+                    response = 'Aucune réponse reçue de l\'API';
+                }
             } else {
-                console.error('Structure de réponse inattendue:', apiResponse.data);
+                console.error('Pas de données dans la réponse');
                 response = 'Aucune réponse reçue de l\'API';
             }
         }
