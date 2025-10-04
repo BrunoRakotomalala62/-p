@@ -103,7 +103,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             const imageUrl = imageAttachments[0].payload.url;
             
             // Si l'utilisateur a envoyé une question avec l'image, traiter directement
-            if (prompt && prompt.trim().length > 0) {
+            if (prompt && prompt.trim().length > 0 && prompt !== "IMAGE_ATTACHMENT") {
                 pendingImages[senderId] = imageUrl;
                 conversationHistory[senderId].hasImage = true;
                 conversationHistory[senderId].imageUrl = imageUrl;
@@ -142,6 +142,13 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         // Si l'utilisateur a une image en attente, utiliser l'API avec image
         if (pendingImages[senderId] || conversationHistory[senderId].hasImage) {
             const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl;
+            
+            // Vérifier que le prompt n'est pas vide ou "IMAGE_ATTACHMENT"
+            if (!prompt || prompt.trim() === '' || prompt === 'IMAGE_ATTACHMENT') {
+                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quel questions avez vous posé sur cette image? ❤️");
+                return { skipCommandCheck: true };
+            }
+            
             const apiUrl = `https://claody7.vercel.app/claude?question=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${userSessions[senderId].uid}`;
             
             console.log('API URL avec image:', apiUrl);
