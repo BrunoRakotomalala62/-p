@@ -153,27 +153,40 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
                 prompt = 'Décrivez bien cette image en détail';
             }
             
+            // URL de l'API avec image (noter le 'c' minuscule dans 'claude')
             const apiUrl = `https://claody7.vercel.app/claude?question=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${userSessions[senderId].uid}`;
             
             console.log('API URL avec image:', apiUrl);
-            apiResponse = await axios.get(apiUrl);
+            apiResponse = await axios.get(apiUrl, { timeout: 30000 });
             console.log('Réponse API avec image:', JSON.stringify(apiResponse.data, null, 2));
             
-            response = apiResponse.data.response || apiResponse.data.content || 'Aucune réponse reçue de l\'API';
+            // Vérifier spécifiquement le champ 'response'
+            if (apiResponse.data && apiResponse.data.response) {
+                response = apiResponse.data.response;
+            } else {
+                console.error('Structure de réponse inattendue:', apiResponse.data);
+                response = 'Aucune réponse reçue de l\'API';
+            }
             
             // Supprimer l'image de pendingImages après avoir répondu
             if (pendingImages[senderId]) {
                 delete pendingImages[senderId];
             }
         } else {
-            // Utiliser l'API textuelle
+            // Utiliser l'API textuelle (noter le 'C' majuscule dans 'Claude')
             const apiUrl = `https://claody7.vercel.app/Claude?question=${encodeURIComponent(prompt)}&uid=${userSessions[senderId].uid}`;
             
             console.log('API URL textuelle:', apiUrl);
-            apiResponse = await axios.get(apiUrl);
+            apiResponse = await axios.get(apiUrl, { timeout: 30000 });
             console.log('Réponse API textuelle:', JSON.stringify(apiResponse.data, null, 2));
             
-            response = apiResponse.data.response || apiResponse.data.content || 'Aucune réponse reçue de l\'API';
+            // Vérifier spécifiquement le champ 'response'
+            if (apiResponse.data && apiResponse.data.response) {
+                response = apiResponse.data.response;
+            } else {
+                console.error('Structure de réponse inattendue:', apiResponse.data);
+                response = 'Aucune réponse reçue de l\'API';
+            }
         }
         
         // Vérifier que la réponse n'est pas vide
