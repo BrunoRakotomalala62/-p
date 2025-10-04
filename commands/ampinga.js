@@ -102,19 +102,17 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             // Stocker l'URL de l'image pour cet utilisateur
             const imageUrl = imageAttachments[0].payload.url;
             
+            // Stocker l'image et attendre la question
+            pendingImages[senderId] = imageUrl;
+            conversationHistory[senderId].hasImage = true;
+            conversationHistory[senderId].imageUrl = imageUrl;
+            
             // Si l'utilisateur a envoyé une question avec l'image, traiter directement
             if (prompt && prompt.trim().length > 0 && prompt !== "IMAGE_ATTACHMENT") {
-                pendingImages[senderId] = imageUrl;
-                conversationHistory[senderId].hasImage = true;
-                conversationHistory[senderId].imageUrl = imageUrl;
                 // Continuer le traitement avec la question
             } else {
-                // Si pas de question, demander à l'utilisateur
-                pendingImages[senderId] = imageUrl;
-                conversationHistory[senderId].hasImage = true;
-                conversationHistory[senderId].imageUrl = imageUrl;
-                
-                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quel questions avez vous posé sur cette image? ❤️");
+                // Si pas de question, demander à l'utilisateur avec un message d'attente
+                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quelle question avez-vous posé sur cette image? ❤️\n\n💡 Vous pouvez demander par exemple :\n• Décrivez bien cette image\n• Qu'est-ce qu'il y a sur cette photo?\n• Analysez cette image en détail");
                 return { skipCommandCheck: true };
             }
         }
@@ -145,8 +143,14 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             
             // Vérifier que le prompt n'est pas vide ou "IMAGE_ATTACHMENT"
             if (!prompt || prompt.trim() === '' || prompt === 'IMAGE_ATTACHMENT') {
-                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quel questions avez vous posé sur cette image? ❤️");
+                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quelle question avez-vous posé sur cette image? ❤️\n\n💡 Vous pouvez demander par exemple :\n• Décrivez bien cette image\n• Qu'est-ce qu'il y a sur cette photo?\n• Analysez cette image en détail");
                 return { skipCommandCheck: true };
+            }
+            
+            // Gérer les questions prédéfinies courantes (optionnel - normaliser la question)
+            const normalizedPrompt = prompt.toLowerCase().trim();
+            if (normalizedPrompt === 'décrivez' || normalizedPrompt === 'describe' || normalizedPrompt === 'décrire') {
+                prompt = 'Décrivez bien cette image en détail';
             }
             
             const apiUrl = `https://claody7.vercel.app/claude?question=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${userSessions[senderId].uid}`;
