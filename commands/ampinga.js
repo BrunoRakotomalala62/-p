@@ -144,8 +144,11 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl;
             const apiUrl = `https://claody7.vercel.app/claude?question=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${userSessions[senderId].uid}`;
             
+            console.log('API URL avec image:', apiUrl);
             apiResponse = await axios.get(apiUrl);
-            response = apiResponse.data.response;
+            console.log('Réponse API avec image:', JSON.stringify(apiResponse.data, null, 2));
+            
+            response = apiResponse.data.response || apiResponse.data.content || 'Aucune réponse reçue de l\'API';
             
             // Supprimer l'image de pendingImages après avoir répondu
             if (pendingImages[senderId]) {
@@ -155,8 +158,16 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             // Utiliser l'API textuelle
             const apiUrl = `https://claody7.vercel.app/Claude?question=${encodeURIComponent(prompt)}&uid=${userSessions[senderId].uid}`;
             
+            console.log('API URL textuelle:', apiUrl);
             apiResponse = await axios.get(apiUrl);
-            response = apiResponse.data.response;
+            console.log('Réponse API textuelle:', JSON.stringify(apiResponse.data, null, 2));
+            
+            response = apiResponse.data.response || apiResponse.data.content || 'Aucune réponse reçue de l\'API';
+        }
+        
+        // Vérifier que la réponse n'est pas vide
+        if (!response || response.trim() === '') {
+            response = 'Désolé, je n\'ai pas pu générer une réponse. Veuillez réessayer.';
         }
 
         // Ajouter le message de l'utilisateur et la réponse à l'historique
