@@ -1,10 +1,7 @@
-
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// Gestion des sessions utilisateur
-const userSessions = {}; 
-const pendingImages = {};
+// Gestion des sessions utilisateur avec historique de conversation
 const conversationHistory = {};
 
 // Fonction pour envoyer des messages longs en plusieurs parties intelligemment
@@ -17,33 +14,33 @@ async function sendLongMessage(senderId, message) {
     }
 
     let startIndex = 0;
-    
+
     while (startIndex < message.length) {
         let endIndex = startIndex + MAX_MESSAGE_LENGTH;
-        
+
         if (endIndex < message.length) {
             const separators = ['. ', ', ', ' ', '! ', '? ', '.\n', ',\n', '!\n', '?\n', '\n\n', '\n', ':', ';'];
             let bestBreakPoint = -1;
-            
+
             for (const separator of separators) {
                 const lastSeparator = message.lastIndexOf(separator, endIndex);
                 if (lastSeparator > startIndex && (bestBreakPoint === -1 || lastSeparator > bestBreakPoint)) {
                     bestBreakPoint = lastSeparator + separator.length;
                 }
             }
-            
+
             if (bestBreakPoint !== -1) {
                 endIndex = bestBreakPoint;
             }
         } else {
             endIndex = message.length;
         }
-        
+
         const messagePart = message.substring(startIndex, endIndex);
         await sendMessage(senderId, messagePart);
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
+        await new Promise(resolve => setTimeout(resolve, 800));
+
         startIndex = endIndex;
     }
 }
@@ -68,139 +65,103 @@ const formatResponse = (content) => {
     return `🌴 SANS BOT 🏡\n${content}\n\nAuteur : 🌞 Bruno 🏡\nDate et heure à Madagascar: ${dateTime}`;
 };
 
+// Fonction pour construire le contexte de conversation
+const buildConversationContext = (senderId, currentPrompt) => {
+    if (!conversationHistory[senderId] || conversationHistory[senderId].length === 0) {
+        return currentPrompt;
+    }
+
+    // Limiter l'historique aux 5 derniers échanges pour éviter les prompts trop longs
+    const recentHistory = conversationHistory[senderId].slice(-5);
+
+    let context = "Historique de la conversation:\n";
+    recentHistory.forEach((entry, index) => {
+        context += `${index + 1}. Utilisateur: ${entry.user}\n   Assistant: ${entry.assistant}\n`;
+    });
+
+    context += `\nQuestion actuelle: ${currentPrompt}`;
+    return context;
+};
+
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
         // Initialiser l'historique de conversation si nécessaire
         if (!conversationHistory[senderId]) {
-            conversationHistory[senderId] = {
-                messages: [],
-                hasImage: false,
-                imageUrl: null
-            };
+            conversationHistory[senderId] = [];
         }
 
         // Si c'est le premier message et qu'il est juste "sans"
-        if (prompt.toLowerCase() === 'sans' && conversationHistory[senderId].messages.length === 0) {
+        if (prompt.toLowerCase() === 'sans' && conversationHistory[senderId].length === 0) {
             const welcomeMessage = formatResponse("Bonjour je m'appelle Sans, comment puis-je vous aider aujourd'hui ?");
             await sendLongMessage(senderId, welcomeMessage);
             return;
         }
 
-        // Vérifier si nous avons des images en pièce jointe
-        if (imageAttachments && imageAttachments.length > 0) {
-            const imageUrl = imageAttachments[0].payload.url;
-            
-            // Stocker l'image et attendre la question
-            pendingImages[senderId] = imageUrl;
-            conversationHistory[senderId].hasImage = true;
-            conversationHistory[senderId].imageUrl = imageUrl;
-            
-            // Si l'utilisateur a envoyé une question avec l'image, traiter directement
-            if (prompt && prompt.trim().length > 0 && prompt !== "IMAGE_ATTACHMENT") {
-                // Continuer le traitement avec la question
-            } else {
-                // Si pas de question, demander à l'utilisateur
-                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quelle question avez-vous posé sur cette image? ❤️\n\n💡 Vous pouvez demander par exemple :\n• Décrivez bien cette image\n• Qu'est-ce qu'il y a sur cette photo?\n• Analysez cette image en détail");
-                return { skipCommandCheck: true };
-            }
-        }
-
         // Si l'utilisateur envoie "clear", réinitialiser la conversation
         if (prompt.toLowerCase() === 'clear') {
-            delete userSessions[senderId];
-            delete pendingImages[senderId];
             delete conversationHistory[senderId];
             await sendMessage(senderId, "✅ Conversation réinitialisée avec succès.");
             return;
         }
 
-        // Vérifier si une session existe pour l'utilisateur, sinon en créer une
-        if (!userSessions[senderId]) {
-            userSessions[senderId] = { uid: senderId };
+        // Vérifier que le prompt n'est pas vide
+        if (!prompt || prompt.trim() === '' || prompt === 'IMAGE_ATTACHMENT') {
+            await sendMessage(senderId, "❓ Veuillez poser une question ou envoyer un message.");
+            return { skipCommandCheck: true };
         }
 
         // Envoyer un message de confirmation
         await sendMessage(senderId, "📜✨ Préparation de la réponse... ✨📜");
 
-        let response;
-        let apiResponse;
+        // Construire le contexte avec l'historique de conversation
+        const conversationContext = buildConversationContext(senderId, prompt);
 
-        // Si l'utilisateur a une image en attente, utiliser l'API avec image
-        if (pendingImages[senderId] || conversationHistory[senderId].hasImage) {
-            const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl;
-            
-            // Vérifier que le prompt n'est pas vide
-            if (!prompt || prompt.trim() === '' || prompt === 'IMAGE_ATTACHMENT') {
-                await sendMessage(senderId, "🇲🇬 J'ai bien reçu votre photo, quelle question avez-vous posé sur cette image? ❤️\n\n💡 Vous pouvez demander par exemple :\n• Décrivez bien cette image\n• Qu'est-ce qu'il y a sur cette photo?\n• Analysez cette image en détail");
-                return { skipCommandCheck: true };
+        // Appeler l'API Perplexity avec le contexte
+        const apiUrl = `https://apis-keith.vercel.app/ai/perplexity?q=${encodeURIComponent(conversationContext)}`;
+
+        console.log('=== DEBUG PERPLEXITY API ===');
+        console.log('Question avec contexte:', conversationContext);
+        console.log('API URL:', apiUrl);
+
+        const apiResponse = await axios.get(apiUrl, { 
+            timeout: 30000,
+            validateStatus: function (status) {
+                return status < 500;
             }
-            
-            // URL de l'API avec image
-            const apiUrl = `https://claody7.vercel.app/claude?question=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${userSessions[senderId].uid}`;
-            
-            console.log('=== DEBUG IMAGE API ===');
-            console.log('Image URL:', imageUrl);
-            console.log('Question:', prompt);
-            console.log('API URL complète:', apiUrl);
-            
-            try {
-                apiResponse = await axios.get(apiUrl, { 
-                    timeout: 30000,
-                    validateStatus: function (status) {
-                        return status < 500;
-                    }
-                });
-                
-                console.log('Statut de la réponse:', apiResponse.status);
-                console.log('Réponse API avec image:', JSON.stringify(apiResponse.data, null, 2));
-                
-                if (apiResponse.data && apiResponse.data.response && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
-                    response = apiResponse.data.response;
-                } else {
-                    console.error('Structure de réponse inattendue:', apiResponse.data);
-                    response = 'Aucune réponse reçue de l\'API. Veuillez réessayer.';
-                }
-            } catch (imageApiError) {
-                console.error('Erreur lors de l\'appel API avec image:', imageApiError.message);
-                response = 'Erreur lors de l\'analyse de l\'image. Veuillez réessayer.';
-            }
-            
-            // Supprimer l'image de pendingImages après avoir répondu
-            if (pendingImages[senderId]) {
-                delete pendingImages[senderId];
-            }
-            // Réinitialiser le flag d'image dans l'historique
-            conversationHistory[senderId].hasImage = false;
-            conversationHistory[senderId].imageUrl = null;
+        });
+
+        console.log('Statut de la réponse:', apiResponse.status);
+        console.log('Réponse API:', JSON.stringify(apiResponse.data, null, 2));
+
+        let response;
+
+        if (apiResponse.data && apiResponse.data.result && typeof apiResponse.data.result === 'string' && apiResponse.data.result.trim() !== '') {
+            response = apiResponse.data.result;
         } else {
-            // Utiliser l'API textuelle
-            const apiUrl = `https://claody7.vercel.app/Claude?question=${encodeURIComponent(prompt)}&uid=${userSessions[senderId].uid}`;
-            
-            console.log('API URL textuelle:', apiUrl);
-            apiResponse = await axios.get(apiUrl, { timeout: 30000 });
-            console.log('Réponse API textuelle:', JSON.stringify(apiResponse.data, null, 2));
-            
-            if (apiResponse.data && typeof apiResponse.data.response === 'string' && apiResponse.data.response.trim() !== '') {
-                response = apiResponse.data.response;
-            } else {
-                console.error('Structure de réponse inattendue:', apiResponse.data);
-                response = 'Aucune réponse reçue de l\'API';
-            }
+            console.error('Structure de réponse inattendue:', apiResponse.data);
+            response = 'Aucune réponse reçue de l\'API. Veuillez réessayer.';
         }
-        
+
         // Vérifier que la réponse n'est pas vide
         if (!response || response.trim() === '') {
             response = 'Désolé, je n\'ai pas pu générer une réponse. Veuillez réessayer.';
         }
 
-        // Ajouter le message de l'utilisateur et la réponse à l'historique
-        conversationHistory[senderId].messages.push({ role: 'user', content: prompt });
-        conversationHistory[senderId].messages.push({ role: 'assistant', content: response });
+        // Ajouter à l'historique de conversation
+        conversationHistory[senderId].push({
+            user: prompt,
+            assistant: response
+        });
+
+        // Limiter la taille de l'historique (garder les 10 derniers échanges)
+        if (conversationHistory[senderId].length > 10) {
+            conversationHistory[senderId] = conversationHistory[senderId].slice(-10);
+        }
 
         // Attendre 2 secondes avant d'envoyer la réponse
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Formater la réponse et l'envoyer
+        // Formater la réponse et l'envoyer avec découpage dynamique
         const formattedResponse = formatResponse(response);
         await sendLongMessage(senderId, formattedResponse);
 
@@ -214,6 +175,6 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "sans",
-    description: "Discutez avec Sans Bot, capable d'analyser vos images et de répondre à vos questions avec continuité.",
-    usage: "Envoyez 'sans <message>' pour poser une question, joignez une image pour l'analyser, ou 'clear' pour réinitialiser la conversation."
+    description: "Discutez avec Sans Bot alimenté par Perplexity AI avec conversation continue et découpage intelligent des réponses.",
+    usage: "Envoyez 'sans <message>' pour poser une question, ou 'clear' pour réinitialiser la conversation."
 };
