@@ -1,63 +1,114 @@
+
 const axios = require('axios');
-const sendMessage = require('../handles/sendMessage'); // Importer la fonction sendMessage
+const sendMessage = require('../handles/sendMessage');
 
-module.exports = async (senderId, userText) => {
-    // Extraire le nom de la chanson à partir du texte de l'utilisateur
-    const songName = userText.slice(3).trim();
+// Fonction pour envoyer des messages longs en plusieurs parties
+async function sendLongMessage(senderId, message) {
+    const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères par message Facebook
 
-    // Vérifier si le nom de la chanson est vide
-    if (!songName) {
-        await sendMessage(senderId, 'Veuillez fournir le nom de la chanson pour que je puisse trouver les paroles.');
+    if (message.length <= MAX_MESSAGE_LENGTH) {
+        await sendMessage(senderId, message);
         return;
     }
 
+    // Diviser le message en plusieurs parties intelligemment
+    let startIndex = 0;
+    
+    while (startIndex < message.length) {
+        let endIndex = startIndex + MAX_MESSAGE_LENGTH;
+        
+        if (endIndex < message.length) {
+            // Chercher le dernier séparateur avant la limite
+            const separators = ['\n\n', '\n', '. ', ', ', ' '];
+            let bestBreakPoint = -1;
+            
+            for (const separator of separators) {
+                const lastSeparator = message.lastIndexOf(separator, endIndex);
+                if (lastSeparator > startIndex && (bestBreakPoint === -1 || lastSeparator > bestBreakPoint)) {
+                    bestBreakPoint = lastSeparator + separator.length;
+                }
+            }
+            
+            if (bestBreakPoint !== -1) {
+                endIndex = bestBreakPoint;
+            }
+        } else {
+            endIndex = message.length;
+        }
+        
+        const messagePart = message.substring(startIndex, endIndex);
+        await sendMessage(senderId, messagePart);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Pause de 1s entre messages
+        
+        startIndex = endIndex;
+    }
+}
+
+module.exports = async (senderId, args) => {
     try {
-        // Envoyer un message de confirmation que la requête est en cours de traitement
-        await sendMessage(senderId, "Recherche des paroles en cours...");
-
-        // Appeler l'API Lyricist pour récupérer les paroles de la chanson
-        const apiUrl = `https://lyrist.vercel.app/api/${encodeURIComponent(songName)}`;
-        const response = await axios.get(apiUrl);
-
-        // Afficher la réponse brute pour déboguer
-        console.log('Réponse de l\'API:', response.data);
-
-        // Vérifier si les données sont présentes dans la réponse
-        if (!response.data || !response.data.lyrics || !response.data.title || !response.data.artist) {
-            await sendMessage(senderId, "Désolé, je n'ai pas trouvé les paroles de cette chanson.");
+        // Vérifier si une requête a été fournie
+        if (!args || args.trim() === '') {
+            await sendMessage(senderId, "🎵 Veuillez fournir le titre d'une chanson ou un artiste.\n\n📝 Exemple: lyrics my love westlife");
             return;
         }
 
-        // Extraire les paroles, le titre, l'artiste et l'image
-        const lyrics = response.data.lyrics;
-        const title = response.data.title;
-        const artist = response.data.artist;
-        const imageUrl = response.data.image;
+        // Message d'attente
+        await sendMessage(senderId, "🎶 Recherche des paroles en cours... ⏳");
 
-        // Attendre 2 secondes avant d'envoyer la réponse pour un délai naturel
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Construire l'URL de l'API
+        const query = encodeURIComponent(args.trim());
+        const apiUrl = `https://api-library-kohi.onrender.com/api/lyrics?query=${query}`;
 
-        // Créer le message à envoyer avec les paroles
-        const message = `**Paroles de "${title}" par ${artist}:**\n\n${lyrics}`;
+        // Appel à l'API
+        const response = await axios.get(apiUrl, { timeout: 30000 });
 
-        // Si l'image de l'album existe, l'ajouter à la réponse
-        if (imageUrl) {
-            await sendMessage(senderId, message);
-            await sendMessage(senderId, { attachment: imageUrl });
+        // Vérifier la réponse
+        if (response.data && response.data.status && response.data.data) {
+            const { title, artist, lyrics } = response.data.data;
+
+            // Formatter la réponse avec des emojis
+            const formattedResponse = `
+🎵✨ PAROLES DE CHANSON ✨🎵
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎤 *Titre:* ${title}
+👨‍🎤 *Artiste:* ${artist}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 *Paroles:*
+
+${lyrics}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎼 Powered by 👉 @Bruno | Lyrics API
+`;
+
+            // Envoyer la réponse avec découpage dynamique
+            await sendLongMessage(senderId, formattedResponse);
+
         } else {
-            await sendMessage(senderId, message);
+            await sendMessage(senderId, "❌ Aucune parole trouvée pour cette chanson. Veuillez vérifier le titre ou l'artiste.");
         }
-    } catch (error) {
-        console.error('Erreur lors de l\'appel à l\'API Lyricist:', error);
 
-        // Envoyer un message d'erreur à l'utilisateur en cas de problème
-        await sendMessage(senderId, 'Désolé, une erreur s\'est produite lors de la recherche des paroles.');
+    } catch (error) {
+        console.error("Erreur lors de l'appel à l'API Lyrics:", error);
+
+        // Message d'erreur stylisé
+        await sendMessage(senderId, `
+⚠️ *ERREUR DE RECHERCHE* ⚠️
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+Une erreur s'est produite lors de la recherche des paroles.
+
+🔄 Veuillez réessayer dans quelques instants.
+💡 Assurez-vous d'avoir bien écrit le titre de la chanson.
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
     }
 };
 
-// Ajouter les informations de la commande
+// Informations de la commande
 module.exports.info = {
-    name: "lyrics",  // Le nom de la commande
-    description: "Envoyer le nom d'une chanson pour obtenir ses paroles.",  // Description de la commande
-    usage: "Envoyez 'lyrics <nom de la chanson>' pour obtenir les paroles."  // Comment utiliser la commande
+    name: "lyrics",
+    description: "Recherchez les paroles de vos chansons préférées",
+    usage: "lyrics <titre de la chanson ou artiste>\n\nExemple: lyrics my love westlife"
 };
