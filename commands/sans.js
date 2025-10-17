@@ -69,7 +69,8 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
         // Gérer les images en pièce jointe
         if (imageAttachments && imageAttachments.length > 0) {
-            const imageUrl = imageAttachments[0];
+            // Récupérer correctement l'URL de l'image depuis l'objet attachment
+            const imageUrl = imageAttachments[0].payload.url;
             pendingImages[senderId] = imageUrl;
             
             await sendMessage(senderId, "✅ J'ai bien reçu votre image. Posez des questions basées sur cette image.");
