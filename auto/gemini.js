@@ -145,10 +145,9 @@ async function handleTextMessage(senderId, message) {
         const formattedResponse = `
 ✅AMPINGA D'OR AI MADAGASCAR🇲🇬
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-💬 *Votre question:* 
-${message || "Analyse de l'image"}
 
-✨ *Réponse:* 
+✍️Réponse 👇
+
 ${response}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧠 Powered by 👉@Bruno | Ampinga AI
