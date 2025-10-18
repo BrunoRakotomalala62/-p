@@ -45,6 +45,38 @@ async function sendLongMessage(senderId, message) {
     }
 }
 
+// Fonction pour nettoyer la syntaxe LaTeX
+function cleanLatexSyntax(text) {
+    return text
+        // Supprimer les commandes LaTeX comme \( et \)
+        .replace(/\\\(|\\\\\(|\\\\\\\(/g, "")
+        .replace(/\\\)|\\\\\)|\\\\\\\)/g, "")
+        // Supprimer les commandes LaTeX comme \[ et \]
+        .replace(/\\\[|\\\\\[|\\\\\\\[/g, "")
+        .replace(/\\\]|\\\\\]|\\\\\\\]/g, "")
+        // Remplacer les fractions
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
+        // Remplacer les commandes LaTeX comme \implies, \boxed, etc.
+        .replace(/\\implies/g, "=>")
+        .replace(/\\boxed\{([^{}]+)\}/g, "[$1]")
+        .replace(/\\[a-zA-Z]+/g, "")
+        // Remplacer les doubles backslashes
+        .replace(/\\\\/g, "")
+        // Nettoyer les accolades
+        .replace(/\{|\}/g, "")
+        // Remplacer d'autres notations mathématiques
+        .replace(/\\quad/g, " ")
+        .replace(/\\cdot/g, "×")
+        .replace(/\\times/g, "×")
+        .replace(/\\div/g, "÷")
+        // Remplacer les expressions comme \text{...} par leur contenu
+        .replace(/\\text\{([^{}]+)\}/g, "$1")
+        // Nettoyer les expressions avec \equiv et \pmod
+        .replace(/\\equiv[^\\]*\\pmod\{([^{}]+)\}/g, "≡ (mod $1)")
+        // Nettoyer les mathématiques restantes
+        .replace(/\\[a-zA-Z]+\{([^{}]+)\}/g, "$1");
+}
+
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
         const API_ENDPOINT = "https://kaiz-apis.gleeze.com/api/gpt-4.1";
@@ -101,6 +133,9 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             return;
         }
 
+        // Nettoyer la syntaxe LaTeX de la réponse
+        const cleanedResponse = cleanLatexSyntax(response);
+
         // Formater la réponse
         const formattedResponse = `
 ✅GPT-4.1 MADAGASCAR🇲🇬
@@ -108,7 +143,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
 ✍️Réponse 👇
 
-${response}
+${cleanedResponse}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧠 Powered by 👉@Bruno | GPT-4.1 AI
 `;
