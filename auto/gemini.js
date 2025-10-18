@@ -8,6 +8,37 @@ const pendingImages = {};
 // Stockage de l'historique de conversation par utilisateur
 const conversationHistory = {};
 
+// Fonction pour nettoyer la syntaxe LaTeX
+function cleanLatexSyntax(text) {
+    return text
+        // Supprimer les délimiteurs LaTeX inline $ et $$
+        .replace(/\$\$/g, "")
+        .replace(/\$/g, "")
+        // Supprimer les commandes LaTeX comme \( et \)
+        .replace(/\\\(|\\\\\(|\\\\\\\(/g, "")
+        .replace(/\\\)|\\\\\)|\\\\\\\)/g, "")
+        // Remplacer les fractions
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
+        // Remplacer les commandes LaTeX comme \implies, \boxed, etc.
+        .replace(/\\implies/g, "=>")
+        .replace(/\\boxed\{([^{}]+)\}/g, "[$1]")
+        // Remplacer d'autres notations mathématiques
+        .replace(/\\quad/g, " ")
+        .replace(/\\cdot/g, "×")
+        .replace(/\\times/g, "×")
+        .replace(/\\div/g, "÷")
+        // Remplacer les expressions comme \text{...} par leur contenu
+        .replace(/\\text\{([^{}]+)\}/g, "$1")
+        // Nettoyer les expressions avec \equiv et \pmod
+        .replace(/\\equiv[^\\]*\\pmod\{([^{}]+)\}/g, "≡ (mod $1)")
+        // Supprimer les commandes LaTeX restantes
+        .replace(/\\[a-zA-Z]+/g, "")
+        // Remplacer les doubles backslashes
+        .replace(/\\\\/g, "")
+        // Nettoyer les accolades
+        .replace(/\{|\}/g, "");
+}
+
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
     const MAX_MESSAGE_LENGTH = 2000;
@@ -141,6 +172,9 @@ async function handleTextMessage(senderId, message) {
             return;
         }
 
+        // Nettoyer les symboles LaTeX de la réponse
+        const cleanedResponse = cleanLatexSyntax(response);
+
         // Formater la réponse
         const formattedResponse = `
 ✅AMPINGA D'OR AI MADAGASCAR🇲🇬
@@ -148,7 +182,7 @@ async function handleTextMessage(senderId, message) {
 
 ✍️Réponse 👇
 
-${response}
+${cleanedResponse}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧠 Powered by 👉@Bruno | Ampinga AI
 `;
