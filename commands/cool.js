@@ -1,13 +1,8 @@
+
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// Stockage des IDs de session par utilisateur pour maintenir les conversations continues
-const userSessionIds = {};
-
-// URL de base pour l'API Claude
-const API_BASE_URL = 'https://rapido.zetsu.xyz/api/anthropic';
-
-// Stockage des images en attente
+// Stockage des images en attente par utilisateur
 const pendingImages = {};
 
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
@@ -52,94 +47,86 @@ async function sendLongMessage(senderId, message) {
 
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
-        // Initialiser l'ID de session si ce n'est pas déjà fait
-        if (!userSessionIds[senderId]) {
-            userSessionIds[senderId] = senderId;
-        }
+        const API_ENDPOINT = "https://kaiz-apis.gleeze.com/api/gpt-4.1";
+        const API_KEY = "115e2076-943c-4deb-a25d-9168e3d7b336";
 
         // Vérifier si nous avons affaire à un attachement image
         if (imageAttachments && imageAttachments.length > 0) {
+            // Stocker l'URL de l'image pour cet utilisateur
             pendingImages[senderId] = imageAttachments[0].payload.url;
+            
+            // Envoyer un message confirmant la réception de l'image
             await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
             return { skipCommandCheck: true };
         }
 
-        // Si le prompt est vide
-        if (!prompt || prompt.trim() === '') {
-            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Cool AI, votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
+        // Récupérer l'image en attente si elle existe
+        let imageUrl = pendingImages[senderId] || null;
+
+        // Si le prompt est vide et qu'il n'y a pas d'image
+        if ((!prompt || prompt.trim() === '') && !imageUrl) {
+            await sendMessage(senderId, "🤖✨ Bonjour! Je suis GPT-4.1, votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
             return;
         }
 
         // Envoyer un message d'attente
-        await sendMessage(senderId, "✨🧠 Analyse en cours... Cool AI réfléchit à votre requête! ⏳💫");
+        await sendMessage(senderId, "✨🧠 Analyse en cours... GPT-4.1 réfléchit à votre requête! ⏳💫");
 
         let response;
 
-        // Vérifier si nous avons une image en attente pour cet utilisateur
-        if (pendingImages[senderId]) {
-            const imageUrl = pendingImages[senderId];
+        // Construire les paramètres de la requête
+        const queryParams = new URLSearchParams({
+            ask: prompt || "Décrivez bien cette photo",
+            uid: senderId,
+            apikey: API_KEY
+        });
 
-            // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-3-7-sonnet-20250219&image=${encodeURIComponent(imageUrl)}`;
-
-            console.log('API URL avec image:', apiUrl);
-
-            // Appel à l'API avec l'image
-            const apiResponse = await axios.get(apiUrl);
-            response = apiResponse.data;
-        } else {
-            // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-3-7-sonnet-20250219`;
-
-            console.log('API URL sans image:', apiUrl);
-
-            // Appel à l'API
-            const apiResponse = await axios.get(apiUrl);
-            response = apiResponse.data;
+        // Ajouter l'image si disponible
+        if (imageUrl) {
+            queryParams.append('imageUrl', imageUrl);
         }
 
-        // Récupérer la réponse de l'API
-        let reply;
-        if (response.response) {
-            reply = response.response;
-        } else if (response.content) {
-            reply = response.content;
-        } else if (response.message) {
-            reply = response.message;
-        } else if (response.text) {
-            reply = response.text;
-        } else if (typeof response === 'string') {
-            reply = response;
-        } else {
-            const keys = Object.keys(response);
-            reply = keys.length > 0 ? response[keys[0]] : 'Réponse vide reçue de l\'API';
+        const fullUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
+        
+        console.log('=== GPT-4.1 DEBUG ===');
+        console.log('Image URL:', imageUrl);
+        console.log('Question:', prompt);
+        console.log('API URL:', fullUrl);
+
+        const apiResponse = await axios.get(fullUrl);
+        response = apiResponse.data.response;
+
+        if (!response) {
+            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API.");
+            return;
         }
 
-        console.log('Réponse extraite:', reply);
-
-        // Créer une réponse formatée
-        const formattedReply = `
-✅COOL AI MADAGASCAR🇲🇬
+        // Formater la réponse
+        const formattedResponse = `
+✅GPT-4.1 MADAGASCAR🇲🇬
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-💬 *Votre question:* 
-${prompt}
 
-✨ *Réponse:* 
-${reply}
+✍️Réponse 👇
+
+${response}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | Cool AI
+🧠 Powered by 👉@Bruno | GPT-4.1 AI
 `;
 
         // Envoyer la réponse formatée
-        await sendLongMessage(senderId, formattedReply);
+        await sendLongMessage(senderId, formattedResponse);
+
+        // Supprimer l'image en attente après utilisation
+        if (pendingImages[senderId]) {
+            delete pendingImages[senderId];
+        }
 
     } catch (error) {
-        console.error("Erreur lors de l'appel à l'API Cool AI:", error);
-
+        console.error("❌ Erreur GPT-4.1:", error?.response?.data || error.message || error);
         await sendMessage(senderId, `
 ⚠️ *OUPS! ERREUR TECHNIQUE* ⚠️
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Une erreur s'est produite lors de la communication avec Cool AI.
+Une erreur s'est produite lors de la communication avec GPT-4.1.
 Veuillez réessayer dans quelques instants.
 
 🔄 Si le problème persiste, essayez une autre commande
@@ -147,13 +134,11 @@ ou contactez l'administrateur.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
     }
-
-    return { skipCommandCheck: true };
 };
 
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "cool",
-    description: "Discutez avec Cool AI, une IA avancée capable d'analyser du texte et des images.",
-    usage: "Envoyez 'cool <question>' pour discuter avec Cool AI, ou envoyez une image suivie de questions à son sujet."
+    description: "Discutez avec GPT-4.1, une IA avancée capable d'analyser du texte et des images.",
+    usage: "Envoyez 'cool <question>' pour discuter avec GPT-4.1, ou envoyez une image suivie de questions à son sujet."
 };
