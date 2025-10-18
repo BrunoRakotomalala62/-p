@@ -2,140 +2,211 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
+// Stockage des images en attente par utilisateur
+const pendingImages = {};
+
+// Stockage de l'historique de conversation par utilisateur
+const conversationHistory = {};
+
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
-    const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères par message Facebook
+    const MAX_MESSAGE_LENGTH = 2000;
 
     if (message.length <= MAX_MESSAGE_LENGTH) {
-        // Si le message est assez court, l'envoyer directement
         await sendMessage(senderId, message);
         return;
     }
 
-    // Diviser le message en plusieurs parties intelligemment
     let startIndex = 0;
-    
+
     while (startIndex < message.length) {
         let endIndex = startIndex + MAX_MESSAGE_LENGTH;
-        
-        // Si on n'est pas à la fin du message
+
         if (endIndex < message.length) {
-            // Chercher le dernier séparateur (point, virgule, espace) avant la limite
             const separators = ['. ', ', ', ' ', '! ', '? ', '.\n', ',\n', '!\n', '?\n', '\n\n', '\n'];
             let bestBreakPoint = -1;
-            
-            // Chercher du point le plus proche de la fin jusqu'au début
+
             for (const separator of separators) {
-                // Chercher le dernier séparateur dans la plage
                 const lastSeparator = message.lastIndexOf(separator, endIndex);
                 if (lastSeparator > startIndex && (bestBreakPoint === -1 || lastSeparator > bestBreakPoint)) {
                     bestBreakPoint = lastSeparator + separator.length;
                 }
             }
-            
-            // Si un séparateur a été trouvé, utiliser ce point de coupure
+
             if (bestBreakPoint !== -1) {
                 endIndex = bestBreakPoint;
             }
         } else {
-            // Si c'est la dernière partie, prendre jusqu'à la fin
             endIndex = message.length;
         }
-        
-        // Extraire la partie du message
+
         const messagePart = message.substring(startIndex, endIndex);
         await sendMessage(senderId, messagePart);
-        await new Promise(resolve => setTimeout(resolve, 1000));  // Pause de 1s entre chaque message
-        
-        // Passer à la partie suivante
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         startIndex = endIndex;
     }
-}
-
-// Fonction pour détecter les mots-clés liés aux exercices
-function detectExerciseKeywords(text) {
-    const exerciseKeywords = [
-        'exercice', 'problème', 'résoudre', 'équation', 'calcul', 'mathématiques',
-        'exercise', 'problem', 'solve', 'equation', 'calculation', 'mathematics'
-    ];
-    
-    const lowercaseText = text.toLowerCase();
-    return exerciseKeywords.some(keyword => lowercaseText.includes(keyword));
 }
 
 // Fonction pour traiter les messages texte
 async function handleTextMessage(senderId, message) {
     try {
-        // Message d'attente
-        sendMessage(senderId, "🇲🇬 ⏳ Generating...").catch(err => 
-            console.error("Erreur lors de l'envoi du message d'attente:", err)
-        );
+        const API_ENDPOINT_IMAGE = "https://gemimagprompt.vercel.app/";
+        const API_ENDPOINT_TEXT = "https://gemimagprompt.vercel.app/";
 
-        const prompt = message;
-        const customId = senderId;
-        
-        // Vérifier si l'utilisateur a des images en attente
-        if (pendingImages[senderId] && pendingImages[senderId].length > 0) {
-            const imageUrl = pendingImages[senderId][pendingImages[senderId].length - 1]; // Prendre la dernière image
-            
-            try {
-                // Analyser l'image avec la question de l'utilisateur
-                const response = await axios.post('https://gemini-sary-prompt-espa-vercel-api.vercel.app/api/gemini', {
-                    link: imageUrl,
-                    prompt: message,
-                    customId: senderId
-                });
-                
-                const reply = response.data.message;
-                
-                if (reply) {
-                    await sendLongMessage(senderId, `Bruno : voici ma suggestion de réponse pour cette image :\n${reply}`);
-                } else {
-                    await sendMessage(senderId, "Je n'ai pas reçu de réponse valide pour l'image avec votre question.");
-                }
-                
-                // Supprimer l'image de la liste des images en attente après avoir traité la question
-                pendingImages[senderId].pop();
-                return;
-            } catch (imageError) {
-                console.error('Erreur lors de l\'analyse de l\'image avec question :', imageError.response ? imageError.response.data : imageError.message);
-                // Continuer à traiter le message comme un message texte normal en cas d'erreur
-            }
+        // Initialiser l'historique de conversation si nécessaire
+        if (!conversationHistory[senderId]) {
+            conversationHistory[senderId] = {
+                messages: [],
+                hasImage: false,
+                imageUrl: null
+            };
         }
-        
-        // Traitement normal des messages texte si aucune image en attente ou en cas d'erreur
-        const response = await axios.post('https://gemini-sary-prompt-espa-vercel-api.vercel.app/api/gemini', {
-            prompt,
-            customId
-        });
-        
-        const reply = response.data.message;
-        await sendLongMessage(senderId, reply);
+
+        // Si l'utilisateur veut effacer la conversation
+        if (message && message.toLowerCase() === 'clear') {
+            delete conversationHistory[senderId];
+            delete pendingImages[senderId];
+            await sendMessage(senderId, "🔄 Conversation réinitialisée avec succès!");
+            return;
+        }
+
+        // Si le message est vide et qu'il n'y a pas d'image
+        if ((!message || message.trim() === '') && !pendingImages[senderId] && !conversationHistory[senderId].hasImage) {
+            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Cool AI. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
+            return;
+        }
+
+        // Envoyer un message d'attente
+        await sendMessage(senderId, "✨🧠 Analyse en cours... Cool AI réfléchit à votre requête! ⏳💫");
+
+        let response;
+        let imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl || null;
+
+        // Si l'utilisateur a une image (actuelle ou précédente dans l'historique)
+        if (imageUrl) {
+            // Construire les paramètres de la requête avec image
+            const queryParams = new URLSearchParams({
+                question: message || "Décrivez cette photo",
+                image: imageUrl,
+                uid: senderId
+            });
+
+            const fullUrl = `${API_ENDPOINT_IMAGE}?${queryParams.toString()}`;
+            
+            console.log('=== COOL AI DEBUG IMAGE ===');
+            console.log('Image URL:', imageUrl);
+            console.log('Question:', message);
+            console.log('API URL:', fullUrl);
+            
+            const apiResponse = await axios.get(fullUrl);
+            response = apiResponse.data;
+
+            // Ajouter à l'historique
+            conversationHistory[senderId].messages.push({
+                role: 'user',
+                content: message,
+                hasImage: true,
+                imageUrl: imageUrl
+            });
+            conversationHistory[senderId].messages.push({
+                role: 'assistant',
+                content: response
+            });
+
+        } else {
+            // Requête texte simple sans image
+            const queryParams = new URLSearchParams({
+                question: message,
+                uid: senderId
+            });
+
+            const fullUrl = `${API_ENDPOINT_TEXT}?${queryParams.toString()}`;
+            const apiResponse = await axios.get(fullUrl);
+            response = apiResponse.data;
+
+            // Ajouter à l'historique
+            conversationHistory[senderId].messages.push({
+                role: 'user',
+                content: message
+            });
+            conversationHistory[senderId].messages.push({
+                role: 'assistant',
+                content: response
+            });
+        }
+
+        if (!response) {
+            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API.");
+            return;
+        }
+
+        // Formater la réponse
+        const formattedResponse = `
+✅COOL AI MADAGASCAR🇲🇬
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+💬 *Votre question:* 
+${message || "Analyse de l'image"}
+
+✨ *Réponse:* 
+${response}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧠 Powered by 👉@Bruno | Cool AI
+`;
+
+        // Envoyer la réponse formatée
+        await sendLongMessage(senderId, formattedResponse);
+
+        // Ne pas supprimer l'image de l'historique pour permettre les questions de suivi
+        // Mais supprimer de pendingImages pour éviter la confusion
+        if (pendingImages[senderId]) {
+            delete pendingImages[senderId];
+        }
+
     } catch (error) {
-        console.error('Erreur lors de l\'appel à l\'API :', error);
-        await sendMessage(senderId, 'Désolé, une erreur s\'est produite lors du traitement de votre message.');
+        console.error("❌ Erreur Cool AI:", error?.response?.data || error.message || error);
+        await sendMessage(senderId, `
+⚠️ *OUPS! ERREUR TECHNIQUE* ⚠️
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+Une erreur s'est produite lors de la communication avec Cool AI.
+Veuillez réessayer dans quelques instants.
+
+🔄 Si le problème persiste, essayez une autre commande
+ou contactez l'administrateur.
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
     }
 }
-
-// Stockage des images en attente de question
-const pendingImages = {};
 
 // Fonction pour traiter les images
 async function handleImageMessage(senderId, imageUrl) {
     try {
+        const API_ENDPOINT_IMAGE = "https://gemimagprompt.vercel.app/";
+
         // Stocker l'URL de l'image pour cet utilisateur
         if (!pendingImages[senderId]) {
-            pendingImages[senderId] = [];
+            pendingImages[senderId] = imageUrl;
+        } else {
+            pendingImages[senderId] = imageUrl;
         }
-        pendingImages[senderId].push(imageUrl);
+
+        if (!conversationHistory[senderId]) {
+            conversationHistory[senderId] = {
+                messages: [],
+                hasImage: false,
+                imageUrl: null
+            };
+        }
         
-        // Envoyer un message d'attente et demander à l'utilisateur de poser une question
-        await sendMessage(senderId, "J'ai bien reçu votre image. N'hésitez pas à me poser votre question à propos de cette image ou photo que vous avez envoyée.");
+        conversationHistory[senderId].hasImage = true;
+        conversationHistory[senderId].imageUrl = imageUrl;
+
+        // Envoyer un message confirmant la réception de l'image
+        await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
         
-        // Ne pas analyser l'image immédiatement - attendre une question de l'utilisateur
     } catch (error) {
         console.error('Erreur lors du traitement de l\'image :', error.response ? error.response.data : error.message);
-        await sendMessage(senderId, "J'ai bien reçu votre image. N'hésitez pas à me poser votre question à propos de cette image ou photo que vous avez envoyée.");
+        await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
     }
 }
 
