@@ -94,13 +94,13 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             const imageUrl = pendingImages[senderId];
             
             // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-sonnet-4-20250514&image=${encodeURIComponent(imageUrl)}&system=&max_tokens=3000`;
+            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-sonnet-4-5-20250929&image=${encodeURIComponent(imageUrl)}&system=&max_tokens=3000`;
             
             // Appel à l'API avec l'image
             response = await axios.get(apiUrl);
         } else {
             // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-sonnet-4-20250514&system=&max_tokens=3000`;
+            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-sonnet-4-5-20250929&system=&max_tokens=3000`;
             response = await axios.get(apiUrl);
         }
         
