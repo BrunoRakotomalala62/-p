@@ -27,7 +27,16 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             
             // Appel à l'API
             const response = await axios.get(apiUrl);
-            const reply = response.data.response;
+            
+            // Vérifier la structure de la réponse
+            let reply;
+            if (response.data && response.data.response) {
+                reply = response.data.response;
+            } else if (typeof response.data === 'string') {
+                reply = response.data;
+            } else {
+                reply = JSON.stringify(response.data);
+            }
             
             // Formater et envoyer la réponse automatique
             const formattedReply = `🇲🇬 Réponse AUTOMATIQUE✅\n${reply}`;
@@ -59,7 +68,16 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         
         // Appel à l'API pour la conversation continue
         const response = await axios.get(apiUrl);
-        const reply = response.data.response;
+        
+        // Vérifier la structure de la réponse
+        let reply;
+        if (response.data && response.data.response) {
+            reply = response.data.response;
+        } else if (typeof response.data === 'string') {
+            reply = response.data;
+        } else {
+            reply = JSON.stringify(response.data);
+        }
         
         // Formater et envoyer la réponse
         const formattedReply = `🇲🇬 Réponse AUTOMATIQUE✅\n${reply}`;
