@@ -73,12 +73,12 @@ async function handleTextMessage(senderId, message) {
 
         // Si le message est vide et qu'il n'y a pas d'image
         if ((!message || message.trim() === '') && !pendingImages[senderId] && !conversationHistory[senderId].hasImage) {
-            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Cool AI. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
+            await sendMessage(senderId, "🤖✨ Bonjour! Je suis ✨AMPINGA AI🌟. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
             return;
         }
 
         // Envoyer un message d'attente
-        await sendMessage(senderId, "✨🧠 Analyse en cours... Cool AI réfléchit à votre requête! ⏳💫");
+        await sendMessage(senderId, "✨🧠 Analyse en cours... AMPINGA AI réfléchit à votre requête! ⏳💫");
 
         let response;
         let imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl || null;
@@ -94,7 +94,7 @@ async function handleTextMessage(senderId, message) {
 
             const fullUrl = `${API_ENDPOINT_IMAGE}?${queryParams.toString()}`;
             
-            console.log('=== COOL AI DEBUG IMAGE ===');
+            console.log('=== AMPINGA AI DEBUG IMAGE ===');
             console.log('Image URL:', imageUrl);
             console.log('Question:', message);
             console.log('API URL:', fullUrl);
@@ -143,7 +143,7 @@ async function handleTextMessage(senderId, message) {
 
         // Formater la réponse
         const formattedResponse = `
-✅COOL AI MADAGASCAR🇲🇬
+✅AMPINGA D'OR AI MADAGASCAR🇲🇬
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 💬 *Votre question:* 
 ${message || "Analyse de l'image"}
@@ -151,7 +151,7 @@ ${message || "Analyse de l'image"}
 ✨ *Réponse:* 
 ${response}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | Cool AI
+🧠 Powered by 👉@Bruno | Ampinga AI
 `;
 
         // Envoyer la réponse formatée
@@ -164,11 +164,11 @@ ${response}
         }
 
     } catch (error) {
-        console.error("❌ Erreur Cool AI:", error?.response?.data || error.message || error);
+        console.error("❌ Erreur AMPINGA AI:", error?.response?.data || error.message || error);
         await sendMessage(senderId, `
 ⚠️ *OUPS! ERREUR TECHNIQUE* ⚠️
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Une erreur s'est produite lors de la communication avec Cool AI.
+Une erreur s'est produite lors de la communication avec AMPINGA AI.
 Veuillez réessayer dans quelques instants.
 
 🔄 Si le problème persiste, essayez une autre commande
