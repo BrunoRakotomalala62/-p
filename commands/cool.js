@@ -1,9 +1,37 @@
 
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
+const fs = require('fs-extra');
+const path = require('path');
 
 // Stockage des images en attente par utilisateur pour la conversation continue
 const pendingImages = {};
+
+// Fonction pour télécharger une image et la sauvegarder localement
+async function downloadImage(imageUrl, senderId) {
+    try {
+        const response = await axios({
+            method: 'get',
+            url: imageUrl,
+            responseType: 'arraybuffer'
+        });
+        
+        const tempDir = path.join(__dirname, '..', 'temp');
+        await fs.ensureDir(tempDir);
+        
+        const imagePath = path.join(tempDir, `image_${senderId}_${Date.now()}.jpg`);
+        await fs.writeFile(imagePath, response.data);
+        
+        // Retourner l'URL accessible publiquement
+        // Assuming your server is running on port 5000
+        const publicUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/temp/image_${senderId}_${Date.now()}.jpg`;
+        
+        return imagePath; // Retourner le chemin local pour l'instant
+    } catch (error) {
+        console.error('Erreur lors du téléchargement de l\'image:', error);
+        throw error;
+    }
+}
 
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
@@ -12,9 +40,17 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         
         // Vérifier si nous avons affaire à un attachement image
         if (imageAttachments && imageAttachments.length > 0) {
-            // Stocker l'URL de l'image pour cet utilisateur
-            const imageUrl = imageAttachments[0].payload.url;
-            pendingImages[senderId] = imageUrl;
+            // Récupérer l'URL de l'image
+            const facebookImageUrl = imageAttachments[0].payload.url;
+            
+            // Envoyer un message d'attente
+            await sendMessage(senderId, "📥 Téléchargement de l'image... ⏳");
+            
+            // Télécharger l'image localement
+            const localImagePath = await downloadImage(facebookImageUrl, senderId);
+            
+            // Stocker le chemin local pour cet utilisateur
+            pendingImages[senderId] = facebookImageUrl;
             
             // Question prédéfinie pour l'analyse automatique
             const predefinedQuestion = "Décrivez bien cette photo";
@@ -22,8 +58,16 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             // Envoyer un message d'attente
             await sendMessage(senderId, "🔍 Analyse automatique de votre image en cours... ⏳");
             
-            // Construire l'URL de l'API avec la question prédéfinie et l'image
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(predefinedQuestion)}&uid=${senderId}&model=${MODEL}&image=${encodeURIComponent(imageUrl)}`;
+            // Pour l'instant, utiliser l'URL Facebook directement car l'API ne peut pas accéder aux fichiers locaux
+            // Une solution serait d'héberger l'image sur un service externe ou de convertir en base64
+            
+            // Convertir l'image en base64
+            const imageBuffer = await fs.readFile(localImagePath);
+            const base64Image = imageBuffer.toString('base64');
+            const imageDataUrl = `data:image/jpeg;base64,${base64Image}`;
+            
+            // Construire l'URL de l'API avec la question prédéfinie et l'image en base64
+            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(predefinedQuestion)}&uid=${senderId}&model=${MODEL}&image=${encodeURIComponent(imageDataUrl)}`;
             
             // Appel à l'API
             const response = await axios.get(apiUrl);
@@ -62,9 +106,19 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         // Envoyer un message d'attente
         await sendMessage(senderId, "🧠 Analyse en cours... ⏳");
         
-        // Construire l'URL de l'API avec la nouvelle question et l'image stockée
-        const imageUrl = pendingImages[senderId];
-        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${senderId}&model=${MODEL}&image=${encodeURIComponent(imageUrl)}`;
+        // Récupérer l'URL Facebook stockée
+        const facebookImageUrl = pendingImages[senderId];
+        
+        // Télécharger à nouveau l'image pour la conversation continue
+        const localImagePath = await downloadImage(facebookImageUrl, senderId);
+        
+        // Convertir l'image en base64
+        const imageBuffer = await fs.readFile(localImagePath);
+        const base64Image = imageBuffer.toString('base64');
+        const imageDataUrl = `data:image/jpeg;base64,${base64Image}`;
+        
+        // Construire l'URL de l'API avec la nouvelle question et l'image en base64
+        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${senderId}&model=${MODEL}&image=${encodeURIComponent(imageDataUrl)}`;
         
         // Appel à l'API pour la conversation continue
         const response = await axios.get(apiUrl);
