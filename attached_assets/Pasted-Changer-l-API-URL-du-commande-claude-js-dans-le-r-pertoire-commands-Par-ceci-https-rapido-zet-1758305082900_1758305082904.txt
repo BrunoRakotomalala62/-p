@@ -1,0 +1,45 @@
+Changer l'API URL du commande claude.js dans le répertoire commands/
+
+Par ceci :
+
+https://rapido.zetsu.xyz/api/anthropic?q=D%C3%A9crivez%20bien%20cette%20photos&uid=123&model=claude-opus-4-20250514&image=https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQLoqCO-YUKIodm_TgoMLIHgRuqhcQ3GOmSImt6iWpglTPJQIDUmwby814&system=&max_tokens=3000
+
+
+Voici la réponse de l'API URL :
+{
+  "operator": "rapido",
+  "response": "Cette magnifique photographie capture un sifaka de Coquerel (un type de lémurien) dans son habitat naturel à Madagascar. L'animal présente une posture caractéristique, suspendu verticalement à une branche d'arbre.\n\n𝗗𝗲𝘀𝗰𝗿𝗶𝗽𝘁𝗶𝗼𝗻 𝗱é𝘁𝗮𝗶𝗹𝗹é𝗲 :\n\n- 𝗟𝗲 𝗹é𝗺𝘂𝗿𝗶𝗲𝗻 : Il s'agit d'un sifaka au pelage distinctif blanc crémeux sur le corps, avec une coloration orange-rougeâtre sur les membres, la poitrine et les flancs. Sa face noire contraste joliment avec le reste de son pelage clair.\n\n- 𝗟𝗮 𝗽𝗼𝘀𝘁𝘂𝗿𝗲 : Le sifaka est accroché à une branche dans une position verticale typique de cette espèce, utilisant ses longs membres pour s'agripper. Ses grandes mains et pieds sont parfaitement adaptés pour saisir les branches.\n\n- 𝗟'𝗲𝗻𝘃𝗶𝗿𝗼𝗻𝗻𝗲𝗺𝗲𝗻𝘁 : L'animal est entouré d'une végétation luxuriante et verdoyante, typique des forêts malgaches. On peut voir plusieurs branches et un feuillage dense en arrière-plan, créant un cadre naturel parfait.\n\n- 𝗟𝗮 𝗾𝘂𝗮𝗹𝗶𝘁é 𝗱𝗲 𝗹'𝗶𝗺𝗮𝗴𝗲 : La photographie est très nette, avec une belle profondeur de champ qui met l'animal en valeur tout en gardant l'arrière-plan légèrement flou, créant ainsi un effet bokeh agréable.\n\nCette image illustre parfaitement l'agilité et l'adaptation remarquable des sifakas à la vie arboricole dans les forêts de Madagascar.",
+  "model": "claude-opus-4-20250514",
+  "usage": {
+    "input_tokens": 312,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 386,
+    "service_tier": "standard"
+  },
+  "models": [
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+  ]
+}
+
+
+
+
+
+Réponse du Bot attendu :
+
+Cette magnifique photographie capture un sifaka de Coquerel (un type de lémurien) dans son habitat naturel à Madagascar. L'animal présente une posture caractéristique, suspendu verticalement à une branche d'arbre.\n\n𝗗𝗲𝘀𝗰𝗿𝗶𝗽𝘁𝗶𝗼𝗻 𝗱é𝘁𝗮𝗶𝗹𝗹é𝗲 :\n\n- 𝗟𝗲 𝗹é𝗺𝘂𝗿𝗶𝗲𝗻 : Il s'agit d'un sifaka au pelage distinctif blanc crémeux sur le corps, avec une coloration orange-rougeâtre sur les membres, la poitrine et les flancs. Sa face noire contraste joliment avec le reste de son pelage clair.\n\n- 𝗟𝗮 𝗽𝗼𝘀𝘁𝘂𝗿𝗲 : Le sifaka est accroché à une branche dans une position verticale typique de cette espèce, utilisant ses longs membres pour s'agripper. Ses grandes mains et pieds sont parfaitement adaptés pour saisir les branches.\n\n- 𝗟'𝗲𝗻𝘃𝗶𝗿𝗼𝗻𝗻𝗲𝗺𝗲𝗻𝘁 : L'animal est entouré d'une végétation luxuriante et verdoyante, typique des forêts malgaches. On peut voir plusieurs branches et un feuillage dense en arrière-plan, créant un cadre naturel parfait.\n\n- 𝗟𝗮 𝗾𝘂𝗮𝗹𝗶𝘁é 𝗱𝗲 𝗹'𝗶𝗺𝗮𝗴𝗲 : La photographie est très nette, avec une belle profondeur de champ qui met l'animal en valeur tout en gardant l'arrière-plan légèrement flou, créant ainsi un effet bokeh agréable.\n\nCette image illustre parfaitement l'agilité et l'adaptation remarquable des sifakas à la vie arboricole dans les forêts de Madagascar.
+
+

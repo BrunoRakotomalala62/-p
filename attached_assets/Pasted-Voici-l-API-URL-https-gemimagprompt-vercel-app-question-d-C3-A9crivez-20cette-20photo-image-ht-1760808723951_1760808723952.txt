@@ -1,0 +1,40 @@
+Voici l'API URL :
+
+https://gemimagprompt.vercel.app/?question=d%C3%A9crivez%20cette%20photo&image=https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQLoqCO-YUKIodm_TgoMLIHgRuqhcQ3GOmSImt6iWpglTPJQIDUmwby814&uid=1
+
+
+Voici sa réponse Json :
+Il s'agit d'une photographie de nature montrant un **lémurien** en pleine action, dans son habitat naturel, qui est probablement une forêt tropicale dense (typiquement à Madagascar).
+
+**Le Sujet Principal : Le Lémurien**
+
+L'animal central est un **Sifaka** (*Propithecus*), reconnaissable à sa posture verticale et ses longs membres. Il semble s'agir d'un Sifaka diademé (ou une espèce similaire très colorée) en raison de la coloration frappante de sa fourrure :
+
+1.  **Posture :** Le lémurien est suspendu verticalement. Il s'accroche à une fine branche horizontale au-dessus de lui, utilisant ses mains (membres antérieurs). Son corps est courbé, et ses longues pattes (membres postérieurs) sont également tendues ou légèrement pendantes, illustrant sa grande agilité.
+2.  **Couleur :** Le contraste des couleurs est spectaculaire. Le torse, le cou et le haut du dos sont de couleur gris clair ou blanc cassé. En revanche, ses bras et ses jambes présentent une couleur vive, intense, allant de l'**orange vif** au **jaune doré**. Sa longue queue est de couleur très pâle ou blanche.
+3.  **Regard :** La tête du lémurien est tournée légèrement vers la gauche et vers le haut, suggérant qu'il est alerte ou qu'il observe son environnement.
+
+**L'Environnement : La Forêt**
+
+1.  **Végétation :** L'arrière-plan et les côtés sont dominés par un feuillage dense et luxuriant de couleur vert foncé, caractéristique des jungles humides. La densité de la végétation crée une atmosphère de canopée.
+2.  **Arbres :** Sur le côté droit de l'image, on distingue clairement le tronc d'un grand arbre, au bois plutôt clair ou grisâtre, qui contraste avec le vert profond du feuillage. Ce tronc sert de cadre vertical.
+3.  **Lumière :** La lumière semble naturelle et vive, filtrant à travers la canopée (lumière tamisée), ce qui met en évidence la texture du pelage du lémurien, en particulier ses membres orange éclatants.
+
+**Impression générale :**
+
+La photo capture un moment dynamique et met en valeur la beauté exotique et les couleurs exceptionnelles de cette espèce endémique, soulignant son adaptation parfaite à la vie arboricole.
+
+
+
+Pour le prompt seulement :
+https://gemimagprompt.vercel.app/?question=bonjour&uid=1
+
+
+Réponse Json :
+
+Bonjour ! Comment puis-je vous aider aujourd'hui ?
+
+
+
+Changer l'API URL du cool.js du répertoire du commands/ par les deux api URL précédent
+
