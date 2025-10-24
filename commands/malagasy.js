@@ -46,6 +46,11 @@ module.exports = async (senderId, prompt) => {
                 return toBoldUnicode(content);
             });
             
+            // Remplacer les titres ### par leur version en gras Unicode (sans les ###)
+            reply = reply.replace(/###\s*(.*?)(\s*:)?$/gm, (match, content, colon) => {
+                return toBoldUnicode(content) + (colon || '');
+            });
+            
             // Formater la réponse
             const formattedReply = `🇲🇬✅ FITIAVANA MLG ✅🇲🇬
 
