@@ -2,8 +2,8 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// URL de base pour l'API Claude Malagasy
-const API_BASE_URL = 'https://apis-keith.vercel.app/ai/claudeai';
+// URL de base pour l'API GPT-4.1
+const API_BASE_URL = 'https://miko-utilis.vercel.app/api/gpt-4.1';
 
 module.exports = async (senderId, prompt) => {
     try {
@@ -17,14 +17,14 @@ module.exports = async (senderId, prompt) => {
         await sendMessage(senderId, "⏳ Création d'une histoire en malgache...");
 
         // Construire l'URL de l'API
-        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}`;
+        const apiUrl = `${API_BASE_URL}?query=${encodeURIComponent(prompt)}&userId=${senderId}`;
         
         // Appel à l'API
         const response = await axios.get(apiUrl);
         
         // Vérifier si la réponse est valide
-        if (response.data && response.data.result && response.data.result.response) {
-            const reply = response.data.result.response;
+        if (response.data && response.data.data && response.data.data.response) {
+            const reply = response.data.data.response;
             
             // Formater la réponse
             const formattedReply = `🇲🇬✅ FITIAVANA MLG ✅🇲🇬
@@ -38,7 +38,7 @@ ${reply}`;
         }
 
     } catch (error) {
-        console.error("Erreur lors de l'appel à l'API Claude Malagasy:", error);
+        console.error("Erreur lors de l'appel à l'API Malagasy:", error);
         
         // Message d'erreur
         await sendMessage(senderId, `
@@ -56,6 +56,6 @@ Veuillez réessayer dans quelques instants.
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "malagasy",
-    description: "Génère des histoires et répond à vos questions en malgache avec Claude AI.",
+    description: "Génère des histoires et répond à vos questions en malgache avec GPT-4.1.",
     usage: "Envoyez 'malagasy <votre question en malgache>' par exemple: 'malagasy milaza angano iray'"
 };
