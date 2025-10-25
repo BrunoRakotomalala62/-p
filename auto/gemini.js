@@ -5,8 +5,8 @@ const path = require('path');
 
 const conversationHistory = new Map();
 
-// Fonction pour convertir en subscript Unicode
-function convertToSubscript(text) {
+// Fonction pour convertir uniquement les notations mathématiques avec underscore en subscript Unicode
+function convertMathSubscript(text) {
     const subscriptMap = {
         '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
         'a': 'ₐ', 'b': '♭', 'c': '𝒸', 'd': '𝒹', 'e': 'ₑ', 'f': '𝒻', 'g': 'ℊ', 'h': '𝒽', 'i': 'ᵢ', 'j': 'ⱼ',
@@ -17,12 +17,12 @@ function convertToSubscript(text) {
         'U': 'U', 'V': 'V', 'W': 'W', 'X': 'X', 'Y': 'Y', 'Z': 'Z',
         '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
     };
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        result += subscriptMap[char] || char;
-    }
-    return result;
+
+    // Utilise une expression régulière pour trouver les motifs comme U_n, U_0, etc.
+    // et remplace seulement la partie qui suit l'underscore par le caractère subscript
+    return text.replace(/([a-zA-Z])_([0-9a-zA-Z])/g, (match, p1, p2) => {
+        return p1 + (subscriptMap[p2] || p2);
+    });
 }
 
 // Fonction pour convertir en superscript Unicode
@@ -63,8 +63,8 @@ async function chat(prompt, uid) {
             throw new Error('Aucune réponse reçue');
         }
 
-        // Convertir les indices en format subscript
-        return convertToSubscript(result);
+        // Convertir les indices mathématiques en format subscript
+        return convertMathSubscript(result);
     } catch (error) {
         console.error('Erreur chat Gemini:', error);
         throw error;
@@ -98,8 +98,8 @@ async function chatWithImage(prompt, uid, imagePath) {
             throw new Error('Aucune réponse reçue');
         }
 
-        // Convertir les indices en format subscript
-        return convertToSubscript(result);
+        // Convertir les indices mathématiques en format subscript
+        return convertMathSubscript(result);
     } catch (error) {
         console.error('Erreur chat avec image Gemini:', error);
         throw error;
