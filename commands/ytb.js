@@ -27,18 +27,49 @@ module.exports = async (senderId, prompt) => {
                 await sendMessage(senderId, "⏳ Préparation du téléchargement en cours...");
                 
                 try {
-                    // Appel à l'API de téléchargement
-                    const downloadUrl = `https://kaiz-apis.gleeze.com/api/ytdown-mp3?url=${encodeURIComponent(selectedVideo.url)}`;
-                    const downloadResponse = await axios.get(downloadUrl);
+                    // Utiliser l'API ytmusic pour obtenir les informations de téléchargement
+                    const searchUrl = `https://api-library-kohi.onrender.com/api/ytmusic?query=${encodeURIComponent(selectedVideo.title)}`;
+                    const searchResponse = await axios.get(searchUrl);
                     
-                    // Extraire les informations de la réponse
-                    const { title, download_url } = downloadResponse.data;
-                    
-                    // Formater un message avec le lien de téléchargement
-                    const message = `📥 *Téléchargement Prêt* 📥\n\n🎵 *Titre*: ${title}\n\n💾 [Cliquez ici pour télécharger](${download_url})`;
-                    
-                    // Envoyer le message avec le lien de téléchargement
-                    await sendMessage(senderId, message);
+                    if (searchResponse.data && searchResponse.data.status && searchResponse.data.data) {
+                        const musicData = searchResponse.data.data;
+                        
+                        // Construire le message de réponse
+                        const messageText = `
+🎵 𝗠𝗨𝗦𝗜𝗖 𝗥𝗘𝗦𝗨𝗟𝗧 🎵
+━━━━━━━━━━━━━━━━━━━
+
+🎤 𝗧𝗶𝘁𝗿𝗲 : ${musicData.title}
+
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${musicData.duration}
+
+👁️ 𝗩𝘂𝗲𝘀 : ${musicData.views.toLocaleString()}
+
+🔗 𝗟𝗶𝗲𝗻 : ${musicData.url}
+
+🎧 𝗔𝘂𝗱𝗶𝗼 : ${musicData.audioUrl}
+
+━━━━━━━━━━━━━━━━━━━
+✨ 𝗕𝗼𝗻𝗻𝗲 𝗲́𝗰𝗼𝘂𝘁𝗲 ! 🎶
+                        `.trim();
+
+                        // Envoyer l'image de la miniature
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'image',
+                                payload: {
+                                    url: musicData.thumbnail,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+
+                        // Envoyer le message texte
+                        await sendMessage(senderId, messageText);
+                        
+                    } else {
+                        await sendMessage(senderId, "❌ Impossible de récupérer le lien de téléchargement.");
+                    }
                 } catch (error) {
                     console.error("Erreur lors du téléchargement:", error);
                     await sendMessage(senderId, "❌ Désolé, une erreur s'est produite lors de la préparation du téléchargement.");
@@ -51,7 +82,7 @@ module.exports = async (senderId, prompt) => {
             // Message d'attente
             await sendMessage(senderId, "🔍 Recherche en cours...");
             
-            // Appel à l'API de recherche
+            // Appel à l'API de recherche YouTube
             const searchUrl = `https://youtube-api-milay.vercel.app/recherche?titre=${encodeURIComponent(prompt)}`;
             const searchResponse = await axios.get(searchUrl);
             
