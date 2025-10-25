@@ -11,6 +11,28 @@ const API_BASE_URL = 'https://rapido.zetsu.xyz/api/anthropic';
 // Stockage des images en attente
 const pendingImages = {};
 
+// Fonction pour convertir les indices en format subscript Unicode
+function convertToSubscript(text) {
+    // Map des chiffres et lettres vers leurs équivalents subscript
+    const subscriptMap = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+        'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ',
+        'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ',
+        'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ',
+        'v': 'ᵥ', 'x': 'ₓ'
+    };
+    
+    // Convertir les patterns comme U_0, U_n, U_p, etc.
+    return text.replace(/([A-Z][a-z]?)_([a-z0-9]+)/g, (match, base, index) => {
+        let subscript = '';
+        for (let char of index) {
+            subscript += subscriptMap[char] || char;
+        }
+        return base + subscript;
+    });
+}
+
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
     const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères par message Facebook
@@ -127,6 +149,9 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         
         console.log('Réponse extraite:', reply);
         
+        // Convertir les indices en format subscript
+        const replyWithSubscript = convertToSubscript(reply);
+        
         // Créer une réponse formatée et stylisée
         const formattedReply = `
 ✅CLAUDE MADAGASCAR🇲🇬
@@ -135,7 +160,7 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 ${prompt}
 
 ✨ *Réponse:* 
-${reply}
+${replyWithSubscript}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧠 Powered by 👉@Bruno | Claude AI
 `;
