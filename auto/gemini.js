@@ -5,6 +5,46 @@ const path = require('path');
 
 const conversationHistory = new Map();
 
+// Fonction pour convertir en subscript Unicode
+function convertToSubscript(text) {
+    const subscriptMap = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+        'a': 'ₐ', 'b': '♭', 'c': '𝒸', 'd': '𝒹', 'e': 'ₑ', 'f': '𝒻', 'g': 'ℊ', 'h': '𝒽', 'i': 'ᵢ', 'j': 'ⱼ',
+        'k': '𝓀', 'l': '𝓁', 'm': 'ℳ', 'n': 'ₙ', 'o': 'ℴ', 'p': '𝓅', 'q': '𝓆', 'r': '𝓇', 's': '𝓈', 't': '𝓉',
+        'u': '𝓊', 'v': '𝓋', 'w': '𝓌', 'x': '𝓍', 'y': '𝓎', 'z': '𝓏',
+        'A': 'Ɐ', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G', 'H': 'H', 'I': 'I', 'J': 'J',
+        'K': 'K', 'L': 'L', 'M': 'M', 'N': 'N', 'O': 'O', 'P': 'P', 'Q': 'Q', 'R': 'R', 'S': 'S', 'T': 'T',
+        'U': 'U', 'V': 'V', 'W': 'W', 'X': 'X', 'Y': 'Y', 'Z': 'Z',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+    };
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        result += subscriptMap[char] || char;
+    }
+    return result;
+}
+
+// Fonction pour convertir en superscript Unicode
+function convertToSuperscript(text) {
+    const superscriptMap = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
+        'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 'q': '𝓆', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ',
+        'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ',
+        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 'I': 'ᴵ', 'J': 'ᴶ',
+        'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 'Q': 'Q', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ',
+        'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 'Y': 'ʸ', 'Z': 'ᶻ',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+    };
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        result += superscriptMap[char] || char;
+    }
+    return result;
+}
+
 // Fonction pour le chat simple
 async function chat(prompt, uid) {
     try {
@@ -23,7 +63,8 @@ async function chat(prompt, uid) {
             throw new Error('Aucune réponse reçue');
         }
 
-        return result;
+        // Convertir les indices en format subscript
+        return convertToSubscript(result);
     } catch (error) {
         console.error('Erreur chat Gemini:', error);
         throw error;
@@ -57,7 +98,8 @@ async function chatWithImage(prompt, uid, imagePath) {
             throw new Error('Aucune réponse reçue');
         }
 
-        return result;
+        // Convertir les indices en format subscript
+        return convertToSubscript(result);
     } catch (error) {
         console.error('Erreur chat avec image Gemini:', error);
         throw error;
