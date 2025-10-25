@@ -51,6 +51,39 @@ module.exports = async (senderId, prompt) => {
                 return toBoldUnicode(content) + (colon || '');
             });
             
+            // Fonction pour nettoyer la syntaxe LaTeX
+            const cleanLatexSyntax = (text) => {
+                return text
+                    // Supprimer les blocs de code LaTeX
+                    .replace(/```[\s\S]*?```/g, '')
+                    // Supprimer les commandes LaTeX \[ et \]
+                    .replace(/\\\[/g, '')
+                    .replace(/\\\]/g, '')
+                    // Supprimer les \( et \)
+                    .replace(/\\\(/g, '')
+                    .replace(/\\\)/g, '')
+                    // Remplacer \frac{a}{b} par a/b
+                    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+                    // Supprimer \boxed{...}
+                    .replace(/\\boxed\{([^}]+)\}/g, '$1')
+                    // Supprimer \text{...}
+                    .replace(/\\text\{([^}]+)\}/g, '$1')
+                    // Supprimer les commandes mathématiques courantes
+                    .replace(/\\times/g, '×')
+                    .replace(/\\cdot/g, '·')
+                    .replace(/\\div/g, '÷')
+                    .replace(/\\quad/g, ' ')
+                    // Supprimer les doubles backslashes
+                    .replace(/\\\\/g, '\n')
+                    // Supprimer toutes les autres commandes LaTeX restantes
+                    .replace(/\\[a-zA-Z]+/g, '')
+                    // Nettoyer les accolades isolées
+                    .replace(/\{|\}/g, '');
+            };
+            
+            // Nettoyer la syntaxe LaTeX de la réponse
+            reply = cleanLatexSyntax(reply);
+            
             // Formater la réponse
             const formattedReply = `🇲🇬✅ FITIAVANA MLG ✅🇲🇬
 
