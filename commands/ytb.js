@@ -83,7 +83,7 @@ module.exports = async (senderId, prompt) => {
             await sendMessage(senderId, "🔍 Recherche en cours...");
             
             // Appel à l'API de recherche YouTube
-            const searchUrl = `https://youtube-api-milay.vercel.app/recherche?titre=${encodeURIComponent(prompt)}`;
+            const searchUrl = `https://api-youtube-vraie-vercel.vercel.app/recherche?titre=${encodeURIComponent(prompt)}`;
             const searchResponse = await axios.get(searchUrl);
             
             // Vérifier si des vidéos ont été trouvées
