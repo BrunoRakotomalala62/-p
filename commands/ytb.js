@@ -90,19 +90,48 @@ module.exports = async (senderId, prompt) => {
             if (searchResponse.data && searchResponse.data.videos && searchResponse.data.videos.length > 0) {
                 // Stocker les vidéos pour cet utilisateur
                 userSearches[senderId].query = prompt;
-                userSearches[senderId].videos = searchResponse.data.videos;
                 
-                // Construire la liste des vidéos
-                let message = `🌟 *${prompt.toUpperCase()}* 🌟\n\n`;
+                // Limiter à 80 résultats maximum
+                const allVideos = searchResponse.data.videos.slice(0, 80);
+                userSearches[senderId].videos = allVideos;
                 
-                searchResponse.data.videos.forEach((video, index) => {
-                    message += `${index + 1}- ${video.title}\n\n`;
-                });
+                // Envoyer les résultats par groupes de 20
+                const BATCH_SIZE = 20;
+                const totalBatches = Math.ceil(allVideos.length / BATCH_SIZE);
                 
-                message += "✅ *Envoyez le numéro* de la vidéo que vous souhaitez télécharger.";
-                
-                // Envoyer la liste des vidéos
-                await sendMessage(senderId, message);
+                for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+                    const startIndex = batchIndex * BATCH_SIZE;
+                    const endIndex = Math.min(startIndex + BATCH_SIZE, allVideos.length);
+                    const batchVideos = allVideos.slice(startIndex, endIndex);
+                    
+                    // Construire le message pour ce lot
+                    let message = '';
+                    
+                    // Ajouter le titre seulement pour le premier lot
+                    if (batchIndex === 0) {
+                        message = `🌟 *${prompt.toUpperCase()}* 🌟\n\n`;
+                    }
+                    
+                    // Ajouter les vidéos de ce lot
+                    batchVideos.forEach((video, index) => {
+                        const globalIndex = startIndex + index + 1;
+                        message += `${globalIndex}- ${video.title}\n\n`;
+                    });
+                    
+                    // Ajouter les instructions seulement au dernier lot
+                    if (batchIndex === totalBatches - 1) {
+                        message += `✅ *Envoyez le numéro* de la vidéo que vous souhaitez télécharger.\n\n`;
+                        message += `📊 Total: ${allVideos.length} résultats trouvés`;
+                    }
+                    
+                    // Envoyer le message pour ce lot
+                    await sendMessage(senderId, message);
+                    
+                    // Attendre 2 secondes entre chaque lot pour éviter la surcharge
+                    if (batchIndex < totalBatches - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    }
+                }
             } else {
                 await sendMessage(senderId, "❌ Aucune vidéo trouvée pour votre recherche.");
             }
