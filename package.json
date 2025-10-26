@@ -8,7 +8,7 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.9",
+    "@distube/ytdl-core": "^4.16.12",
     "@google/generative-ai": "^0.22.0",
     "@types/node": "^18.0.6",
     "axios": "^1.4.0",
