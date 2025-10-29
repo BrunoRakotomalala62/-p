@@ -1,15 +1,15 @@
 
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
-const fs = require('fs-extra');
-const path = require('path');
 
 // Stockage de l'historique de conversation pour chaque utilisateur
 const conversationHistory = {};
 
 module.exports = async (senderId, args) => {
     try {
+        console.log('Commande poesie appelée avec args:', args);
         const userInput = args.join(' ').trim();
+        console.log('Input utilisateur:', userInput);
 
         if (!userInput) {
             return sendMessage(senderId, "❌ Veuillez fournir un mot-clé pour rechercher des poèmes.\nExemple: poesie fitiavana");
@@ -62,11 +62,14 @@ module.exports = async (senderId, args) => {
 
             // Appel à la première API pour la recherche
             const searchUrl = `https://tonontako-audio.vercel.app/recherche?tononkalo=${encodeURIComponent(keyword)}&page=${page}`;
+            console.log('URL de recherche:', searchUrl);
             
             const searchResponse = await axios.get(searchUrl);
+            console.log('Réponse API reçue:', JSON.stringify(searchResponse.data));
             const searchData = searchResponse.data;
 
             if (!searchData || !searchData.Reponse) {
+                console.log('Pas de résultats dans la réponse');
                 return sendMessage(senderId, "❌ Aucun résultat trouvé pour votre recherche.");
             }
 
@@ -85,7 +88,14 @@ module.exports = async (senderId, args) => {
 
     } catch (error) {
         console.error('Erreur dans la commande poesie:', error);
-        await sendMessage(senderId, "❌ Une erreur s'est produite lors de la recherche de poèmes. Veuillez réessayer.");
+        console.error('Détails de l\'erreur:', error.response ? error.response.data : error.message);
+        
+        if (error.response) {
+            console.error('Code status:', error.response.status);
+            console.error('Données de réponse:', error.response.data);
+        }
+        
+        await sendMessage(senderId, `❌ Une erreur s'est produite lors de la recherche de poèmes. Veuillez réessayer.\nDétails: ${error.message}`);
     }
 };
 
