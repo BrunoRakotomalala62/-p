@@ -16,6 +16,40 @@ module.exports = async (senderId, args) => {
             return sendMessage(senderId, "❌ Veuillez fournir un mot-clé pour rechercher des poèmes.\nExemple: poesie fitiavana");
         }
 
+        // Vérifier si l'utilisateur demande une page spécifique (ex: "page 2", "page 3")
+        const pageMatch = userInput.match(/^page\s+(\d+)$/i);
+        
+        if (pageMatch) {
+            const pageNumber = parseInt(pageMatch[1]);
+            
+            if (!conversationHistory[senderId]) {
+                return sendMessage(senderId, "❌ Veuillez d'abord effectuer une recherche avant de demander une page spécifique.\nExemple: poesie fitiavana");
+            }
+            
+            const keyword = conversationHistory[senderId].keyword;
+            
+            // Appel à l'API pour la page demandée
+            const searchUrl = `https://tonontako-audio.vercel.app/recherche?tononkalo=${encodeURIComponent(keyword)}&page=${pageNumber}`;
+            console.log('URL de recherche pour page:', searchUrl);
+            
+            const searchResponse = await axios.get(searchUrl);
+            const searchData = searchResponse.data;
+
+            if (!searchData || !searchData.Reponse) {
+                return sendMessage(senderId, `❌ Aucun résultat trouvé pour la page ${pageNumber}.`);
+            }
+
+            // Mettre à jour l'historique avec la nouvelle page
+            conversationHistory[senderId].page = pageNumber;
+            conversationHistory[senderId].timestamp = Date.now();
+
+            // Envoyer la liste des résultats
+            const message = `🔍 Résultats pour "${keyword}" (Page ${pageNumber}):\n\n${searchData.Reponse}\n\n💡 Répondez avec un numéro (1-20) pour voir les détails du poème.`;
+            
+            await sendMessage(senderId, message);
+            return;
+        }
+        
         // Vérifier si l'utilisateur a envoyé un numéro (sélection d'un poème)
         const numeroMatch = userInput.match(/^\d+$/);
         
