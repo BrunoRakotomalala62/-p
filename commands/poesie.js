@@ -8,7 +8,8 @@ const conversationHistory = {};
 module.exports = async (senderId, args) => {
     try {
         console.log('Commande poesie appelée avec args:', args);
-        const userInput = args.join(' ').trim();
+        // Gérer le cas où args est une chaîne de caractères ou un tableau
+        const userInput = typeof args === 'string' ? args.trim() : (Array.isArray(args) ? args.join(' ').trim() : '');
         console.log('Input utilisateur:', userInput);
 
         if (!userInput) {
