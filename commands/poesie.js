@@ -85,8 +85,8 @@ module.exports = async (senderId, args) => {
                 });
             }
 
-            // Envoyer les détails du poème sans l'URL MP3
-            const message = `📝 Mpanoratra: ${detailData.auteur}\n\n${detailData.tonony}`;
+            // Envoyer les détails du poème avec l'URL MP3
+            const message = `📝 Mpanoratra: ${detailData.auteur}\n\n🎵 mp3: ${detailData.mp3}\n\n${detailData.tonony}`;
             
             await sendMessage(senderId, message);
 
