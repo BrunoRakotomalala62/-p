@@ -1,6 +1,65 @@
 
+
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
+
+// Fonction pour envoyer des messages longs en plusieurs parties
+async function sendLongMessage(senderId, message) {
+    const MAX_MESSAGE_LENGTH = 2000;
+
+    if (message.length <= MAX_MESSAGE_LENGTH) {
+        await sendMessage(senderId, message);
+        return;
+    }
+
+    let startIndex = 0;
+    let partNumber = 1;
+    const totalParts = Math.ceil(message.length / MAX_MESSAGE_LENGTH);
+
+    while (startIndex < message.length) {
+        let endIndex = startIndex + MAX_MESSAGE_LENGTH;
+
+        if (endIndex < message.length) {
+            // Chercher le dernier séparateur avant la limite
+            const separators = ['\n\n', '\n', ' ', ', ', ':', ';'];
+            let bestBreakPoint = -1;
+
+            for (const separator of separators) {
+                const lastSeparator = message.lastIndexOf(separator, endIndex);
+                if (lastSeparator > startIndex && (bestBreakPoint === -1 || lastSeparator > bestBreakPoint)) {
+                    bestBreakPoint = lastSeparator + separator.length;
+                }
+            }
+
+            if (bestBreakPoint !== -1) {
+                endIndex = bestBreakPoint;
+            }
+        } else {
+            endIndex = message.length;
+        }
+
+        let messagePart = message.substring(startIndex, endIndex);
+
+        // Ajouter un indicateur de partie si le message est divisé
+        if (totalParts > 1) {
+            if (partNumber === 1) {
+                messagePart = `${messagePart}\n\n📄 Partie ${partNumber}/${totalParts}`;
+            } else {
+                messagePart = `📄 Partie ${partNumber}/${totalParts}\n\n${messagePart}`;
+            }
+        }
+
+        await sendMessage(senderId, messagePart);
+        
+        // Attendre 500ms entre chaque message pour éviter les limitations
+        if (partNumber < totalParts) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        startIndex = endIndex;
+        partNumber++;
+    }
+}
 
 module.exports = async (senderId, args) => {
     try {
@@ -29,20 +88,19 @@ module.exports = async (senderId, args) => {
                 minute: '2-digit'
             });
 
-            // Sélectionner les devises principales à afficher
-            const mainCurrencies = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'CNY', 'INR', 'BRL', 'ZAR', 'AED', 'MAD', 'MGA'];
-            
+            // Construire le message complet avec TOUTES les devises
             let message = `🎉🌻 TAUX D'ÉCHANGE 👷📝\n\n`;
             message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
             message += `💱 Devise de base : ${baseCode}\n`;
             message += `📅 Mise à jour : ${updateDate}\n`;
             message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
             
-            message += `✨ PRINCIPALES DEVISES :\n\n`;
+            message += `✨ TOUTES LES DEVISES DISPONIBLES :\n\n`;
             
-            // Afficher les devises principales
-            mainCurrencies.forEach(currency => {
-                if (rates[currency] && currency !== baseCode) {
+            // Afficher TOUTES les devises
+            const allCurrencies = Object.keys(rates).sort();
+            allCurrencies.forEach(currency => {
+                if (currency !== baseCode) {
                     const rate = rates[currency];
                     const formattedRate = rate.toFixed(4);
                     const flag = getCurrencyFlag(currency);
@@ -56,9 +114,10 @@ module.exports = async (senderId, args) => {
             message += `💡 Pour changer la devise de base,\n`;
             message += `tapez : echange <CODE_DEVISE>\n`;
             message += `Exemple : echange USD\n\n`;
-            message += `🌍 Devises disponibles : ${Object.keys(rates).length} devises`;
+            message += `🌍 Total : ${Object.keys(rates).length} devises`;
 
-            await sendMessage(senderId, message);
+            // Envoyer le message avec découpage automatique
+            await sendLongMessage(senderId, message);
 
         } else {
             await sendMessage(senderId, "❌ Erreur lors de la récupération des taux d'échange. Veuillez réessayer plus tard.");
@@ -79,7 +138,9 @@ function getCurrencyFlag(currency) {
         'KRW': '🇰🇷', 'MXN': '🇲🇽', 'SGD': '🇸🇬', 'HKD': '🇭🇰', 'NOK': '🇳🇴',
         'SEK': '🇸🇪', 'DKK': '🇩🇰', 'PLN': '🇵🇱', 'THB': '🇹🇭', 'IDR': '🇮🇩',
         'HUF': '🇭🇺', 'CZK': '🇨🇿', 'ILS': '🇮🇱', 'CLP': '🇨🇱', 'PHP': '🇵🇭',
-        'ARS': '🇦🇷', 'COP': '🇨🇴', 'SAR': '🇸🇦', 'MYR': '🇲🇾', 'RON': '🇷🇴'
+        'ARS': '🇦🇷', 'COP': '🇨🇴', 'SAR': '🇸🇦', 'MYR': '🇲🇾', 'RON': '🇷🇴',
+        'TRY': '🇹🇷', 'NZD': '🇳🇿', 'VND': '🇻🇳', 'EGP': '🇪🇬', 'NGN': '🇳🇬',
+        'PKR': '🇵🇰', 'BDT': '🇧🇩', 'UAH': '🇺🇦', 'AED': '🇦🇪', 'KES': '🇰🇪'
     };
     return flags[currency] || '💰';
 }
@@ -87,6 +148,7 @@ function getCurrencyFlag(currency) {
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "echange",
-    description: "Affiche les taux d'échange de devises en temps réel pour une devise de base donnée.",
+    description: "Affiche les taux d'échange de TOUTES les devises en temps réel pour une devise de base donnée.",
     usage: "Envoyez 'echange' pour EUR par défaut, ou 'echange <CODE_DEVISE>' pour une autre devise (ex: echange USD)"
 };
+
