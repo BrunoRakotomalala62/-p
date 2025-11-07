@@ -76,6 +76,9 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             return toBoldUnicode(content);
         });
 
+        // Supprimer les ## utilisés pour les titres Markdown
+        processedResult = processedResult.replace(/##\s*/g, '');
+
         const formattedResponse = `🌾 PRAIRIE AI\n\n${processedResult}\n\n✨ Vous pouvez continuer à poser des questions sur cette image`;
 
         const MAX_MESSAGE_LENGTH = 2000;
