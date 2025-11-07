@@ -4,7 +4,7 @@ const sendMessage = require('../handles/sendMessage');
 const { addSubscription, removeSubscription, checkSubscription } = require('../utils/subscription');
 
 // Liste des administrateurs autorisés (ajouter vos UIDs)
-const ADMIN_IDS = ['8019039378224629']; // Seul l'administrateur principal
+const ADMIN_IDS = ['5986125634817413']; // Seul l'administrateur principal
 
 module.exports = async (senderId, message, args = []) => {
     try {

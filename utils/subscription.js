@@ -16,7 +16,7 @@ if (!fs.existsSync(uidFilePath)) {
 }
 
 // Importer les IDs administrateurs
-const ADMIN_IDS = ['8019039378224629']; // Même liste que dans admin.js
+const ADMIN_IDS = ['5986125634817413']; // Même liste que dans admin.js
 
 /**
  * Vérifie si un utilisateur est abonné
