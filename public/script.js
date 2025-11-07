@@ -310,7 +310,7 @@ async function sendMessage() {
     userInput.value = '';
     userInput.style.height = 'auto';
 
-    // Si nous avons des fichiers, les traiter un par un
+    // Si nous avons des fichiers, les envoyer tous ensemble
     if (selectedFiles.length > 0) {
         // Afficher les fichiers dans le chat
         const fileURLs = [...selectedFileURLs]; // Copie pour éviter les problèmes si removeAllFiles est appelé
@@ -318,50 +318,46 @@ async function sendMessage() {
         // Ajouter le message utilisateur au chat avec tous les fichiers
         addMessage(message, true, fileURLs);
 
-        // Traiter chaque fichier séparément
-        for (let i = 0; i < selectedFiles.length; i++) {
-            // Afficher l'indicateur de chargement
-            showLoading();
+        // Afficher l'indicateur de chargement
+        showLoading();
 
-            try {
-                const formData = new FormData();
-                formData.append('prompt', message);
-                formData.append('uid', uid);
-                formData.append('file', selectedFiles[i]);
-
-                const response = await fetch('/gemini/chat-with-file', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                // Supprimer l'indicateur de chargement
-                hideLoading();
-
-                // Ajouter la réponse au chat
-                if (data.response) {
-                    // Remplacer Gemini par Bruno dans la réponse
-                    let modifiedResponse = data.response.replace(/Gemini/g, 'Bruno').replace(/gemini/g, 'bruno');
-                    // Remplacer la phrase d'identification de l'IA avec plusieurs variantes
-                    modifiedResponse = modifiedResponse.replace(/Je suis un grand modèle de langage, entraîné par Google/g, 'Je suis une création de ❤️Bruno Rakotomalala❤️, conçue pour vous aider');
-                    modifiedResponse = modifiedResponse.replace(/Je suis un modèle de langage IA/g, 'Je suis un assistant développé par ❤️Bruno Rakotomalala❤️');
-                    modifiedResponse = modifiedResponse.replace(/Je suis un assistant IA entraîné par Google/g, 'Je suis l\'assistant intelligent de ❤️Bruno Rakotomalala❤️');
-                    modifiedResponse = modifiedResponse.replace(/Je suis une IA créée par Google/g, 'Je suis l\'IA personnelle de ❤️Bruno Rakotomalala❤️');
-                    addMessage(`Pour "${selectedFiles[i].name}" : \n\n${modifiedResponse}`);
-                } else if (data.erreur) {
-                    addMessage(`Erreur avec "${selectedFiles[i].name}" : ${data.erreur}`);
-                }
-
-                // Courte pause entre les requêtes pour éviter de surcharger l'API
-                if (i < selectedFiles.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-                hideLoading();
-                addMessage(`Erreur avec "${selectedFiles[i].name}" : Erreur de communication avec le serveur. Veuillez réessayer plus tard.`);
+        try {
+            const formData = new FormData();
+            formData.append('prompt', message || 'Analysez ces images');
+            formData.append('uid', uid);
+            
+            // Ajouter tous les fichiers en une seule requête
+            for (let i = 0; i < selectedFiles.length; i++) {
+                formData.append('files', selectedFiles[i]);
             }
+
+            const response = await fetch('/gemini/chat-with-files', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            // Supprimer l'indicateur de chargement
+            hideLoading();
+
+            // Ajouter la réponse au chat
+            if (data.response) {
+                // Remplacer Gemini par Bruno dans la réponse
+                let modifiedResponse = data.response.replace(/Gemini/g, 'Bruno').replace(/gemini/g, 'bruno');
+                // Remplacer la phrase d'identification de l'IA avec plusieurs variantes
+                modifiedResponse = modifiedResponse.replace(/Je suis un grand modèle de langage, entraîné par Google/g, 'Je suis une création de ❤️Bruno Rakotomalala❤️, conçue pour vous aider');
+                modifiedResponse = modifiedResponse.replace(/Je suis un modèle de langage IA/g, 'Je suis un assistant développé par ❤️Bruno Rakotomalala❤️');
+                modifiedResponse = modifiedResponse.replace(/Je suis un assistant IA entraîné par Google/g, 'Je suis l\'assistant intelligent de ❤️Bruno Rakotomalala❤️');
+                modifiedResponse = modifiedResponse.replace(/Je suis une IA créée par Google/g, 'Je suis l\'IA personnelle de ❤️Bruno Rakotomalala❤️');
+                addMessage(modifiedResponse);
+            } else if (data.erreur) {
+                addMessage(`Erreur : ${data.erreur}`);
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            hideLoading();
+            addMessage('Erreur de communication avec le serveur. Veuillez réessayer plus tard.');
         }
 
         // Réinitialiser les fichiers

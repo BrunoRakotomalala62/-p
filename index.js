@@ -19,6 +19,8 @@ app.use(bodyParser.json());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+// Servir les fichiers temporaires pour les rendre accessibles publiquement
+app.use('/temp', express.static(path.join(__dirname, 'temp')));
 
 // Configuration de multer pour le téléchargement de fichiers
 const upload = multer({
@@ -104,31 +106,60 @@ app.post('/gemini/chat', async (req, res) => {
     }
 });
 
-// Route API pour le chat avec fichier
-app.post('/gemini/chat-with-file', upload.single('file'), async (req, res) => {
+// Route API pour le chat avec plusieurs fichiers
+app.post('/gemini/chat-with-files', upload.array('files', 10), async (req, res) => {
     try {
         const { prompt, uid } = req.body;
-        const file = req.file;
+        const files = req.files;
 
-        if (!file) {
+        if (!files || files.length === 0) {
             return res.status(400).json({ erreur: 'Aucun fichier fourni' });
         }
 
         const geminiModule = require('./auto/gemini');
+        const fs = require('fs');
         
-        // Créer un chemin temporaire pour le fichier
-        const tempPath = path.join(__dirname, 'temp', file.originalname);
-        require('fs').writeFileSync(tempPath, file.buffer);
+        // Sauvegarder les fichiers et créer des URLs publiques
+        const imageUrls = [];
+        const filePaths = [];
+        
+        for (const file of files) {
+            const uniqueName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${file.originalname}`;
+            const tempPath = path.join(__dirname, 'temp', uniqueName);
+            fs.writeFileSync(tempPath, file.buffer);
+            filePaths.push(tempPath);
+            
+            // Créer l'URL publique (utiliser la variable d'environnement REPLIT_DEV_DOMAIN si disponible)
+            const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+                ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+                : `http://localhost:${process.env.PORT || 5000}`;
+            const imageUrl = `${baseUrl}/temp/${uniqueName}`;
+            imageUrls.push(imageUrl);
+        }
 
-        const response = await geminiModule.chatWithImage(prompt || 'Décrivez cette image', uid || 'web_user', tempPath);
+        const response = await geminiModule.chatWithMultipleImages(
+            prompt || 'Analysez ces images', 
+            uid || 'web_user', 
+            imageUrls
+        );
         
-        // Nettoyer le fichier temporaire
-        require('fs').unlinkSync(tempPath);
+        // Nettoyer les fichiers temporaires après un délai
+        setTimeout(() => {
+            filePaths.forEach(filePath => {
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                } catch (error) {
+                    console.error('Erreur lors de la suppression du fichier:', error);
+                }
+            });
+        }, 60000); // Supprimer après 1 minute
         
         res.json({ response });
     } catch (error) {
-        console.error('Erreur Gemini avec fichier:', error);
-        res.status(500).json({ erreur: 'Erreur lors du traitement du fichier' });
+        console.error('Erreur Gemini avec fichiers:', error);
+        res.status(500).json({ erreur: error.message || 'Erreur lors du traitement des fichiers' });
     }
 });
 

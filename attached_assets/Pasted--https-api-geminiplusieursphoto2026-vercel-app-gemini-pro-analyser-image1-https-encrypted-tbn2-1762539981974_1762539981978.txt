@@ -1,0 +1,30 @@
+
+
+
+https://api-geminiplusieursphoto2026.vercel.app/gemini?pro=analyser&image1=https://encrypted-tbn2.gstatic.com/images?q=tbn:ANd9GcTsWmt54pp2P7-y_VeVl9hwby78R103iNRkL75CmhTpFwz02dw8IqTbcjFxVTZq4eGYf5lYGlJ73wZekWaGLjtarqG0xCNueHifhFk2c2s&image2=https://encrypted-tbn3.gstatic.com/images?q=tbn:ANd9GcQuC64OYSVdAzMgKU_vSFb03vs7pFdEcQwvXpSt0CO5D1JROtMsMRGw6RqG6IbvG8XRRqEULN4ORnq9FZ0sfOSl7AOJidLjwkYrv_GteA&uid=123
+
+
+
+Voici sa réponse Json :
+
+{"success":true,"uid":"123","prompt":"analyser","imagesCount":2,"newImagesAdded":2,"response":"Voici une analyse des images :\n\nLa première image représente 𝗗𝗼𝗿𝗮 𝗹’𝗲𝘅𝗽𝗹𝗼𝗿𝗮𝘁𝗿𝗶𝗰𝗲, un personnage de dessin animé d’une jeune fille portant un t-shirt rose, un short orange et un sac à dos violet.\n\nLa deuxième image montre un 𝗹é𝗺𝘂𝗿𝗶𝗲𝗻 à 𝗾𝘂𝗲𝘂𝗲 𝗮𝗻𝗻𝗲𝗹é𝗲 devant un arrière-plan vert flou. Le lémurien a un pelage gris et blanc et des yeux jaunes."}
+
+
+Conversation continue basé sur ces images :
+
+URL ApI : 
+https://api-geminiplusieursphoto2026.vercel.app/gemini?pro=plus%20de%20d%C3%A9tails&uid=123
+
+Réponse Json :
+{"success":true,"uid":"123","prompt":"plus de détails","imagesCount":2,"newImagesAdded":0,"response":"Absolument! Voici une analyse plus détaillée des images:\n\n𝗜𝗺𝗮𝗴𝗲 𝟭: 𝗗𝗼𝗿𝗮 𝗹'𝗲𝘅𝗽𝗹𝗼𝗿𝗮𝘁𝗿𝗶𝗰𝗲\n\n*   𝗦𝘁𝘆𝗹𝗲 𝗮𝗿𝘁𝗶𝘀𝘁𝗶𝗾𝘂𝗲: L'image est un dessin animé avec des lignes nettes et des couleurs vives, ce qui est typique des dessins animés pour enfants. Le style est simple et reconnaissable.\n*   𝗗é𝘁𝗮𝗶𝗹𝘀 𝗱𝘂 𝗽𝗲𝗿𝘀𝗼𝗻𝗻𝗮𝗴𝗲: Dora est représentée avec son sourire amical, renforçant son image de personnage accessible et aventureux. Son sac à dos suggère qu'elle est toujours prête pour une exploration. Le bracelet fleuri est un détail féminin qui ajoute à son charme.\n*   𝗖𝗼𝗺𝗽𝗼𝘀𝗶𝘁𝗶𝗼𝗻: Dora est placée au centre de l'image, ce qui attire immédiatement l'attention du spectateur. L'arrière-plan blanc la met en valeur.\n*   𝗖𝗼𝘂𝗹𝗲𝘂𝗿𝘀: L'utilisation de couleurs vives comme le rose, l'orange et le violet rend l'image attrayante pour les enfants.\n\n𝗜𝗺𝗮𝗴𝗲 𝟮: 𝗟é𝗺𝘂𝗿𝗶𝗲𝗻 à 𝗾𝘂𝗲𝘂𝗲 𝗮𝗻𝗻𝗲𝗹é𝗲\n\n*   𝗤𝘂𝗮𝗹𝗶𝘁é 𝗱𝗲 𝗹𝗮 𝗽𝗵𝗼𝘁𝗼: La photo est de haute qualité, avec une bonne netteté et une profondeur de champ faible qui met l'accent sur le sujet.\n*   𝗗é𝘁𝗮𝗶𝗹𝘀 𝗱𝗲 𝗹'𝗮𝗻𝗶𝗺𝗮𝗹: On peut voir les détails de la fourrure du lémurien. Ses yeux orange sont particulièrement frappants et contrastent avec son pelage gris et blanc. Le motif facial noir et blanc est unique à cette espèce de lémurien.\n*   𝗔𝗿𝗿𝗶è𝗿𝗲-𝗽𝗹𝗮𝗻: L'arrière-plan flou et verdoyant donne un contexte à l'image, suggérant que l'animal se trouve dans son habitat naturel. Les feuilles vertes ajoutent de la couleur et de la profondeur à l'image.\n*   𝗟𝘂𝗺𝗶è𝗿𝗲: La lumière semble douce et naturelle, ce qui contribue à la sensation de réalisme de la photo.\n\nEn résumé, la première image est une illustration simple et colorée d'un personnage de dessin animé populaire, tandis que la deuxième image est une photographie détaillée et réaliste d'un lémurien dans son environnement naturel.\n"}
+
+
+
+Pour le prompt seulement :
+https://api-geminiplusieursphoto2026.vercel.app/gemini?pro=bonjour%20R%C3%A9soudre%204x-8=0&uid=123
+
+Sa réponse Json :
+{"success":true,"uid":"123","prompt":"bonjour Résoudre 4x-8=0","imagesCount":2,"newImagesAdded":0,"response":"Bien sûr, voici la résolution de l’équation `4x - 8 = 0` :\n\n1.  Ajoutez `8` aux deux côtés de l’équation :\n    `4x - 8 + 8 = 0 + 8`\n    `4x = 8`\n2.  Divisez les deux côtés par `4` :\n    `4x / 4 = 8 / 4`\n    `x = 2`\n\nDonc, la solution est `x = 2`."}
+
+
+

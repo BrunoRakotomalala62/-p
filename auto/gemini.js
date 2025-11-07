@@ -48,58 +48,69 @@ function convertToSuperscript(text) {
 // Fonction pour le chat simple
 async function chat(prompt, uid) {
     try {
-        const API_ENDPOINT = "https://gemimagprompt.vercel.app/";
+        const API_ENDPOINT = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
 
         const queryParams = new URLSearchParams({
-            question: prompt,
+            pro: prompt,
             uid: uid
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
         const result = response.data;
 
-        // La réponse est directement le texte
-        if (!result) {
-            throw new Error('Aucune réponse reçue');
+        // La réponse est maintenant dans result.response
+        if (!result || !result.success) {
+            throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
         // Convertir les indices mathématiques en format subscript
-        return convertMathSubscript(result);
+        return convertMathSubscript(result.response);
     } catch (error) {
         console.error('Erreur chat Gemini:', error);
         throw error;
     }
 }
 
-// Fonction pour le chat avec image
-async function chatWithImage(prompt, uid, imagePath) {
+// Fonction pour le chat avec plusieurs images
+async function chatWithMultipleImages(prompt, uid, imageUrls) {
     try {
-        const API_ENDPOINT = "https://gemimagprompt.vercel.app/";
-
-        // Vérifier si imagePath est une URL ou un chemin local
-        let imageUrl = imagePath;
-
-        // Si c'est un chemin local, on ne peut pas l'utiliser directement avec cette API
-        // L'API nécessite une URL d'image accessible
-        if (!imagePath.startsWith('http')) {
-            throw new Error('Cette API nécessite une URL d\'image accessible publiquement');
-        }
+        const API_ENDPOINT = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
 
         const queryParams = new URLSearchParams({
-            question: prompt,
-            image: imageUrl,
+            pro: prompt,
             uid: uid
+        });
+
+        // Ajouter toutes les images (image1, image2, etc.)
+        imageUrls.forEach((imageUrl, index) => {
+            queryParams.append(`image${index + 1}`, imageUrl);
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
         const result = response.data;
 
-        if (!result) {
-            throw new Error('Aucune réponse reçue');
+        if (!result || !result.success) {
+            throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
         // Convertir les indices mathématiques en format subscript
-        return convertMathSubscript(result);
+        return convertMathSubscript(result.response);
+    } catch (error) {
+        console.error('Erreur chat avec images Gemini:', error);
+        throw error;
+    }
+}
+
+// Fonction pour le chat avec image (ancienne version, pour compatibilité)
+async function chatWithImage(prompt, uid, imagePath) {
+    try {
+        // Si c'est une URL, utiliser directement la nouvelle API
+        if (imagePath.startsWith('http')) {
+            return await chatWithMultipleImages(prompt, uid, [imagePath]);
+        }
+
+        // Si c'est un chemin local, on ne peut pas l'utiliser directement
+        throw new Error('Cette API nécessite une URL d\'image accessible publiquement');
     } catch (error) {
         console.error('Erreur chat avec image Gemini:', error);
         throw error;
@@ -308,5 +319,6 @@ module.exports = {
     handleImageMessage,
     chat,
     chatWithImage,
+    chatWithMultipleImages,
     resetConversation
 };
