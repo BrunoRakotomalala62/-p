@@ -2,80 +2,101 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// Stocker les sessions utilisateurs (image + historique)
-const userSessions = {};
+const pendingImages = {};
 
-module.exports = async (senderId, prompt, attachments) => {
+module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
-        // Si l'utilisateur envoie une image
-        if (attachments && attachments.length > 0) {
-            const imageAttachment = attachments.find(att => att.type === 'image');
-            
-            if (imageAttachment) {
-                // Stocker l'URL de l'image pour cet utilisateur
-                userSessions[senderId] = {
-                    imageUrl: imageAttachment.payload.url,
-                    conversationActive: true
-                };
-                
-                await sendMessage(senderId, "📸 Merci beaucoup pour cette photo et j'ai bien reçu ! Quelle est votre question concernant cette photo ? 🤔");
-                return { skipCommandCheck: true };
-            }
+        const API_ENDPOINT = "https://haji-mix-api.gleeze.com/api/anthropic";
+        const API_KEY = process.env.PRAIRIE_API_KEY;
+        const MODEL = "claude-opus-4-20250514";
+
+        if (!API_KEY) {
+            console.error("❌ PRAIRIE_API_KEY environment variable is not set");
+            await sendMessage(senderId, "❌ Configuration error: API key missing. Please contact the administrator.");
+            return;
         }
-        
-        // Si l'utilisateur pose une question et a une session active
-        if (userSessions[senderId] && userSessions[senderId].conversationActive && prompt && prompt.trim() !== '') {
-            const imageUrl = userSessions[senderId].imageUrl;
-            
-            // Message d'attente
-            await sendMessage(senderId, "🔍 Analyse de votre image en cours... Veuillez patienter ! ⏳");
-            
-            // Préparer la requête API
-            const apiKey = '669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225';
-            const model = 'claude-opus-4-20250514';
-            const maxTokens = 3000;
-            
-            const apiUrl = `https://haji-mix-api.gleeze.com/api/anthropic`;
-            
-            const params = {
-                ask: prompt,
-                model: model,
-                uid: senderId,
-                roleplay: 'Text',
-                max_tokens: maxTokens,
-                stream: false,
-                img_url: imageUrl,
-                api_key: apiKey
-            };
-            
-            // Appel à l'API
-            const response = await axios.get(apiUrl, { params });
-            
-            if (response.data && response.data.answer) {
-                const reply = response.data.answer;
-                
-                // Formater la réponse
-                const formattedReply = `🌾 PRAIRIE AI 🌾\n\n${reply}\n\n💬 Vous pouvez continuer à poser des questions sur cette image !`;
-                
-                await sendMessage(senderId, formattedReply);
-            } else {
-                await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API. Veuillez réessayer.");
-            }
-            
+
+        if (imageAttachments && imageAttachments.length > 0) {
+            pendingImages[senderId] = imageAttachments[0].payload.url;
+            await sendMessage(senderId, "Merci beaucoup pour cette photo et j'ai bien reçu quel est votre question concernant cette photo");
             return { skipCommandCheck: true };
         }
-        
-        // Si pas de session active et pas d'image
-        if (!userSessions[senderId] || !userSessions[senderId].conversationActive) {
-            await sendMessage(senderId, "📸 Veuillez d'abord envoyer une image en pièce jointe, puis je vous demanderai votre question ! 😊");
+
+        const imageUrl = pendingImages[senderId] || null;
+
+        if ((!prompt || prompt.trim() === '') && !imageUrl) {
+            await sendMessage(senderId, "🌾 Prairie AI\n\nVeuillez envoyer une image ou poser une question.");
+            return;
         }
-        
+
+        if (!imageUrl && prompt) {
+            await sendMessage(senderId, "Veuillez d'abord envoyer une image en pièce jointe avant de poser votre question.");
+            return;
+        }
+
+        await sendMessage(senderId, "🌾 Prairie AI analyse votre demande...");
+
+        const queryParams = {
+            ask: prompt || "",
+            model: MODEL,
+            uid: senderId,
+            roleplay: "Text",
+            max_tokens: 3000,
+            stream: false,
+            img_url: imageUrl,
+            api_key: API_KEY
+        };
+
+        const response = await axios.get(API_ENDPOINT, {
+            params: queryParams,
+            timeout: 60000
+        });
+
+        const result = response?.data?.answer;
+
+        if (!result) {
+            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API Prairie.");
+            return;
+        }
+
+        const formattedResponse = `🌾 PRAIRIE AI\n\n${result}\n\n✨ Vous pouvez continuer à poser des questions sur cette image`;
+
+        const MAX_MESSAGE_LENGTH = 2000;
+        if (formattedResponse.length > MAX_MESSAGE_LENGTH) {
+            const chunks = [];
+            let startIndex = 0;
+            
+            while (startIndex < formattedResponse.length) {
+                let endIndex = startIndex + MAX_MESSAGE_LENGTH;
+                
+                if (endIndex < formattedResponse.length) {
+                    const lastPeriod = formattedResponse.lastIndexOf('.', endIndex);
+                    const lastSpace = formattedResponse.lastIndexOf(' ', endIndex);
+                    const breakPoint = Math.max(lastPeriod, lastSpace);
+                    
+                    if (breakPoint > startIndex) {
+                        endIndex = breakPoint + 1;
+                    }
+                }
+                
+                chunks.push(formattedResponse.substring(startIndex, endIndex));
+                startIndex = endIndex;
+            }
+            
+            for (let i = 0; i < chunks.length; i++) {
+                await sendMessage(senderId, chunks[i]);
+                if (i < chunks.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        } else {
+            await sendMessage(senderId, formattedResponse);
+        }
+
     } catch (error) {
-        console.error("Erreur lors de l'analyse avec Prairie AI:", error);
-        await sendMessage(senderId, "🚨 Une erreur s'est produite lors de l'analyse de votre image. Veuillez réessayer.");
+        console.error("❌ Erreur Prairie AI:", error?.response?.data || error.message || error);
+        await sendMessage(senderId, "❌ Une erreur s'est produite lors du traitement de votre demande. Veuillez réessayer plus tard.");
     }
-    
-    return { skipCommandCheck: true };
 };
 
 // Ajouter les informations de la commande
