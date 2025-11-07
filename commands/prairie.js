@@ -7,14 +7,8 @@ const pendingImages = {};
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
         const API_ENDPOINT = "https://haji-mix-api.gleeze.com/api/anthropic";
-        const API_KEY = process.env.PRAIRIE_API_KEY;
+        const API_KEY = "669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225";
         const MODEL = "claude-opus-4-20250514";
-
-        if (!API_KEY) {
-            console.error("❌ PRAIRIE_API_KEY environment variable is not set");
-            await sendMessage(senderId, "❌ Configuration error: API key missing. Please contact the administrator.");
-            return;
-        }
 
         if (imageAttachments && imageAttachments.length > 0) {
             pendingImages[senderId] = imageAttachments[0].payload.url;
