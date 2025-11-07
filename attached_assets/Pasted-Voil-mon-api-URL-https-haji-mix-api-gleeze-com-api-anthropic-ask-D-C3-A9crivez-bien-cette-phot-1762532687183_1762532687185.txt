@@ -1,0 +1,42 @@
+Voilà mon api URL :
+
+https://haji-mix-api.gleeze.com/api/anthropic?ask=D%C3%A9crivez+bien+cette+photo&model=claude-opus-4-20250514&uid=123&roleplay=Text&max_tokens=3000&stream=false&img_url=https%3A%2F%2Fwww.thispersondoesnotexist.com&api_key=669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225
+
+
+Voici sa réponse Json :
+{
+  "user_ask": "Décrivez bien cette photo",
+  "model_used": "claude-opus-4-20250514",
+  "answer": "Cette photo montre un selfie d'un homme souriant, pris en extérieur par une belle journée ensoleillée. Il a les cheveux courts châtains, une barbe de quelques jours, et affiche un large sourire chaleureux. On peut voir des rides d'expression sur son front et autour de ses yeux, témoignant de son sourire. Il porte ce qui semble être un t-shirt de couleur sombre (vert ou bleu foncé).\n\nL'arrière-plan révèle qu'il se trouve dans un environnement côtier ou montagneux, avec un terrain rocheux visible derrière lui et un magnifique ciel bleu clair. On aperçoit également ce qui pourrait être une structure ou un poteau dans la partie supérieure de l'image. La lumière naturelle du soleil illumine son visage, créant une ambiance décontractée et joyeuse typique d'une sortie en plein air.",
+  "supported_models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+  ],
+  "images_processed": 1
+}
+
+
+créer une commande appelé : prairie.js dans le répertoire commands/
+
+Mettre la logique suivant :
+
+Si l'utilisateur envoyer une image pièce jointe attachement alors le bot attend la question de l'utilisateur et mémoriser l'image pour répondre au question de l'utilisateur et le bot répond :
+
+Utilisateur : envoyé une pièce jointe attachement
+
+Bot: Merci beaucoup pour cette photo et j'ai bien reçu quel est votre question concernant cette photo
+
+Utilisateur : Decrivez bien cette photo
+
+Bot: (réponse de l'API )
+
+Utilisateur : plus de détails
+
+Bot: le bot utilisant l'uid pour la conversation continue basé sur l'image ou autre question pour la conversation seulement 
