@@ -24,13 +24,8 @@ module.exports = async (senderId, prompt, attachments) => {
         }
         
         // Si l'utilisateur pose une question et a une session active
-        if (userSessions[senderId] && userSessions[senderId].conversationActive) {
+        if (userSessions[senderId] && userSessions[senderId].conversationActive && prompt && prompt.trim() !== '') {
             const imageUrl = userSessions[senderId].imageUrl;
-            
-            if (!prompt || prompt.trim() === '') {
-                await sendMessage(senderId, "❓ Veuillez poser une question concernant l'image.");
-                return { skipCommandCheck: true };
-            }
             
             // Message d'attente
             await sendMessage(senderId, "🔍 Analyse de votre image en cours... Veuillez patienter ! ⏳");
@@ -67,8 +62,11 @@ module.exports = async (senderId, prompt, attachments) => {
                 await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API. Veuillez réessayer.");
             }
             
-        } else {
-            // L'utilisateur n'a pas envoyé d'image d'abord
+            return { skipCommandCheck: true };
+        }
+        
+        // Si pas de session active et pas d'image
+        if (!userSessions[senderId] || !userSessions[senderId].conversationActive) {
             await sendMessage(senderId, "📸 Veuillez d'abord envoyer une image en pièce jointe, puis je vous demanderai votre question ! 😊");
         }
         
