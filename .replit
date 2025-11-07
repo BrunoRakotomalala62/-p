@@ -14,14 +14,6 @@ run = ["node", "index.js"]
 deploymentTarget = "autoscale"
 ignorePorts = false
 
-[[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
-localPort = 39347
-externalPort = 3000
-
 [workflows]
 runButton = "Project"
 
@@ -57,3 +49,7 @@ outputType = "webview"
 
 [agent]
 expertMode = true
+
+[[ports]]
+localPort = 5000
+externalPort = 80
