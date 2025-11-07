@@ -7,8 +7,8 @@ const pendingSearches = {};
 
 module.exports = async (senderId, args, api) => {
     try {
-        // Si c'est un message de sélection (format: "1 | video" ou "1 | audio")
-        const messageText = args.join(' ').trim();
+        // args est une chaîne de caractères, pas un tableau
+        const messageText = typeof args === 'string' ? args.trim() : (Array.isArray(args) ? args.join(' ').trim() : '');
         
         // Vérifier si l'utilisateur répond à une recherche précédente
         if (pendingSearches[senderId] && /^\d+\s*\|\s*(video|audio)$/i.test(messageText)) {
@@ -16,7 +16,7 @@ module.exports = async (senderId, args, api) => {
         }
 
         // Sinon, c'est une nouvelle recherche
-        const query = args.join(' ').trim();
+        const query = messageText;
 
         if (!query) {
             return await sendMessage(senderId, `
