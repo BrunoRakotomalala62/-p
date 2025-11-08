@@ -335,6 +335,32 @@ textarea {
   }
 }
 
+/* Styles pour les équations mathématiques KaTeX */
+.katex {
+  font-size: 1.15em !important;
+  color: inherit !important;
+}
+
+.katex-display {
+  font-size: 1.2em !important;
+  margin: 0.5em 0 !important;
+  color: inherit !important;
+}
+
+.message-content .katex {
+  font-size: 1.15em !important;
+}
+
+.message-content .katex-display {
+  font-size: 1.2em !important;
+}
+
+/* Améliorer la lisibilité des équations dans les messages du bot */
+.bot-message .katex,
+.bot-message .katex-display {
+  color: var(--text-color) !important;
+}
+
 @media (max-width: 768px) {
   .container {
       padding: 0;
@@ -347,5 +373,14 @@ textarea {
 
   .message {
       max-width: 90%;
+  }
+  
+  /* Maintenir la taille des équations sur mobile */
+  .katex {
+      font-size: 1.1em !important;
+  }
+  
+  .katex-display {
+      font-size: 1.15em !important;
   }
 }
