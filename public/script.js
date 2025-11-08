@@ -223,17 +223,86 @@ function addMessage(text, isUser = false, imageUrls = null) {
     messageDiv.innerHTML = messageContent;
     chatMessages.appendChild(messageDiv);
 
+    // Rendre les équations mathématiques si c'est un message du bot
+    if (!isUser) {
+        // Attendre que KaTeX soit chargé avant de rendre
+        setTimeout(() => {
+            renderMath(messageDiv);
+        }, 100);
+    }
+
     // Faire défiler vers le bas
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Fonction pour formater le message (markdown simple)
+// Fonction pour formater le message (markdown simple + équations mathématiques)
 function formatMessage(text) {
-    return text
+    // D'abord, protéger les expressions mathématiques existantes en LaTeX
+    let formatted = text;
+
+    // Convertir les patterns mathématiques communs en LaTeX
+    formatted = convertMathToLatex(formatted);
+
+    // Appliquer le formatage markdown
+    formatted = formatted
         .replace(/\n\n/g, '<br><br>')
         .replace(/\n/g, '<br>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    return formatted;
+}
+
+// Fonction pour convertir les expressions mathématiques en LaTeX
+function convertMathToLatex(text) {
+    let result = text;
+
+    // Convertir les fractions (ex: 11/4, 4Un/4, Un = 11/4)
+    result = result.replace(/(\d+|\w+)\s*\/\s*(\d+)/g, (match, num, den) => {
+        return `$\\frac{${num}}{${den}}$`;
+    });
+
+    // Convertir les exposants numériques (ex: x², 4², Un²)
+    result = result.replace(/([a-zA-Z0-9]+)²/g, '$1^2');
+    result = result.replace(/([a-zA-Z0-9]+)³/g, '$1^3');
+    
+    // Convertir les indices (ex: 4Un devient 4U_n, mais seulement si pas déjà dans une expression)
+    result = result.replace(/(\d+)([A-Z])([a-z])/g, (match, num, upper, lower) => {
+        return `${num}${upper}_${lower}`;
+    });
+
+    // Détecter les équations complètes et les encadrer avec $$...$$
+    // Ex: "4Un - 8 + 8 = 3 + 8" ou "4Un = 11"
+    result = result.replace(/^(\s*)([A-Za-z0-9_\^\{\}]+\s*[-+*/=]\s*[A-Za-z0-9_\^\{\}\s\-+*/=]+)(\s*)$/gm, (match, pre, equation, post) => {
+        // Vérifier si c'est vraiment une équation (contient =)
+        if (equation.includes('=')) {
+            return `${pre}$$${equation}$$${post}`;
+        }
+        return match;
+    });
+
+    return result;
+}
+
+// Fonction pour rendre les équations mathématiques avec KaTeX
+function renderMath(element) {
+    if (typeof renderMathInElement !== 'undefined') {
+        try {
+            renderMathInElement(element, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError: false,
+                errorColor: '#cc0000',
+                strict: false
+            });
+        } catch (error) {
+            console.error('Erreur lors du rendu mathématique:', error);
+        }
+    }
 }
 
 // Fonction pour effacer la conversation
