@@ -21,6 +21,7 @@ body {
   background-color: var(--background-color);
   color: var(--text-color);
   line-height: 1.6;
+  overflow-x: hidden;
 }
 
 .container {
@@ -31,6 +32,197 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
+}
+
+/* Bouton hamburger */
+.hamburger-btn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 1001;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  width: 45px;
+  height: 45px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.hamburger-btn:hover {
+  background-color: #3367d6;
+  transform: scale(1.05);
+}
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -320px;
+  width: 300px;
+  height: 100vh;
+  background-color: #1a1a1a;
+  z-index: 1002;
+  transition: left 0.3s ease;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar.open {
+  left: 0;
+}
+
+.sidebar-header {
+  padding: 20px;
+  background-color: #111;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.sidebar-header h2 {
+  font-size: 1.2rem;
+  margin: 0;
+  color: var(--text-color);
+}
+
+.sidebar-header i {
+  margin-right: 8px;
+}
+
+.close-sidebar-btn {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 5px;
+  transition: color 0.3s;
+}
+
+.close-sidebar-btn:hover {
+  color: var(--primary-color);
+}
+
+.new-chat-btn {
+  margin: 15px;
+  padding: 12px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.3s;
+}
+
+.new-chat-btn:hover {
+  background-color: #3367d6;
+}
+
+/* Liste des conversations */
+.conversations-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.conversation-item {
+  background-color: #2d2d2d;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+
+.conversation-item:hover {
+  background-color: #3a3a3a;
+}
+
+.conversation-item.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.conversation-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.conversation-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-date {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.conversation-menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+  opacity: 0;
+}
+
+.conversation-item:hover .conversation-menu-btn {
+  opacity: 1;
+}
+
+.conversation-menu-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.conversation-item.active .conversation-menu-btn {
+  color: white;
+  opacity: 1;
+}
+
+/* Overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.active {
+  display: block;
+  opacity: 1;
 }
 
 .chat-container {

@@ -10,6 +10,8 @@ function getUID() {
 const uid = getUID();
 let selectedFiles = [];
 let selectedFileURLs = [];
+let currentConversationId = null;
+let conversations = {};
 
 // Éléments DOM
 const chatMessages = document.getElementById('chatMessages');
@@ -18,6 +20,12 @@ const sendButton = document.getElementById('sendButton');
 const fileInput = document.getElementById('fileInput');
 const filePreview = document.getElementById('filePreview');
 const clearButton = document.getElementById('clearButton');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const sidebar = document.getElementById('sidebar');
+const closeSidebar = document.getElementById('closeSidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+const newChatBtn = document.getElementById('newChatBtn');
+const conversationsList = document.getElementById('conversationsList');
 
 // Ajuster automatiquement la hauteur du textarea
 userInput.addEventListener('input', () => {
@@ -41,6 +49,21 @@ fileInput.addEventListener('change', handleFileSelect);
 
 // Gérer le clic sur le bouton d'effacement
 clearButton.addEventListener('click', clearConversation);
+
+// Gérer le sidebar
+hamburgerBtn.addEventListener('click', openSidebar);
+closeSidebar.addEventListener('click', closeSidebarMenu);
+sidebarOverlay.addEventListener('click', closeSidebarMenu);
+newChatBtn.addEventListener('click', createNewConversation);
+
+// Initialiser l'historique au chargement
+document.addEventListener('DOMContentLoaded', () => {
+    loadConversationsFromStorage();
+    if (!currentConversationId) {
+        createNewConversation();
+    }
+    renderConversationsList();
+});
 
 // Fonction pour gérer la sélection de fichier
 function handleFileSelect(e) {
@@ -475,4 +498,235 @@ async function sendMessage() {
             addMessage('Erreur de communication avec le serveur. Veuillez réessayer plus tard.');
         }
     }
+    
+    // Sauvegarder la conversation après chaque message
+    saveCurrentConversation();
+}
+
+// ========== GESTION DE L'HISTORIQUE DES CONVERSATIONS ==========
+
+// Ouvrir le sidebar
+function openSidebar() {
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('active');
+}
+
+// Fermer le sidebar
+function closeSidebarMenu() {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('active');
+}
+
+// Créer une nouvelle conversation
+function createNewConversation() {
+    // Sauvegarder la conversation actuelle avant d'en créer une nouvelle
+    if (currentConversationId) {
+        saveCurrentConversation();
+    }
+
+    // Générer un nouvel ID unique
+    const newId = 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    // Créer la nouvelle conversation
+    conversations[newId] = {
+        id: newId,
+        title: 'Nouvelle conversation',
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    // Définir comme conversation active
+    currentConversationId = newId;
+
+    // Effacer l'interface
+    chatMessages.innerHTML = '';
+    addMessage("Bonjour ! Je suis une création de ❤️Bruno Rakotomalala❤️, conçue pour vous aider. Comment puis-je vous être utile aujourd'hui ?", false);
+
+    // Sauvegarder et mettre à jour l'affichage
+    saveConversationsToStorage();
+    renderConversationsList();
+    closeSidebarMenu();
+}
+
+// Charger les conversations depuis localStorage
+function loadConversationsFromStorage() {
+    const stored = localStorage.getItem('chatConversations');
+    const currentId = localStorage.getItem('currentConversationId');
+    
+    if (stored) {
+        conversations = JSON.parse(stored);
+    }
+    
+    if (currentId && conversations[currentId]) {
+        currentConversationId = currentId;
+        loadConversation(currentId);
+    }
+}
+
+// Sauvegarder les conversations dans localStorage
+function saveConversationsToStorage() {
+    localStorage.setItem('chatConversations', JSON.stringify(conversations));
+    localStorage.setItem('currentConversationId', currentConversationId);
+}
+
+// Sauvegarder la conversation actuelle
+function saveCurrentConversation() {
+    if (!currentConversationId) return;
+
+    // Extraire tous les messages de l'interface
+    const messages = [];
+    const messageElements = chatMessages.querySelectorAll('.message');
+    
+    messageElements.forEach(msgEl => {
+        const isUser = msgEl.classList.contains('user-message');
+        const content = msgEl.querySelector('.message-content p')?.innerHTML || '';
+        
+        messages.push({
+            text: content,
+            isUser: isUser,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    // Mettre à jour la conversation
+    if (conversations[currentConversationId]) {
+        conversations[currentConversationId].messages = messages;
+        conversations[currentConversationId].updatedAt = new Date().toISOString();
+        
+        // Mettre à jour le titre si c'est le premier message utilisateur
+        if (messages.length >= 2 && conversations[currentConversationId].title === 'Nouvelle conversation') {
+            const firstUserMsg = messages.find(m => m.isUser);
+            if (firstUserMsg) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = firstUserMsg.text;
+                const plainText = tempDiv.textContent || tempDiv.innerText || '';
+                conversations[currentConversationId].title = plainText.substring(0, 50) + (plainText.length > 50 ? '...' : '');
+            }
+        }
+    }
+
+    saveConversationsToStorage();
+    renderConversationsList();
+}
+
+// Charger une conversation spécifique
+function loadConversation(conversationId) {
+    if (!conversations[conversationId]) return;
+
+    const conversation = conversations[conversationId];
+    currentConversationId = conversationId;
+
+    // Effacer l'interface
+    chatMessages.innerHTML = '';
+
+    // Recharger les messages
+    conversation.messages.forEach(msg => {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${msg.isUser ? 'user-message' : 'bot-message'}`;
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <p>${msg.text}</p>
+                <div class="message-time">${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            </div>
+        `;
+        chatMessages.appendChild(messageDiv);
+
+        // Rendre les équations mathématiques
+        if (!msg.isUser) {
+            setTimeout(() => renderMath(messageDiv), 100);
+        }
+    });
+
+    // Faire défiler vers le bas
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    saveConversationsToStorage();
+    renderConversationsList();
+}
+
+// Changer de conversation
+function switchConversation(conversationId) {
+    if (conversationId === currentConversationId) {
+        closeSidebarMenu();
+        return;
+    }
+
+    // Sauvegarder la conversation actuelle
+    saveCurrentConversation();
+
+    // Charger la nouvelle conversation
+    loadConversation(conversationId);
+
+    closeSidebarMenu();
+}
+
+// Supprimer une conversation
+function deleteConversation(conversationId, event) {
+    event.stopPropagation();
+
+    if (confirm('Voulez-vous vraiment supprimer cette conversation ?')) {
+        delete conversations[conversationId];
+
+        // Si c'est la conversation active, en créer une nouvelle
+        if (conversationId === currentConversationId) {
+            currentConversationId = null;
+            createNewConversation();
+        }
+
+        saveConversationsToStorage();
+        renderConversationsList();
+    }
+}
+
+// Afficher la liste des conversations
+function renderConversationsList() {
+    conversationsList.innerHTML = '';
+
+    // Trier les conversations par date de mise à jour (plus récentes en premier)
+    const sortedConversations = Object.values(conversations).sort((a, b) => {
+        return new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
+
+    sortedConversations.forEach(conv => {
+        const convItem = document.createElement('div');
+        convItem.className = `conversation-item ${conv.id === currentConversationId ? 'active' : ''}`;
+        
+        const date = new Date(conv.updatedAt);
+        const formattedDate = formatRelativeDate(date);
+
+        convItem.innerHTML = `
+            <div class="conversation-content">
+                <div class="conversation-title">${conv.title}</div>
+                <div class="conversation-date">${formattedDate}</div>
+            </div>
+            <button class="conversation-menu-btn" onclick="deleteConversation('${conv.id}', event)">
+                <i class="fas fa-ellipsis-v"></i>
+            </button>
+        `;
+
+        convItem.addEventListener('click', (e) => {
+            if (!e.target.closest('.conversation-menu-btn')) {
+                switchConversation(conv.id);
+            }
+        });
+
+        conversationsList.appendChild(convItem);
+    });
+}
+
+// Formater la date relative
+function formatRelativeDate(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'À l\'instant';
+    if (diffMins < 60) return `Il y a ${diffMins} min`;
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    if (diffDays < 7) return `Il y a ${diffDays}j`;
+    
+    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 }
