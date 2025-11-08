@@ -42,6 +42,12 @@ const handleMessage = async (event, api) => {
 
     // Vérifier l'abonnement de l'utilisateur
     const subscription = checkSubscription(senderId);
+    
+    // Envoyer un message de bienvenue si c'est le premier message de l'utilisateur
+    if (!userPaginationStates[senderId] && !activeCommands[senderId]) {
+        // Marquer que nous avons déjà accueilli cet utilisateur
+        userPaginationStates[senderId] = { welcomed: true };
+    }
 
     // Autoriser uniquement la commande uid sans abonnement
     const isCommandAllowed = message.text && (
