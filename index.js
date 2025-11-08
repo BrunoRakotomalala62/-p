@@ -19,8 +19,8 @@ app.use(bodyParser.json());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-// Servir les fichiers temporaires pour les rendre accessibles publiquement
-app.use('/temp', express.static(path.join(__dirname, 'temp')));
+// Servir les fichiers temporaires pour les rendre accessibles publiquement (depuis /tmp pour Vercel)
+app.use('/temp', express.static('/tmp'));
 
 // Configuration de multer pour le téléchargement de fichiers
 const upload = multer({
@@ -119,17 +119,25 @@ app.post('/gemini/chat-with-files', upload.array('files', 10), async (req, res) 
         const geminiModule = require('./auto/gemini');
         const fs = require('fs');
         
+        // Utiliser /tmp pour Vercel (compatible avec les fonctions serverless)
+        const tempDir = '/tmp';
+        
+        // S'assurer que le répertoire /tmp existe (il existe toujours sur Vercel)
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
         // Sauvegarder les fichiers et créer des URLs publiques
         const imageUrls = [];
         const filePaths = [];
         
         for (const file of files) {
             const uniqueName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${file.originalname}`;
-            const tempPath = path.join(__dirname, 'temp', uniqueName);
+            const tempPath = path.join(tempDir, uniqueName);
             fs.writeFileSync(tempPath, file.buffer);
             filePaths.push(tempPath);
             
-            // Créer l'URL publique (utiliser la variable d'environnement REPLIT_DEV_DOMAIN si disponible)
+            // Créer l'URL publique
             const baseUrl = process.env.REPLIT_DEV_DOMAIN 
                 ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
                 : `http://localhost:${process.env.PORT || 5000}`;
