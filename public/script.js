@@ -342,15 +342,8 @@ async function clearConversation() {
         const newUid = getUID();
 
         try {
-            // Appeler l'API pour réinitialiser la conversation côté serveur
-            await fetch('/gemini/reset', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ uid: newUid })
-            });
-
+            // Note: L'API externe ne nécessite pas de réinitialisation explicite
+            // La nouvelle UID suffit à créer une nouvelle session
             console.log("Conversation réinitialisée avec succès");
         } catch (error) {
             console.error("Erreur lors de la réinitialisation de la conversation:", error);
@@ -414,18 +407,27 @@ async function sendMessage() {
         showLoading();
 
         try {
-            const formData = new FormData();
-            formData.append('prompt', message || 'Analysez ces images');
-            formData.append('uid', uid);
-            
-            // Ajouter tous les fichiers en une seule requête
-            for (let i = 0; i < selectedFiles.length; i++) {
-                formData.append('files', selectedFiles[i]);
-            }
+            // Convertir les fichiers en URLs base64 ou data URLs
+            const imageUrls = await Promise.all(
+                selectedFiles.map(file => {
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(file);
+                    });
+                })
+            );
 
-            const response = await fetch('/gemini/chat-with-files', {
-                method: 'POST',
-                body: formData
+            // Construire l'URL avec les paramètres
+            let apiUrl = `https://api-geminiplusieursphoto2026.vercel.app/gemini?uid=${encodeURIComponent(uid)}&pro=${encodeURIComponent(message || 'Analysez ces images')}`;
+            
+            // Ajouter les images comme paramètres (note: data URLs peuvent être longs)
+            imageUrls.forEach((url, index) => {
+                apiUrl += `&image${index + 1}=${encodeURIComponent(url)}`;
+            });
+
+            const response = await fetch(apiUrl, {
+                method: 'GET'
             });
 
             const data = await response.json();
@@ -463,15 +465,10 @@ async function sendMessage() {
 
         try {
             // Envoi de requête standard sans fichier
-            const response = await fetch('/gemini/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    prompt: message,
-                    uid: uid
-                })
+            const apiUrl = `https://api-geminiplusieursphoto2026.vercel.app/gemini?uid=${encodeURIComponent(uid)}&pro=${encodeURIComponent(message)}`;
+            
+            const response = await fetch(apiUrl, {
+                method: 'GET'
             });
 
             const data = await response.json();
