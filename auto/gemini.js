@@ -170,8 +170,8 @@ async function resetConversation(uid) {
     conversationHistory.delete(uid);
 }
 
-// Stockage des images en attente par utilisateur
-const pendingImages = {};
+// Stockage des images en attente par utilisateur (MULTIPLE IMAGES)
+const pendingImages = {}; // Format: { senderId: [url1, url2, url3, ...] }
 
 // Stockage de l'historique de conversation par utilisateur
 const conversationHistoryOld = {};
@@ -259,7 +259,8 @@ async function handleTextMessage(senderId, message) {
         }
 
         // Si le message est vide et qu'il n'y a pas d'image
-        if ((!message || message.trim() === '') && !pendingImages[senderId] && !conversationHistoryOld[senderId].hasImage) {
+        const hasImages = pendingImages[senderId] && pendingImages[senderId].length > 0;
+        if ((!message || message.trim() === '') && !hasImages && !conversationHistoryOld[senderId].hasImage) {
             await sendMessage(senderId, "✨🧠 Bonjour! Je suis ✨AMPINGA AI🌟. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
             return;
         }
@@ -268,16 +269,16 @@ async function handleTextMessage(senderId, message) {
         await sendMessage(senderId, "✨🧠 Analyse en cours... AMPINGA AI réfléchit à votre requête! ⏳💫");
 
         let response;
-        let imageUrl = pendingImages[senderId] || conversationHistoryOld[senderId].imageUrl || null;
+        let imageUrls = pendingImages[senderId] || (conversationHistoryOld[senderId].imageUrl ? [conversationHistoryOld[senderId].imageUrl] : null);
 
-        if (imageUrl) {
+        if (imageUrls && imageUrls.length > 0) {
             try {
-                response = await chatWithImage(message || "Décrivez cette photo", senderId, imageUrl);
+                response = await chatWithMultipleImages(message || "Décrivez ces photos", senderId, imageUrls);
                 conversationHistoryOld[senderId].hasImage = true;
-                conversationHistoryOld[senderId].imageUrl = imageUrl;
+                conversationHistoryOld[senderId].imageUrl = imageUrls[0]; // Garder la première pour compatibilité
             } catch (error) {
-                console.error("Erreur lors de l'appel à chatWithImage:", error);
-                response = "Désolé, je n'ai pas pu traiter votre image. Assurez-vous que l'URL de l'image est accessible publiquement.";
+                console.error("Erreur lors de l'appel à chatWithMultipleImages:", error);
+                response = "Désolé, je n'ai pas pu traiter vos images. Assurez-vous que les URLs des images sont accessibles publiquement.";
                 delete pendingImages[senderId];
                 conversationHistoryOld[senderId].imageUrl = null;
                 conversationHistoryOld[senderId].hasImage = false;
@@ -336,7 +337,7 @@ ou contactez l'administrateur.
     }
 }
 
-// Fonction pour traiter les images
+// Fonction pour traiter les images (SUPPORTE PLUSIEURS IMAGES)
 async function handleImageMessage(senderId, imageUrl) {
     try {
         await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
@@ -354,7 +355,13 @@ async function handleImageMessage(senderId, imageUrl) {
             return;
         }
         
-        pendingImages[senderId] = publicImageUrl;
+        // Initialiser le tableau d'images si nécessaire
+        if (!pendingImages[senderId]) {
+            pendingImages[senderId] = [];
+        }
+        
+        // Ajouter l'image au tableau
+        pendingImages[senderId].push(publicImageUrl);
 
         if (!conversationHistoryOld[senderId]) {
             conversationHistoryOld[senderId] = {
@@ -367,7 +374,9 @@ async function handleImageMessage(senderId, imageUrl) {
         conversationHistoryOld[senderId].hasImage = true;
         conversationHistoryOld[senderId].imageUrl = publicImageUrl;
 
-        await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
+        const imageCount = pendingImages[senderId].length;
+        const imageWord = imageCount === 1 ? "image" : "images";
+        await sendMessage(senderId, `✨📸 J'ai bien reçu votre ${imageWord}! Total: ${imageCount} ${imageWord}. Que voulez-vous savoir à propos de ${imageCount === 1 ? "cette photo" : "ces photos"}? Posez-moi votre question! 🔍🖼️`);
 
     } catch (error) {
         console.error('Erreur lors du traitement de l\'image :', error.response ? error.response.data : error.message);
