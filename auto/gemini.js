@@ -2,8 +2,47 @@ const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 const fs = require('fs');
 const path = require('path');
+const FormData = require('form-data');
 
 const conversationHistory = new Map();
+
+async function uploadImageToCatbox(imageUrl) {
+    try {
+        console.log('📥 Téléchargement de l\'image depuis:', imageUrl);
+        
+        const imageResponse = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        const imageBuffer = Buffer.from(imageResponse.data);
+        console.log('✅ Image téléchargée, taille:', imageBuffer.length, 'bytes');
+        
+        const formData = new FormData();
+        formData.append('reqtype', 'fileupload');
+        formData.append('fileToUpload', imageBuffer, {
+            filename: 'image.jpg',
+            contentType: imageResponse.headers['content-type'] || 'image/jpeg'
+        });
+        
+        console.log('📤 Upload vers catbox.moe...');
+        const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
+            headers: formData.getHeaders(),
+            timeout: 30000
+        });
+        
+        const publicUrl = uploadResponse.data.trim();
+        console.log('✅ Image uploadée avec succès:', publicUrl);
+        
+        return publicUrl;
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'upload de l\'image:', error.message);
+        throw new Error(`Impossible d'uploader l'image: ${error.message}`);
+    }
+}
 
 // Fonction pour convertir uniquement les notations mathématiques avec underscore en subscript Unicode
 function convertMathSubscript(text) {
@@ -291,8 +330,22 @@ ou contactez l'administrateur.
 // Fonction pour traiter les images
 async function handleImageMessage(senderId, imageUrl) {
     try {
-        // Stocker l'URL de l'image pour cet utilisateur
-        pendingImages[senderId] = imageUrl;
+        await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
+        
+        console.log('🖼️ Réception image pour utilisateur:', senderId);
+        console.log('📍 URL originale:', imageUrl);
+        
+        let publicImageUrl;
+        try {
+            publicImageUrl = await uploadImageToCatbox(imageUrl);
+            console.log('✅ URL publique créée:', publicImageUrl);
+        } catch (uploadError) {
+            console.error('❌ Erreur upload catbox:', uploadError);
+            await sendMessage(senderId, "❌ Désolé, je n'ai pas pu traiter votre image. Veuillez réessayer.");
+            return;
+        }
+        
+        pendingImages[senderId] = publicImageUrl;
 
         if (!conversationHistoryOld[senderId]) {
             conversationHistoryOld[senderId] = {
@@ -303,9 +356,8 @@ async function handleImageMessage(senderId, imageUrl) {
         }
 
         conversationHistoryOld[senderId].hasImage = true;
-        conversationHistoryOld[senderId].imageUrl = imageUrl;
+        conversationHistoryOld[senderId].imageUrl = publicImageUrl;
 
-        // Envoyer un message confirmant la réception de l'image
         await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
 
     } catch (error) {
