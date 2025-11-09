@@ -13,6 +13,7 @@ async function uploadImageToCatbox(imageUrl) {
         const imageResponse = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
             timeout: 30000,
+            maxContentLength: Infinity,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
@@ -31,10 +32,18 @@ async function uploadImageToCatbox(imageUrl) {
         console.log('📤 Upload vers catbox.moe...');
         const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
             headers: formData.getHeaders(),
-            timeout: 30000
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
         });
         
         const publicUrl = uploadResponse.data.trim();
+        
+        if (!publicUrl.startsWith('https://')) {
+            console.error('❌ Réponse invalide de catbox:', publicUrl);
+            throw new Error('Service d\'hébergement indisponible');
+        }
+        
         console.log('✅ Image uploadée avec succès:', publicUrl);
         
         return publicUrl;
@@ -362,7 +371,7 @@ async function handleImageMessage(senderId, imageUrl) {
 
     } catch (error) {
         console.error('Erreur lors du traitement de l\'image :', error.response ? error.response.data : error.message);
-        await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
+        await sendMessage(senderId, "❌ Une erreur s'est produite lors du traitement de votre image. Veuillez réessayer ou contacter l'administrateur si le problème persiste.");
     }
 }
 
