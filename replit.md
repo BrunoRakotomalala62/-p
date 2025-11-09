@@ -2,6 +2,15 @@
 
 This is a Facebook Messenger bot built with Node.js and Express that provides an intelligent conversational assistant with multiple AI capabilities. The bot integrates various AI models (Gemini, Claude, GPT-4, DeepSeek, etc.) and offers features including multilingual translation, web search, biblical verse lookup, dictionary services, image generation, and content analysis. It's designed to handle user subscriptions with expiration dates and supports continuous conversations with context retention.
 
+# Recent Changes
+
+**November 9, 2025 - Image Processing for Vercel Deployment**
+- Fixed image processing issue on Vercel by implementing cloud-based image hosting
+- Added `uploadImageToCatbox()` function that downloads Facebook Messenger images to memory and uploads them to catbox.moe (free hosting service without API key requirement)
+- Modified `handleImageMessage()` to use public image URLs instead of local file storage
+- Implemented robust error handling with URL validation and size limit removal for large images
+- Solution is fully compatible with Vercel's serverless environment (no local file persistence required)
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -52,6 +61,8 @@ Preferred communication style: Simple, everyday language.
 - Weather/Date API - Location-based time information
 - WikiJS - Wikipedia content access
 - Image generation APIs (DALL-E, Bing)
+- Catbox.moe - Free image hosting for Messenger attachments (no API key required)
+- Custom Gemini API (`api-geminiplusieursphoto2026.vercel.app`) - Image analysis with conversation history
 - Various specialized APIs for cocktails, citations, grammar checking, etc.
 
 **Core Dependencies**:
@@ -62,6 +73,7 @@ Preferred communication style: Simple, everyday language.
 - `cheerio` - HTML parsing
 - `moment-timezone` - Date/time manipulation
 - `fs-extra` - Enhanced file system operations
+- `form-data` - Multipart form data handling for image uploads
 
 **Authentication**:
 - Facebook Page Access Token (`FB_ACCESS_TOKEN`) for API calls
@@ -89,3 +101,10 @@ Preferred communication style: Simple, everyday language.
 - Automatic chunking for responses exceeding 2000 characters
 - Rate limiting through delayed sending (1-2 second intervals)
 - Support for rich media attachments (images, audio, files)
+
+**Image Processing Workflow**:
+- Facebook Messenger image URLs are downloaded to memory (not saved to disk)
+- Images are uploaded to catbox.moe to obtain public URLs accessible from Vercel
+- Public URLs are sent to the external Gemini API with conversation context
+- Process is serverless-compatible and works identically on both Replit and Vercel
+- Supports unlimited image sizes with robust error handling and URL validation
