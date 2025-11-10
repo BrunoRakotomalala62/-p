@@ -12,10 +12,10 @@ module.exports = async (senderId, args) => {
 ❌ Veuillez fournir un mot-clé de recherche !
 
 📝 𝗨𝘁𝗶𝗹𝗶𝘀𝗮𝘁𝗶𝗼𝗻 :
-videotiktok <mot-clé>
+video <mot-clé>
 
 💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 :
-videotiktok dance challenge
+video dance challenge
             `.trim());
         }
 
@@ -91,9 +91,9 @@ Veuillez réessayer plus tard. 🔧
 };
 
 module.exports.info = {
-    name: "videotiktok",
+    name: "video",
     description: "Recherche une vidéo TikTok et affiche le titre, la photo de couverture et la vidéo.",
-    usage: "videotiktok <mot-clé>",
+    usage: "video <mot-clé>",
     author: "Bruno",
     aliases: ["tiktok", "ttv", "ttvid"]
 };
