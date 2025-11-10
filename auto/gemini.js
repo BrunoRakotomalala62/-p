@@ -1,46 +1,200 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
+const fs = require('fs');
+const path = require('path');
+const FormData = require('form-data');
 
-// Variables globales pour le suivi des états utilisateurs
-const pendingImages = {};
-const conversationHistory = {};
+const conversationHistory = new Map();
 
-// Configuration de l'API
-const API_CONFIG = {
-    ENDPOINT: "https://haji-mix-api.gleeze.com/api/anthropic",
-    KEY: "669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225",
-    MODEL: "claude-opus-4-20250514"
-};
+async function uploadImageToCatbox(imageUrl) {
+    try {
+        console.log('📥 Téléchargement de l\'image depuis:', imageUrl);
 
-// Fonction pour convertir en gras Unicode
-function toBoldUnicode(text) {
-    const boldMap = {
-        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚',
-        'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡',
-        'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨',
-        'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
-        'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴',
-        'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻',
-        'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂',
-        'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
-        '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰',
-        '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
-    };
+        const imageResponse = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            maxContentLength: Infinity,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
 
-    return text.split('').map(char => boldMap[char] || char).join('');
+        const imageBuffer = Buffer.from(imageResponse.data);
+        console.log('✅ Image téléchargée, taille:', imageBuffer.length, 'bytes');
+
+        const formData = new FormData();
+        formData.append('reqtype', 'fileupload');
+        formData.append('fileToUpload', imageBuffer, {
+            filename: 'image.jpg',
+            contentType: imageResponse.headers['content-type'] || 'image/jpeg'
+        });
+
+        console.log('📤 Upload vers catbox.moe...');
+        const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
+            headers: formData.getHeaders(),
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
+        });
+
+        const publicUrl = uploadResponse.data.trim();
+
+        if (!publicUrl.startsWith('https://')) {
+            console.error('❌ Réponse invalide de catbox:', publicUrl);
+            throw new Error('Service d\'hébergement indisponible');
+        }
+
+        console.log('✅ Image uploadée avec succès:', publicUrl);
+
+        return publicUrl;
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'upload de l\'image:', error.message);
+        throw new Error(`Impossible d'uploader l'image: ${error.message}`);
+    }
 }
 
-// Fonction pour formater le texte Markdown
-function formatMarkdown(text) {
-    // Convertir les mots entre ** en gras Unicode et enlever les astérisques
-    let processedText = text.replace(/\*\*(.*?)\*\*/g, (match, content) => {
-        return toBoldUnicode(content);
+// Fonction pour convertir uniquement les notations mathématiques avec underscore en subscript Unicode
+function convertMathSubscript(text) {
+    const subscriptMap = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+        'a': 'ₐ', 'b': '♭', 'c': '𝒸', 'd': '𝒹', 'e': 'ₑ', 'f': '𝒻', 'g': 'ℊ', 'h': '𝒽', 'i': 'ᵢ', 'j': 'ⱼ',
+        'k': '𝓀', 'l': '𝓁', 'm': 'ℳ', 'n': 'ₙ', 'o': 'ℴ', 'p': '𝓅', 'q': '𝓆', 'r': '𝓇', 's': '𝓈', 't': '𝓉',
+        'u': '𝓊', 'v': '𝓋', 'w': '𝓌', 'x': '𝓍', 'y': '𝓎', 'z': '𝓏',
+        'A': 'Ɐ', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G', 'H': 'H', 'I': 'I', 'J': 'J',
+        'K': 'K', 'L': 'L', 'M': 'M', 'N': 'N', 'O': 'O', 'P': 'P', 'Q': 'Q', 'R': 'R', 'S': 'S', 'T': 'T',
+        'U': 'U', 'V': 'V', 'W': 'W', 'X': 'X', 'Y': 'Y', 'Z': 'Z',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+    };
+
+    // Utilise une expression régulière pour trouver les motifs comme U_n, U_0, etc.
+    // et remplace seulement la partie qui suit l'underscore par le caractère subscript
+    return text.replace(/([a-zA-Z])_([0-9a-zA-Z])/g, (match, p1, p2) => {
+        return p1 + (subscriptMap[p2] || p2);
     });
+}
 
-    // Supprimer les ## utilisés pour les titres Markdown
-    processedText = processedText.replace(/##\s*/g, '');
+// Fonction pour convertir en superscript Unicode
+function convertToSuperscript(text) {
+    const superscriptMap = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
+        'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 'q': '𝓆', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ',
+        'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ',
+        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 'I': 'ᴵ', 'J': 'ᴶ',
+        'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 'Q': 'Q', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ',
+        'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 'Y': 'ʸ', 'Z': 'ᶻ',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+    };
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        result += superscriptMap[char] || char;
+    }
+    return result;
+}
 
-    return processedText;
+// Fonction pour le chat simple
+async function chat(prompt, uid) {
+    try {
+        const API_ENDPOINT = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
+
+        const queryParams = new URLSearchParams({
+            pro: prompt,
+            uid: uid
+        });
+
+        const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
+        const result = response.data;
+
+        // La réponse est maintenant dans result.response
+        if (!result || !result.success) {
+            throw new Error(result?.error || 'Aucune réponse reçue');
+        }
+
+        // Convertir les indices mathématiques en format subscript
+        return convertMathSubscript(result.response);
+    } catch (error) {
+        console.error('Erreur chat Gemini:', error);
+        throw error;
+    }
+}
+
+// Fonction pour le chat avec plusieurs images
+async function chatWithMultipleImages(prompt, uid, imageUrls) {
+    try {
+        const API_ENDPOINT = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
+
+        const queryParams = new URLSearchParams({
+            pro: prompt,
+            uid: uid
+        });
+
+        // Ajouter toutes les images (image1, image2, etc.)
+        imageUrls.forEach((imageUrl, index) => {
+            queryParams.append(`image${index + 1}`, imageUrl);
+        });
+
+        const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
+        const result = response.data;
+
+        if (!result || !result.success) {
+            throw new Error(result?.error || 'Aucune réponse reçue');
+        }
+
+        // Convertir les indices mathématiques en format subscript
+        return convertMathSubscript(result.response);
+    } catch (error) {
+        console.error('Erreur chat avec images Gemini:', error);
+        throw error;
+    }
+}
+
+// Fonction pour le chat avec image (ancienne version, pour compatibilité)
+async function chatWithImage(prompt, uid, imagePath) {
+    try {
+        // Si c'est une URL, utiliser directement la nouvelle API
+        if (imagePath.startsWith('http')) {
+            return await chatWithMultipleImages(prompt, uid, [imagePath]);
+        }
+
+        // Si c'est un chemin local, on ne peut pas l'utiliser directement
+        throw new Error('Cette API nécessite une URL d\'image accessible publiquement');
+    } catch (error) {
+        console.error('Erreur chat avec image Gemini:', error);
+        throw error;
+    }
+}
+
+// Fonction pour réinitialiser la conversation
+async function resetConversation(uid) {
+    conversationHistory.delete(uid);
+}
+
+// Stockage des images en attente par utilisateur (MULTIPLE IMAGES)
+const pendingImages = {}; // Format: { senderId: [url1, url2, url3, ...] }
+
+// Stockage de l'historique de conversation par utilisateur
+const conversationHistoryOld = {};
+
+// Fonction pour nettoyer la syntaxe LaTeX
+function cleanLatexSyntax(text) {
+    return text
+        .replace(/\$\$/g, "")
+        .replace(/\$/g, "")
+        .replace(/\\\(|\\\\\(|\\\\\\\(/g, "")
+        .replace(/\\\)|\\\\\)|\\\\\\\)/g, "")
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
+        .replace(/\\implies/g, "=>")
+        .replace(/\\boxed\{([^{}]+)\}/g, "[$1]")
+        .replace(/\\quad/g, " ")
+        .replace(/\\cdot/g, "×")
+        .replace(/\\times/g, "×")
+        .replace(/\\div/g, "÷")
+        .replace(/\\text\{([^{}]+)\}/g, "$1")
+        .replace(/\\equiv[^\\]*\\pmod\{([^{}]+)\}/g, "≡ (mod $1)")
+        .replace(/\\[a-zA-Z]+/g, "")
+        .replace(/\\\\/g, "")
+        .replace(/\{|\}/g, "");
 }
 
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
@@ -52,7 +206,6 @@ async function sendLongMessage(senderId, message) {
         return;
     }
 
-    const chunks = [];
     let startIndex = 0;
 
     while (startIndex < message.length) {
@@ -76,62 +229,20 @@ async function sendLongMessage(senderId, message) {
             endIndex = message.length;
         }
 
-        chunks.push(message.substring(startIndex, endIndex));
+        const messagePart = message.substring(startIndex, endIndex);
+        await sendMessage(senderId, messagePart);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         startIndex = endIndex;
     }
-
-    for (let i = 0; i < chunks.length; i++) {
-        await sendMessage(senderId, chunks[i]);
-        if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-    }
-}
-
-// Fonction principale pour le chat avec Claude
-async function chat(prompt, uid, imageUrl = null) {
-    try {
-        const queryParams = {
-            ask: prompt || "",
-            model: API_CONFIG.MODEL,
-            uid: uid,
-            roleplay: "Text",
-            max_tokens: 3000,
-            stream: false,
-            img_url: imageUrl,
-            api_key: API_CONFIG.KEY
-        };
-
-        const response = await axios.get(API_CONFIG.ENDPOINT, {
-            params: queryParams,
-            timeout: 60000
-        });
-
-        const result = response?.data?.answer;
-
-        if (!result) {
-            throw new Error('Aucune réponse reçue de l\'API');
-        }
-
-        return result;
-    } catch (error) {
-        console.error('Erreur chat Prairie AI:', error);
-        throw error;
-    }
-}
-
-// Fonction pour réinitialiser la conversation
-async function resetConversation(uid) {
-    delete pendingImages[uid];
-    delete conversationHistory[uid];
 }
 
 // Fonction pour traiter les messages texte
 async function handleTextMessage(senderId, message) {
     try {
-        // Initialiser l'historique si nécessaire
-        if (!conversationHistory[senderId]) {
-            conversationHistory[senderId] = {
+        // Initialiser l'historique de conversation si nécessaire
+        if (!conversationHistoryOld[senderId]) {
+            conversationHistoryOld[senderId] = {
                 messages: [],
                 hasImage: false,
                 imageUrl: null
@@ -140,70 +251,136 @@ async function handleTextMessage(senderId, message) {
 
         // Si l'utilisateur veut effacer la conversation
         if (message && message.toLowerCase() === 'clear') {
+            delete conversationHistoryOld[senderId];
+            delete pendingImages[senderId];
             await resetConversation(senderId);
             await sendMessage(senderId, "🔄 Conversation réinitialisée avec succès!");
             return;
         }
 
-        const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl || null;
-
-        // Vérifications de base
-        if (!message || message.trim() === '') {
-            await sendMessage(senderId, "✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\nVeuillez poser une question.");
+        // Si le message est vide et qu'il n'y a pas d'image
+        const hasImages = pendingImages[senderId] && pendingImages[senderId].length > 0;
+        if ((!message || message.trim() === '') && !hasImages && !conversationHistoryOld[senderId].hasImage) {
+            await sendMessage(senderId, "✨🧠 Bonjour! Je suis ✨AMPINGA AI🌟. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
             return;
         }
 
-        // Message d'attente
-        await sendMessage(senderId, "✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n⏳ Analyse en cours...");
+        // Envoyer un message d'attente
+        await sendMessage(senderId, "✨🧠 Analyse en cours... AMPINGA AI réfléchit à votre requête! ⏳💫");
 
-        // Appeler l'API
-        const result = await chat(message, senderId, imageUrl);
+        let response;
+        let imageUrls = pendingImages[senderId] || (conversationHistoryOld[senderId].imageUrl ? [conversationHistoryOld[senderId].imageUrl] : null);
 
-        if (!result) {
-            await sendMessage(senderId, "✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n⚠️ Aucune réponse reçue de l'API.");
+        if (imageUrls && imageUrls.length > 0) {
+            try {
+                response = await chatWithMultipleImages(message || "Décrivez ces photos", senderId, imageUrls);
+                conversationHistoryOld[senderId].hasImage = true;
+                conversationHistoryOld[senderId].imageUrl = imageUrls[0]; // Garder la première pour compatibilité
+            } catch (error) {
+                console.error("Erreur lors de l'appel à chatWithMultipleImages:", error);
+                response = "Désolé, je n'ai pas pu traiter vos images. Assurez-vous que les URLs des images sont accessibles publiquement.";
+                delete pendingImages[senderId];
+                conversationHistoryOld[senderId].imageUrl = null;
+                conversationHistoryOld[senderId].hasImage = false;
+            }
+        } else {
+            try {
+                response = await chat(message, senderId);
+                conversationHistoryOld[senderId].hasImage = false;
+                conversationHistoryOld[senderId].imageUrl = null;
+            } catch (error) {
+                console.error("Erreur lors de l'appel à chat:", error);
+                response = "Désolé, je n'ai pas pu traiter votre demande.";
+            }
+        }
+
+        if (!response) {
+            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API.");
             return;
         }
+
+        // Nettoyer les symboles LaTeX de la réponse
+        const cleanedResponse = cleanLatexSyntax(response);
 
         // Formater la réponse
-        const processedResult = formatMarkdown(result);
-        const formattedResponse = `✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n✍️Réponse 👇\n\n${processedResult}\n━━━━━━━━━━━━━━━━━━\n🧠 Powered by 👉@Bruno | Ampinga AI`;
+        const formattedResponse = `
+✅ AMPINGA D'OR AI 🇲🇬
+━━━━━━━━━━━━━━
 
-        // Envoyer la réponse
+✍️Réponse 👇
+
+${cleanedResponse}
+━━━━━━━━━━━━━━━━━━
+🧠 Powered by 👉@Bruno | Ampinga AI
+`;
+
+        // Envoyer la réponse formatée
         await sendLongMessage(senderId, formattedResponse);
 
-        // Mettre à jour l'historique
-        conversationHistory[senderId].hasImage = !!imageUrl;
-        conversationHistory[senderId].imageUrl = imageUrl;
+        // Supprimer de pendingImages après traitement
+        if (pendingImages[senderId]) {
+            delete pendingImages[senderId];
+        }
 
     } catch (error) {
-        console.error("❌ Erreur Ampinga AI:", error?.response?.data || error.message || error);
-        await sendMessage(senderId, `✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n✍️Réponse 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n━━━━━━━━━━━━━━━━━━\n🧠 Powered by 👉@Bruno | Ampinga AI`);
+        console.error("❌ Erreur AMPINGA AI:", error?.response?.data || error.message || error);
+        await sendMessage(senderId, `
+⚠️ *OUPS! ERREUR TECHNIQUE* ⚠️
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+Une erreur s'est produite lors de la communication avec AMPINGA AI.
+Veuillez réessayer dans quelques instants.
+
+🔄 Si le problème persiste, essayez une autre commande
+ou contactez l'administrateur.
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
     }
 }
 
-// Fonction pour traiter les images
+// Fonction pour traiter les images (SUPPORTE PLUSIEURS IMAGES)
 async function handleImageMessage(senderId, imageUrl) {
     try {
-        // Stocker l'image en attente
-        pendingImages[senderId] = imageUrl;
+        await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
 
-        // Initialiser l'historique si nécessaire
-        if (!conversationHistory[senderId]) {
-            conversationHistory[senderId] = {
+        console.log('🖼️ Réception image pour utilisateur:', senderId);
+        console.log('📍 URL originale:', imageUrl);
+
+        let publicImageUrl;
+        try {
+            publicImageUrl = await uploadImageToCatbox(imageUrl);
+            console.log('✅ URL publique créée:', publicImageUrl);
+        } catch (uploadError) {
+            console.error('❌ Erreur upload catbox:', uploadError);
+            await sendMessage(senderId, "❌ Désolé, je n'ai pas pu traiter votre image. Veuillez réessayer.");
+            return;
+        }
+
+        // Initialiser le tableau d'images si nécessaire
+        if (!pendingImages[senderId]) {
+            pendingImages[senderId] = [];
+        }
+
+        // Ajouter l'image au tableau
+        pendingImages[senderId].push(publicImageUrl);
+
+        if (!conversationHistoryOld[senderId]) {
+            conversationHistoryOld[senderId] = {
                 messages: [],
                 hasImage: false,
                 imageUrl: null
             };
         }
 
-        conversationHistory[senderId].hasImage = true;
-        conversationHistory[senderId].imageUrl = imageUrl;
+        conversationHistoryOld[senderId].hasImage = true;
+        conversationHistoryOld[senderId].imageUrl = publicImageUrl;
 
-        await sendMessage(senderId, "Merci beaucoup pour cette photo et j'ai bien reçu quel est votre question concernant cette photo");
+        const imageCount = pendingImages[senderId].length;
+        const imageWord = imageCount === 1 ? "image" : "images";
+        await sendMessage(senderId, `✨📸 J'ai bien reçu votre ${imageWord}! Total: ${imageCount} ${imageWord}. Que voulez-vous savoir à propos de ${imageCount === 1 ? "cette photo" : "ces photos"}? Posez-moi votre question! 🔍🖼️`);
 
     } catch (error) {
-        console.error('Erreur lors du traitement de l\'image:', error);
-        await sendMessage(senderId, "❌ Une erreur s'est produite lors du traitement de votre image. Veuillez réessayer.");
+        console.error('Erreur lors du traitement de l\'image :', error.response ? error.response.data : error.message);
+        await sendMessage(senderId, "❌ Une erreur s'est produite lors du traitement de votre image. Veuillez réessayer ou contacter l'administrateur si le problème persiste.");
     }
 }
 
@@ -211,13 +388,7 @@ module.exports = {
     handleTextMessage,
     handleImageMessage,
     chat,
+    chatWithImage,
+    chatWithMultipleImages,
     resetConversation
-};
-
-// Ajouter les informations de la commande
-module.exports.info = {
-    name: "prairie",
-    description: "Analysez des images avec l'intelligence artificielle Claude. Envoyez une image puis posez vos questions.",
-    usage: "Envoyez une image en pièce jointe, puis posez votre question.",
-    author: "Bruno"
 };
