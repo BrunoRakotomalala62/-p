@@ -3,7 +3,9 @@ const sendMessage = require('../handles/sendMessage');
 
 module.exports = async (senderId, args) => {
     try {
-        if (!args || args.length === 0) {
+        const keywords = typeof args === 'string' ? args.trim() : (Array.isArray(args) ? args.join(' ').trim() : '');
+        
+        if (!keywords || keywords.length === 0) {
             return await sendMessage(senderId, `
 🎵 𝗧𝗜𝗞𝗧𝗢𝗞 𝗩𝗜𝗗𝗘𝗢 𝗦𝗘𝗔𝗥𝗖𝗛 🎵
 ━━━━━━━━━━━━━━━━━━━
@@ -16,8 +18,6 @@ videotiktok <mot-clé>
 videotiktok dance challenge
             `.trim());
         }
-
-        const keywords = args.join(' ');
 
         await sendMessage(senderId, `🔎 Recherche de vidéos TikTok pour "${keywords}"...\n⏳ Veuillez patienter...`);
 
