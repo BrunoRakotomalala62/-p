@@ -93,6 +93,38 @@ function convertToSuperscript(text) {
     return result;
 }
 
+// Fonction pour convertir en gras Unicode (pour texte entre ** **)
+function convertToBold(text) {
+    const boldMap = {
+        'A': '𝐀', 'B': '𝐁', 'C': '𝐂', 'D': '𝐃', 'E': '𝐄', 'F': '𝐅', 'G': '𝐆', 'H': '𝐇', 'I': '𝐈', 'J': '𝐉',
+        'K': '𝐊', 'L': '𝐋', 'M': '𝐌', 'N': '𝐍', 'O': '𝐎', 'P': '𝐏', 'Q': '𝐐', 'R': '𝐑', 'S': '𝐒', 'T': '𝐓',
+        'U': '𝐔', 'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙',
+        'a': '𝐚', 'b': '𝐛', 'c': '𝐜', 'd': '𝐝', 'e': '𝐞', 'f': '𝐟', 'g': '𝐠', 'h': '𝐡', 'i': '𝐢', 'j': '𝐣',
+        'k': '𝐤', 'l': '𝐥', 'm': '𝐦', 'n': '𝐧', 'o': '𝐨', 'p': '𝐩', 'q': '𝐪', 'r': '𝐫', 's': '𝐬', 't': '𝐭',
+        'u': '𝐮', 'v': '𝐯', 'w': '𝐰', 'x': '𝐱', 'y': '𝐲', 'z': '𝐳',
+        '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'
+    };
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        result += boldMap[char] || char;
+    }
+    return result;
+}
+
+// Fonction pour formater le texte avec gras et subscript
+function formatText(text) {
+    // D'abord convertir les subscripts mathématiques (U_0, U_n, etc.)
+    let formattedText = convertMathSubscript(text);
+    
+    // Ensuite convertir le texte entre ** ** en gras Unicode
+    formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, (match, p1) => {
+        return convertToBold(p1);
+    });
+    
+    return formattedText;
+}
+
 // Fonction pour le chat simple
 async function chat(prompt, uid) {
     try {
@@ -115,8 +147,8 @@ async function chat(prompt, uid) {
             throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
-        // Convertir les indices mathématiques en format subscript
-        return convertMathSubscript(result.answer);
+        // Formater le texte avec gras et subscripts
+        return formatText(result.answer);
     } catch (error) {
         console.error('Erreur chat Anthropic:', error);
         throw error;
@@ -151,8 +183,8 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
             throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
-        // Convertir les indices mathématiques en format subscript
-        return convertMathSubscript(result.answer);
+        // Formater le texte avec gras et subscripts
+        return formatText(result.answer);
     } catch (error) {
         console.error('Erreur chat avec images Anthropic:', error);
         throw error;
