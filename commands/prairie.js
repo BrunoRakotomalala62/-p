@@ -1,4 +1,4 @@
-const gemModule = require('../auto/gem');
+const gemModule = require('../auto/gemini');
 
 module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
