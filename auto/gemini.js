@@ -145,33 +145,28 @@ async function handleTextMessage(senderId, message) {
             return;
         }
 
-        const imageUrl = pendingImages[senderId] || null;
+        const imageUrl = pendingImages[senderId] || conversationHistory[senderId].imageUrl || null;
 
         // Vérifications de base
-        if ((!message || message.trim() === '') && !imageUrl) {
-            await sendMessage(senderId, "🌾 Prairie AI\n\nVeuillez envoyer une image ou poser une question.");
-            return;
-        }
-
-        if (!imageUrl && message) {
-            await sendMessage(senderId, "Veuillez d'abord envoyer une image en pièce jointe avant de poser votre question.");
+        if (!message || message.trim() === '') {
+            await sendMessage(senderId, "✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\nVeuillez poser une question.");
             return;
         }
 
         // Message d'attente
-        await sendMessage(senderId, "🌾 Prairie AI analyse votre demande...");
+        await sendMessage(senderId, "✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n⏳ Analyse en cours...");
 
         // Appeler l'API
         const result = await chat(message, senderId, imageUrl);
 
         if (!result) {
-            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API Prairie.");
+            await sendMessage(senderId, "✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n⚠️ Aucune réponse reçue de l'API.");
             return;
         }
 
         // Formater la réponse
         const processedResult = formatMarkdown(result);
-        const formattedResponse = `🌾 PRAIRIE AI\n\n${processedResult}\n\n✨ Vous pouvez continuer à poser des questions sur cette image`;
+        const formattedResponse = `✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n✍️Réponse 👇\n\n${processedResult}\n━━━━━━━━━━━━━━━━━━\n🧠 Powered by 👉@Bruno | Ampinga AI`;
 
         // Envoyer la réponse
         await sendLongMessage(senderId, formattedResponse);
@@ -181,8 +176,8 @@ async function handleTextMessage(senderId, message) {
         conversationHistory[senderId].imageUrl = imageUrl;
 
     } catch (error) {
-        console.error("❌ Erreur Prairie AI:", error?.response?.data || error.message || error);
-        await sendMessage(senderId, "❌ Une erreur s'est produite lors du traitement de votre demande. Veuillez réessayer plus tard.");
+        console.error("❌ Erreur Ampinga AI:", error?.response?.data || error.message || error);
+        await sendMessage(senderId, `✅ AMPINGA D'OR AI 🇲🇬\n━━━━━━━━━━━━━━\n\n✍️Réponse 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n━━━━━━━━━━━━━━━━━━\n🧠 Powered by 👉@Bruno | Ampinga AI`);
     }
 }
 
