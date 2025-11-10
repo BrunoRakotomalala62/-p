@@ -96,25 +96,29 @@ function convertToSuperscript(text) {
 // Fonction pour le chat simple
 async function chat(prompt, uid) {
     try {
-        const API_ENDPOINT = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
+        const API_ENDPOINT = "https://haji-mix-api.gleeze.com/api/anthropic";
 
         const queryParams = new URLSearchParams({
-            pro: prompt,
-            uid: uid
+            ask: prompt,
+            model: 'claude-opus-4-20250514',
+            uid: uid,
+            roleplay: 'Text',
+            max_tokens: '3000',
+            stream: 'false'
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
         const result = response.data;
 
-        // La réponse est maintenant dans result.response
-        if (!result || !result.success) {
+        // La réponse est maintenant dans result.answer
+        if (!result || !result.answer) {
             throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
         // Convertir les indices mathématiques en format subscript
-        return convertMathSubscript(result.response);
+        return convertMathSubscript(result.answer);
     } catch (error) {
-        console.error('Erreur chat Gemini:', error);
+        console.error('Erreur chat Anthropic:', error);
         throw error;
     }
 }
@@ -122,29 +126,35 @@ async function chat(prompt, uid) {
 // Fonction pour le chat avec plusieurs images
 async function chatWithMultipleImages(prompt, uid, imageUrls) {
     try {
-        const API_ENDPOINT = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
+        const API_ENDPOINT = "https://haji-mix-api.gleeze.com/api/anthropic";
+        const API_KEY = "669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225";
+
+        // Pour l'instant, l'API ne supporte qu'une seule image
+        // On prend la première image du tableau
+        const imageUrl = imageUrls[0];
 
         const queryParams = new URLSearchParams({
-            pro: prompt,
-            uid: uid
-        });
-
-        // Ajouter toutes les images (image1, image2, etc.)
-        imageUrls.forEach((imageUrl, index) => {
-            queryParams.append(`image${index + 1}`, imageUrl);
+            ask: prompt,
+            model: 'claude-opus-4-20250514',
+            uid: uid,
+            roleplay: 'Text',
+            max_tokens: '3000',
+            stream: 'false',
+            img_url: imageUrl,
+            api_key: API_KEY
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
         const result = response.data;
 
-        if (!result || !result.success) {
+        if (!result || !result.answer) {
             throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
         // Convertir les indices mathématiques en format subscript
-        return convertMathSubscript(result.response);
+        return convertMathSubscript(result.answer);
     } catch (error) {
-        console.error('Erreur chat avec images Gemini:', error);
+        console.error('Erreur chat avec images Anthropic:', error);
         throw error;
     }
 }
@@ -374,9 +384,7 @@ async function handleImageMessage(senderId, imageUrl) {
         conversationHistoryOld[senderId].hasImage = true;
         conversationHistoryOld[senderId].imageUrl = publicImageUrl;
 
-        const imageCount = pendingImages[senderId].length;
-        const imageWord = imageCount === 1 ? "image" : "images";
-        await sendMessage(senderId, `✨📸 J'ai bien reçu votre ${imageWord}! Total: ${imageCount} ${imageWord}. Que voulez-vous savoir à propos de ${imageCount === 1 ? "cette photo" : "ces photos"}? Posez-moi votre question! 🔍🖼️`);
+        await sendMessage(senderId, `✨📸 Merci beaucoup pour cette photo et j'ai bien reçu quel est votre question concernant cette photo 🔍🖼️`);
 
     } catch (error) {
         console.error('Erreur lors du traitement de l\'image :', error.response ? error.response.data : error.message);
