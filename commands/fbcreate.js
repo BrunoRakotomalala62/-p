@@ -21,7 +21,7 @@ module.exports = async (senderId, args) => {
 
         const accounts = [];
         for (let i = 0; i < amount; i++) {
-            const account = await createMailTmAccount();
+            const account = await createTempMailAccount();
             if (account) {
                 const regData = await registerFacebookAccount(
                     account.email, 
@@ -31,6 +31,33 @@ module.exports = async (senderId, args) => {
                     account.birthday
                 );
                 if (regData && regData.new_user_id) {
+                    console.log(`[⏳] Récupération du code de vérification pour ${account.email}...`);
+                    await sendMessage(senderId, `⏳ Compte créé. Récupération du code de vérification...`);
+                    
+                    const verificationCode = await getVerificationCode(account.email);
+                    
+                    let accountStatus = 'Non confirmé';
+                    let finalToken = regData.session_info ? regData.session_info.access_token : 'N/A';
+                    
+                    if (verificationCode) {
+                        console.log(`[✓] Code de vérification reçu: ${verificationCode}`);
+                        const confirmResult = await confirmFacebookAccount(verificationCode, regData.new_user_id);
+                        
+                        if (confirmResult && !confirmResult.error_msg) {
+                            accountStatus = 'Confirmé ✅';
+                            if (confirmResult.access_token) {
+                                finalToken = confirmResult.access_token;
+                            }
+                            console.log(`[✓] Compte confirmé avec succès: ${account.email}`);
+                        } else {
+                            accountStatus = 'Échec confirmation';
+                            console.error(`[×] Échec de confirmation: ${confirmResult ? confirmResult.error_msg : 'Unknown'}`);
+                        }
+                    } else {
+                        accountStatus = 'Code non reçu';
+                        console.error(`[×] Code de vérification non reçu pour ${account.email}`);
+                    }
+                    
                     accounts.push({
                         email: account.email,
                         password: account.password,
@@ -39,7 +66,8 @@ module.exports = async (senderId, args) => {
                         birthday: account.birthday.toISOString().split('T')[0],
                         gender: regData.gender,
                         userId: regData.new_user_id,
-                        token: regData.session_info ? regData.session_info.access_token : 'N/A',
+                        token: finalToken,
+                        status: accountStatus,
                     });
                 } else {
                     const errorMsg = regData && regData.error_msg ? regData.error_msg : 'Raison inconnue';
@@ -60,6 +88,7 @@ module.exports = async (senderId, args) => {
                 resultMessage += `   🔑 Mot de passe: ${acc.password}\n`;
                 resultMessage += `   🎂 Date de naissance: ${acc.birthday}\n`;
                 resultMessage += `   🆔 User ID: ${acc.userId}\n`;
+                resultMessage += `   📊 Statut: ${acc.status}\n`;
                 if (acc.token && acc.token !== 'N/A' && typeof acc.token === 'string') {
                     resultMessage += `   🔐 Token: ${acc.token.substring(0, 20)}...\n`;
                 }
@@ -99,43 +128,97 @@ const getRandomName = () => {
     };
 };
 
-const getMailDomains = async () => {
-    const url = 'https://api.mail.tm/domains';
+const createTempMailAccount = async () => {
+    const url = 'https://api-test-liart-alpha.vercel.app/create';
+    const password = genRandomString(12);
+    const birthday = getRandomDate(new Date(1976, 0, 1), new Date(2004, 0, 1));
+    const { firstName, lastName } = getRandomName();
+    
     try {
         const response = await axios.get(url);
-        return response.data['hydra:member'];
+        if (response.data && response.data.address && response.data.token) {
+            const email = response.data.address;
+            const token = response.data.token;
+            console.log(`[✓] E-mail Created: ${email}`);
+            return { email, password, firstName, lastName, birthday, token };
+        } else {
+            console.error(`[×] Email Error: Invalid response`);
+            return null;
+        }
     } catch (error) {
-        console.error(`[×] E-mail Error: ${error}`);
+        console.error(`[×] Error creating email: ${error.message}`);
         return null;
     }
 };
 
-const createMailTmAccount = async () => {
-    const mailDomains = await getMailDomains();
-    if (mailDomains && mailDomains.length > 0) {
-        const domain = mailDomains[Math.floor(Math.random() * mailDomains.length)].domain;
-        const username = genRandomString(10);
-        const password = genRandomString(12);
-        const birthday = getRandomDate(new Date(1976, 0, 1), new Date(2004, 0, 1));
-        const { firstName, lastName } = getRandomName();
-        const url = 'https://api.mail.tm/accounts';
-        const data = { address: `${username}@${domain}`, password: password };
+const getVerificationCode = async (email, maxAttempts = 10) => {
+    const url = `https://api-test-liart-alpha.vercel.app/inbox?message=${encodeURIComponent(email)}`;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            const response = await axios.post(url, data, { 
-                headers: { 'Content-Type': 'application/json' } 
-            });
-            if (response.status === 201) {
-                console.log(`[✓] E-mail Created: ${username}@${domain}`);
-                return { email: `${username}@${domain}`, password, firstName, lastName, birthday };
-            } else {
-                console.error(`[×] Email Error: ${response.data}`);
-                return null;
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            const response = await axios.get(url);
+            if (response.data && response.data.emails && response.data.emails.length > 0) {
+                const emails = response.data.emails;
+                
+                for (const emailObj of emails) {
+                    if (emailObj.subject && emailObj.subject.includes('confirmation code')) {
+                        const codeMatch = emailObj.subject.match(/(\d{5,6})/);
+                        if (codeMatch) {
+                            const code = codeMatch[1];
+                            console.log(`[✓] Verification code found: ${code}`);
+                            return code;
+                        }
+                        
+                        if (emailObj.body) {
+                            const bodyCodeMatch = emailObj.body.match(/(\d{5,6})/);
+                            if (bodyCodeMatch) {
+                                const code = bodyCodeMatch[1];
+                                console.log(`[✓] Verification code found in body: ${code}`);
+                                return code;
+                            }
+                        }
+                    }
+                }
             }
+            console.log(`[⏳] Attempt ${attempt}/${maxAttempts}: Waiting for verification email...`);
         } catch (error) {
-            console.error(`[×] Error: ${error.message}`);
-            return null;
+            console.error(`[×] Error checking inbox (attempt ${attempt}): ${error.message}`);
         }
-    } else {
+    }
+    
+    console.error(`[×] No verification code found after ${maxAttempts} attempts`);
+    return null;
+};
+
+const confirmFacebookAccount = async (code, userId) => {
+    const api_key = '882a8490361da98702bf97a021ddc14d';
+    const secret = '62f8ce9f74b12f84c123cc23437a4a32';
+    
+    const req = {
+        api_key: api_key,
+        code: code,
+        format: 'json',
+        method: 'auth.confirmPhone',
+        uid: userId,
+    };
+    
+    const sig = Object.keys(req).sort().map(k => `${k}=${req[k]}`).join('') + secret;
+    const ensig = crypto.createHash('md5').update(sig).digest('hex');
+    req.sig = ensig;
+
+    const api_url = 'https://b-api.facebook.com/method/auth.confirmPhone';
+    try {
+        const response = await axios.post(api_url, new URLSearchParams(req), {
+            headers: { 
+                'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBCR/;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]' 
+            }
+        });
+        console.log(`[✓] Account confirmed successfully`);
+        return response.data;
+    } catch (error) {
+        console.error(`[×] Confirmation Error: ${error.message}`);
         return null;
     }
 };
