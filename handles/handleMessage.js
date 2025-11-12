@@ -198,6 +198,26 @@ const handleMessage = async (event, api) => {
         return;
     }
 
+    // Détection automatique des liens de réseaux sociaux pour autodown
+    // Utiliser une regex pour détecter les URLs de manière plus robuste
+    const SOCIAL_MEDIA_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?(?:tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com)\/[^\s]*/gi;
+    
+    const socialMediaMatches = userText.match(SOCIAL_MEDIA_REGEX);
+    
+    // Si un lien de réseau social est détecté ET que le message ne commence pas par une autre commande
+    // Cela permet d'éviter d'intercepter les commandes qui contiennent des liens
+    const startsWithCommand = Object.keys(commands).some(cmd => userTextLower.startsWith(cmd));
+    
+    if (socialMediaMatches && socialMediaMatches.length > 0 && !startsWithCommand && commands['autodown']) {
+        try {
+            await commands['autodown'](senderId, userText, api);
+            return; // Arrêter le traitement après autodown
+        } catch (error) {
+            console.error('Erreur lors de l\'exécution automatique d\'autodown:', error);
+            // Continuer le traitement si autodown échoue
+        }
+    }
+
     // Détecter si une nouvelle commande est utilisée
     let newCommandDetected = false;
     let detectedCommandName = null;
