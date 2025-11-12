@@ -200,7 +200,8 @@ const handleMessage = async (event, api) => {
 
     // Détection automatique des liens de réseaux sociaux pour autodown
     // Utiliser une regex pour détecter les URLs de manière plus robuste
-    const SOCIAL_MEDIA_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?(?:tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com)\/[^\s]*/gi;
+    // Supporte aussi les liens de partage Facebook (/share/r/...)
+    const SOCIAL_MEDIA_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?(?:tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com)(?:\/[^\s]*)?/gi;
     
     const socialMediaMatches = userText.match(SOCIAL_MEDIA_REGEX);
     

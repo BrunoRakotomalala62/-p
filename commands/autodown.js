@@ -3,7 +3,8 @@ const sendMessage = require('../handles/sendMessage');
 
 // Regex pour détecter les URLs de réseaux sociaux de manière robuste
 // Supporte http/https, www/m/vt/vm, majuscules/minuscules
-const SOCIAL_MEDIA_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?(?:tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com)\/[^\s]*/gi;
+// Supporte aussi les liens de partage Facebook (/share/r/...)
+const SOCIAL_MEDIA_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?(?:tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com)(?:\/[^\s]*)?/gi;
 
 module.exports = async (senderId, userText, api) => {
     try {
