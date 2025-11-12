@@ -51,17 +51,25 @@ module.exports = async (senderId, userText, api) => {
         }
 
         // Envoyer un message de traitement
-        await sendMessage(senderId, "⏳ Téléchargement en cours... Veuillez patienter.");
+        await sendMessage(senderId, "⏳ Téléchargement en cours... Veuillez patienter.\n💡 Les vidéos longues peuvent prendre 1-3 minutes.");
+
+        // Message de rappel après 60 secondes pour les vidéos longues
+        const reminderTimeout = setTimeout(async () => {
+            await sendMessage(senderId, "⏳ Téléchargement toujours en cours... La vidéo sera bientôt prête!");
+        }, 60000);
 
         // Appeler l'API de téléchargement avec l'URL normalisée
         const apiUrl = `https://buda-juoe.onrender.com/downr?url=${encodeURIComponent(normalizedUrl)}`;
         const response = await axios.get(apiUrl, { 
-            timeout: 30000,
-            maxContentLength: 100 * 1024 * 1024, // Limite de 100MB pour la réponse
+            timeout: 180000,
+            maxContentLength: 200 * 1024 * 1024,
             validateStatus: function (status) {
-                return status >= 200 && status < 500; // Accepter les erreurs pour les gérer
+                return status >= 200 && status < 500;
             }
         });
+        
+        clearTimeout(reminderTimeout);
+        
         const apiData = response.data;
 
         // Vérifier si l'API a retourné une erreur
@@ -158,11 +166,14 @@ module.exports = async (senderId, userText, api) => {
     } catch (error) {
         console.error('Erreur dans autodown:', error.message || error);
         
-        // Message d'erreur plus détaillé pour le débogage
         let errorMessage = "⚠️ Une erreur s'est produite lors du téléchargement.\n\n";
         
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-            errorMessage += "Le serveur met trop de temps à répondre. Veuillez réessayer dans quelques instants.";
+            errorMessage += "⏱️ La vidéo est trop volumineuse ou le serveur est lent.\n\n" +
+                "💡 Suggestions:\n" +
+                "• Réessayez dans quelques instants\n" +
+                "• Essayez avec une vidéo plus courte\n" +
+                "• Vérifiez votre connexion internet";
         } else if (error.response && error.response.status === 404) {
             errorMessage += "Le contenu demandé n'a pas été trouvé. Vérifiez que le lien est correct.";
         } else if (error.response && error.response.status >= 500) {
