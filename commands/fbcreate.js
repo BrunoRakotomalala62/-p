@@ -60,7 +60,7 @@ module.exports = async (senderId, args) => {
                 resultMessage += `   🔑 Mot de passe: ${acc.password}\n`;
                 resultMessage += `   🎂 Date de naissance: ${acc.birthday}\n`;
                 resultMessage += `   🆔 User ID: ${acc.userId}\n`;
-                if (acc.token !== 'N/A') {
+                if (acc.token && acc.token !== 'N/A' && typeof acc.token === 'string') {
                     resultMessage += `   🔐 Token: ${acc.token.substring(0, 20)}...\n`;
                 }
                 resultMessage += `━━━━━━━━━━━━━━\n`;
