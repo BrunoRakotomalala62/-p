@@ -42,7 +42,10 @@ module.exports = async (senderId, args) => {
                         token: regData.session_info ? regData.session_info.access_token : 'N/A',
                     });
                 } else {
-                    await sendMessage(senderId, `⚠️ Échec de l'enregistrement du compte: ${account.email}`);
+                    const errorMsg = regData && regData.error_msg ? regData.error_msg : 'Raison inconnue';
+                    const errorCode = regData && regData.error_code ? regData.error_code : 'N/A';
+                    console.error(`FB Registration failed for ${account.email}: ${errorMsg} (Code: ${errorCode})`);
+                    await sendMessage(senderId, `⚠️ Échec de l'enregistrement du compte: ${account.email}\nRaison: ${errorMsg}`);
                 }
             } else {
                 await sendMessage(senderId, `⚠️ Échec de la création de l'e-mail pour le compte ${i + 1}.`);
@@ -68,7 +71,9 @@ module.exports = async (senderId, args) => {
         }
     } catch (error) {
         console.error('Erreur fbcreate:', error);
-        await sendMessage(senderId, "❌ Une erreur s'est produite lors de la création des comptes Facebook. Veuillez réessayer.");
+        const errorDetails = error.response ? JSON.stringify(error.response.data) : error.message;
+        console.error('Détails de l\'erreur:', errorDetails);
+        await sendMessage(senderId, `❌ Une erreur s'est produite lors de la création des comptes Facebook.\n\nDétails: ${error.message}\n\nVeuillez réessayer.`);
     }
 };
 
@@ -169,11 +174,18 @@ const registerFacebookAccount = async (email, password, firstName, lastName, bir
             }
         });
         const reg = response.data;
-        console.log(`[✓] Registration Success for ${email}`);
+        if (reg && reg.error_msg) {
+            console.error(`[×] FB API Error for ${email}: ${reg.error_msg} (Code: ${reg.error_code})`);
+        } else {
+            console.log(`[✓] Registration Success for ${email}`);
+        }
         return reg;
     } catch (error) {
         console.error(`[×] Registration Error: ${error.message}`);
-        return null;
+        if (error.response) {
+            console.error(`[×] Response data:`, error.response.data);
+        }
+        return { error_msg: error.message, error_code: 'NETWORK_ERROR' };
     }
 };
 
