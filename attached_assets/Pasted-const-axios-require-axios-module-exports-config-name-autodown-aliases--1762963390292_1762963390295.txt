@@ -1,0 +1,128 @@
+const axios = require('axios');
+
+module.exports = {
+  config: {
+    name: "autodown",
+    aliases: ["atd"],
+    version: "1.2.0",
+    author: "LocDev",
+    description: "Tự động tải video/ảnh từ TikTok, Facebook, Instagram, X (Twitter)",
+    prefix: true,
+    type: "group",
+    category: "media",
+    cooldown: 0,
+    keywords: [
+      "https://vt.tiktok.com", 
+      "https://www.tiktok.com", 
+      "https://vm.tiktok.com",
+      "https://www.facebook.com", 
+      "https://fb.watch",
+      "https://www.instagram.com",
+      "https://x.com", 
+      "https://twitter.com"
+    ]
+  },
+  lang: {
+    vi: {
+      prompt: "📥 Gửi cho tôi một liên kết TikTok, Facebook, Instagram hoặc X (Twitter), tôi sẽ tải xuống giúp bạn!",
+      processing: "⏳ Đang xử lý...",
+      cannotDownload: "❌ Không thể tải nội dung. Có thể liên kết không hợp lệ hoặc máy chủ đang lỗi.",
+      noTitle: "Không có tiêu đề",
+      unknownAuthor: "Không rõ",
+      notFoundSuitable: "❌ Không tìm thấy nội dung tải xuống phù hợp.",
+      errorPrefix: "❌ Lỗi trong autodown:",
+      errorGeneric: "⚠️ Có lỗi xảy ra khi tải xuống. Vui lòng thử lại sau."
+    },
+    en: {
+      prompt: "📥 Send me a TikTok, Facebook, Instagram or X (Twitter) link, I'll download it for you!",
+      processing: "⏳ Processing...",
+      cannotDownload: "❌ Unable to download. The link may be invalid or the server has an issue.",
+      noTitle: "No title",
+      unknownAuthor: "Unknown",
+      notFoundSuitable: "❌ No suitable downloadable content found.",
+      errorPrefix: "❌ Error in autodown:",
+      errorGeneric: "⚠️ An error occurred while downloading. Please try again later."
+    }
+  },
+
+  // Khi người dùng gọi lệnh thủ công (ví dụ: /autodown)
+  onStart: async ({ response, chatId }) => {
+    // Lấy ngôn ngữ từ chat settings hoặc global settings
+    let language = global.settings?.language;
+    try {
+      if (chatId && global.db?.chatsData) {
+        const chatData = await global.db.chatsData.get(chatId);
+        if (chatData?.settings?.language) {
+          language = chatData.settings.language;
+        }
+      }
+    } catch {}
+
+    const pack = module.exports.lang || {};
+    const cur = pack[language] || pack.vi || pack.en || {};
+    await response.reply(cur.prompt || "");
+  },
+
+  // Khi người dùng gửi tin nhắn bất kỳ trong nhóm
+  onChat: async ({ bot, response, msg, chatId, args }) => {
+    // Lấy ngôn ngữ từ chat settings hoặc global settings
+    let language = global.settings?.language;
+    try {
+      if (chatId && global.db?.chatsData) {
+        const chatData = await global.db.chatsData.get(chatId);
+        if (chatData?.settings?.language) {
+          language = chatData.settings.language;
+        }
+      }
+    } catch {}
+
+    const pack = module.exports.lang || {};
+    const cur = pack[language] || pack.vi || pack.en || {};
+    try {
+      const text = (msg.text || msg.caption || "").trim();
+      if (!text) return;
+
+      // Kiểm tra xem tin nhắn có chứa link mạng xã hội không
+      const keywords = module.exports.config.keywords;
+      const found = keywords.find(k => text.includes(k));
+      if (!found) return; // Không có link hợp lệ thì bỏ qua
+
+      // Gửi tin nhắn chờ
+      const waitMsg = await response.reply(cur.processing || "");
+
+      const apiUrl = `https://buda-juoe.onrender.com/downr?url=${encodeURIComponent(text)}`;
+      const { data: apiData } = await axios.get(apiUrl, { timeout: 20000 });
+
+      // Xóa tin nhắn "đang xử lý"
+      await response.delete(waitMsg.message_id).catch(() => {});
+
+      if (!apiData || apiData.error || !apiData.medias) {
+        await response.reply(cur.cannotDownload || "");
+        return false;
+      }
+
+      const { title = (cur.noTitle || ''), author = (cur.unknownAuthor || ''), medias = [] } = apiData;
+      const caption = `📜 <b>${title}</b>\n👤 Tác giả: ${author}`;
+
+      const images = medias.filter(m => m.type === "image" || m.type === "photo");
+      const video =
+        medias.find(m => m.type === "video" && m.quality === "hd_no_watermark") ||
+        medias.find(m => m.type === "video" && m.quality === "hd") ||
+        medias.find(m => m.type === "video");
+
+      if (images.length > 0) {
+        const album = images.map(img => ({ type: "photo", media: img.url }));
+        await response.mediaGroup(album);
+        await response.reply(caption, { parse_mode: "HTML" });
+      } else if (video) {
+        await response.video(video.url, { caption, parse_mode: "HTML" });
+      } else {
+        await response.reply(cur.notFoundSuitable || "");
+      }
+
+    } catch (err) {
+      console.error((cur.errorPrefix || 'Error:'), err.message || err);
+      await response.reply(cur.errorGeneric || "");
+    }
+  }
+};
