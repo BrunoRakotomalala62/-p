@@ -175,9 +175,6 @@ const handleMessage = async (event, api) => {
                 await geminiModule.handleImageMessage(senderId, imageUrl);
             }
             return;
-        } else {
-            await sendMessage(senderId, "Aucune image n'a été trouvée dans le message.");
-            return;
         }
     }
 
