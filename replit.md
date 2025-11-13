@@ -4,6 +4,24 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**November 13, 2025 - Automatic CAPTCHA Resolution for Facebook Account Creation**
+- Integrated CapSolver API for automatic CAPTCHA solving in `fbcreate` command
+- Added Puppeteer for browser automation to handle Facebook login checkpoints
+- Implemented `solveCaptchaWithCapSolver()` function that:
+  - Downloads CAPTCHA images from URLs and converts to base64
+  - Extracts clean base64 from data URLs (strips prefixes)
+  - Sends images to CapSolver API and polls for solutions
+  - Includes comprehensive error logging with errorId and errorCode
+- Implemented `loginToFacebookAndSolveCaptcha()` function that:
+  - Launches headless browser with anti-detection settings
+  - Detects CAPTCHA challenges after login
+  - Captures CAPTCHA images via multiple methods (screenshot, src extraction)
+  - Automatically fills and submits CAPTCHA solutions
+  - Verifies account is fully accessible after CAPTCHA resolution
+- Modified `fbcreate` workflow to automatically verify accounts post-creation
+- Accounts now show status "Vérifié et Prêt ✅✅" when fully verified
+- Requires `CAPSOLVER_API_KEY` environment variable (stored securely in Replit Secrets)
+
 **November 9, 2025 - Image Processing for Vercel Deployment**
 - Fixed image processing issue on Vercel by implementing cloud-based image hosting
 - Added `uploadImageToCatbox()` function that downloads Facebook Messenger images to memory and uploads them to catbox.moe (free hosting service without API key requirement)
