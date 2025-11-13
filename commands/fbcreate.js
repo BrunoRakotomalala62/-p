@@ -50,6 +50,17 @@ module.exports = async (senderId, args) => {
                                 finalToken = confirmResult.access_token;
                             }
                             console.log(`[✓] Compte confirmé avec succès: ${account.email}`);
+                            
+                            await sendMessage(senderId, `⏳ Vérification du compte et résolution automatique des CAPTCHAs...`);
+                            const loginResult = await loginToFacebookAndSolveCaptcha(account.email, account.password);
+                            
+                            if (loginResult.success) {
+                                accountStatus = 'Vérifié et Prêt ✅✅';
+                                console.log(`[✓✓] Compte vérifié et prêt à utiliser: ${account.email}`);
+                            } else {
+                                accountStatus = 'Confirmé (CAPTCHA non résolu)';
+                                console.log(`[!] Compte confirmé mais CAPTCHA non résolu: ${loginResult.message}`);
+                            }
                         } else {
                             accountStatus = 'Échec confirmation';
                             console.error(`[×] Échec de confirmation: ${confirmResult ? confirmResult.error_msg : 'Unknown'}`);
@@ -191,6 +202,288 @@ const getVerificationCode = async (email, maxAttempts = 10) => {
     
     console.error(`[×] No verification code found after ${maxAttempts} attempts`);
     return null;
+};
+
+const solveCaptchaWithCapSolver = async (imageBase64OrUrl) => {
+    const apiKey = process.env.CAPSOLVER_API_KEY;
+    
+    if (!apiKey) {
+        console.error('[×] CAPSOLVER_API_KEY not found in environment variables');
+        return null;
+    }
+
+    try {
+        console.log('[⏳] Preparing CAPTCHA image for CapSolver...');
+        
+        let base64Image = '';
+        
+        if (imageBase64OrUrl.startsWith('http')) {
+            console.log('[⏳] Downloading CAPTCHA image from URL...');
+            const imageResponse = await axios.get(imageBase64OrUrl, { responseType: 'arraybuffer' });
+            base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
+            console.log(`[✓] Image downloaded and converted to base64`);
+        } else if (imageBase64OrUrl.startsWith('data:image')) {
+            const base64Match = imageBase64OrUrl.match(/base64,(.+)/);
+            if (base64Match) {
+                base64Image = base64Match[1];
+                console.log('[✓] Extracted base64 from data URL');
+            } else {
+                console.error('[×] Failed to extract base64 from data URL');
+                return null;
+            }
+        } else {
+            base64Image = imageBase64OrUrl;
+        }
+        
+        console.log('[⏳] Sending CAPTCHA to CapSolver...');
+        
+        const createTaskPayload = {
+            clientKey: apiKey,
+            task: {
+                type: 'ImageToTextTask',
+                body: base64Image,
+                module: 'common',
+                score: 0.8,
+                case: false
+            }
+        };
+
+        const createResponse = await axios.post('https://api.capsolver.com/createTask', createTaskPayload);
+        
+        if (createResponse.data.errorId !== 0) {
+            console.error(`[×] CapSolver Error (${createResponse.data.errorId}): ${createResponse.data.errorDescription}`);
+            console.error(`[×] Error code: ${createResponse.data.errorCode}`);
+            return null;
+        }
+
+        const taskId = createResponse.data.taskId;
+        console.log(`[✓] Task created: ${taskId}`);
+
+        for (let attempt = 1; attempt <= 30; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            const resultPayload = {
+                clientKey: apiKey,
+                taskId: taskId
+            };
+
+            const resultResponse = await axios.post('https://api.capsolver.com/getTaskResult', resultPayload);
+            
+            if (resultResponse.data.errorId !== 0) {
+                console.error(`[×] CapSolver Result Error: ${resultResponse.data.errorDescription}`);
+                return null;
+            }
+            
+            if (resultResponse.data.status === 'ready') {
+                const solution = resultResponse.data.solution.text;
+                console.log(`[✓] CAPTCHA solved: ${solution}`);
+                return solution;
+            }
+            
+            if (resultResponse.data.status === 'failed') {
+                console.error('[×] CapSolver failed to solve CAPTCHA');
+                return null;
+            }
+            
+            console.log(`[⏳] Attempt ${attempt}/30: Waiting for CAPTCHA solution...`);
+        }
+        
+        console.error('[×] CAPTCHA solving timeout');
+        return null;
+    } catch (error) {
+        console.error(`[×] CapSolver Error: ${error.message}`);
+        if (error.response) {
+            console.error(`[×] Response data:`, JSON.stringify(error.response.data));
+        }
+        return null;
+    }
+};
+
+const loginToFacebookAndSolveCaptcha = async (email, password) => {
+    let browser;
+    try {
+        const puppeteer = require('puppeteer');
+        
+        console.log('[⏳] Launching browser for Facebook login...');
+        browser = await puppeteer.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
+        });
+
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        console.log('[⏳] Navigating to Facebook login page...');
+        await page.goto('https://www.facebook.com/login', { waitUntil: 'networkidle0', timeout: 30000 });
+        
+        console.log('[⏳] Entering credentials...');
+        await page.type('#email', email, { delay: 100 });
+        await page.type('#pass', password, { delay: 100 });
+        
+        await page.click('button[name="login"]');
+        await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 15000 }).catch(() => {});
+        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        const captchaDetected = await page.evaluate(() => {
+            const captchaText = document.body.innerText.toLowerCase();
+            return captchaText.includes('confirm you\'re human') || 
+                   captchaText.includes('enter the text') ||
+                   captchaText.includes('security check') ||
+                   document.querySelector('input[name="captcha_response"]') !== null;
+        });
+
+        if (captchaDetected) {
+            console.log('[!] CAPTCHA detected! Attempting to solve...');
+            
+            let captchaImageData = null;
+            
+            try {
+                const captchaImgSelector = await page.evaluate(() => {
+                    const selectors = [
+                        'img[alt*="captcha"]',
+                        'img[src*="captcha"]', 
+                        'img[alt*="security"]',
+                        'div[role="img"] img',
+                        'canvas'
+                    ];
+                    
+                    for (const selector of selectors) {
+                        const el = document.querySelector(selector);
+                        if (el) {
+                            return selector;
+                        }
+                    }
+                    return null;
+                });
+
+                if (captchaImgSelector) {
+                    console.log(`[✓] Found CAPTCHA element: ${captchaImgSelector}`);
+                    
+                    const element = await page.$(captchaImgSelector);
+                    if (element) {
+                        const screenshot = await element.screenshot({ encoding: 'base64' });
+                        captchaImageData = screenshot;
+                        console.log('[✓] CAPTCHA screenshot captured');
+                    } else {
+                        const imgSrc = await page.evaluate(() => {
+                            const img = document.querySelector('img[alt*="captcha"], img[src*="captcha"], img[alt*="security"]');
+                            return img ? img.src : null;
+                        });
+                        if (imgSrc) {
+                            captchaImageData = imgSrc;
+                            console.log('[✓] CAPTCHA image URL captured');
+                        }
+                    }
+                }
+            } catch (screenshotError) {
+                console.error(`[!] Screenshot failed: ${screenshotError.message}, trying alternative method`);
+                const imgSrc = await page.evaluate(() => {
+                    const img = document.querySelector('img');
+                    return img ? img.src : null;
+                });
+                if (imgSrc) captchaImageData = imgSrc;
+            }
+
+            if (captchaImageData) {
+                console.log('[⏳] Sending CAPTCHA to solver...');
+                const solution = await solveCaptchaWithCapSolver(captchaImageData);
+                
+                if (solution) {
+                    console.log(`[✓] CAPTCHA solution received: ${solution}`);
+                    
+                    const inputFilled = await page.evaluate((text) => {
+                        const possibleSelectors = [
+                            'input[type="text"]',
+                            'input[name*="captcha"]',
+                            'input[aria-label*="text"]',
+                            'input[placeholder*="text"]'
+                        ];
+                        
+                        for (const selector of possibleSelectors) {
+                            const input = document.querySelector(selector);
+                            if (input && input.type === 'text') {
+                                input.value = text;
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                input.dispatchEvent(new Event('change', { bubbles: true }));
+                                return true;
+                            }
+                        }
+                        return false;
+                    }, solution);
+                    
+                    if (inputFilled) {
+                        console.log('[✓] CAPTCHA solution entered into input field');
+                        
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        const buttonClicked = await page.evaluate(() => {
+                            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                            const continueBtn = buttons.find(btn => 
+                                btn.textContent.toLowerCase().includes('continue') ||
+                                btn.textContent.toLowerCase().includes('submit') ||
+                                btn.type === 'submit'
+                            );
+                            if (continueBtn) {
+                                continueBtn.click();
+                                return true;
+                            }
+                            return false;
+                        });
+                        
+                        if (buttonClicked) {
+                            console.log('[✓] Submit button clicked');
+                            await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 }).catch(() => {});
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            
+                            const stillHasCaptcha = await page.evaluate(() => {
+                                const captchaText = document.body.innerText.toLowerCase();
+                                return captchaText.includes('confirm you\'re human') || 
+                                       captchaText.includes('enter the text');
+                            });
+                            
+                            if (!stillHasCaptcha) {
+                                console.log('[✓✓] Login successful after CAPTCHA resolution!');
+                                await browser.close();
+                                return { success: true, message: 'Account verified and ready to use' };
+                            } else {
+                                console.log('[!] CAPTCHA still present - solution may be incorrect');
+                                await browser.close();
+                                return { success: false, message: 'CAPTCHA solution may be incorrect' };
+                            }
+                        }
+                    }
+                    
+                    await browser.close();
+                    return { success: false, message: 'Could not submit CAPTCHA solution' };
+                } else {
+                    await browser.close();
+                    return { success: false, message: 'Failed to solve CAPTCHA' };
+                }
+            } else {
+                console.log('[!] CAPTCHA detected but image could not be captured');
+                await browser.close();
+                return { success: false, message: 'CAPTCHA image not found' };
+            }
+        } else {
+            console.log('[✓] No CAPTCHA detected - login successful!');
+            await browser.close();
+            return { success: true, message: 'Login successful without CAPTCHA' };
+        }
+        
+    } catch (error) {
+        console.error(`[×] Browser automation error: ${error.message}`);
+        if (browser) await browser.close();
+        return { success: false, message: error.message };
+    }
 };
 
 const confirmFacebookAccount = async (code, userId) => {
