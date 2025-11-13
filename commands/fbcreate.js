@@ -2,6 +2,7 @@ const fs = require("fs");
 const axios = require("axios");
 const crypto = require("crypto");
 const sendMessage = require('../handles/sendMessage');
+require('dotenv').config();
 
 module.exports = async (senderId, args) => {
     try {
