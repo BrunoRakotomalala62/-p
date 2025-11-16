@@ -4,6 +4,9 @@ const axios = require('axios');
 // État pour chaque utilisateur
 const userStates = {};
 
+// Délai minimum entre deux requêtes (en millisecondes)
+const MIN_REQUEST_DELAY = 3000; // 3 secondes
+
 module.exports = async (senderId, prompt, api, attachments) => {
     try {
         // Initialiser l'état de l'utilisateur si nécessaire
@@ -12,11 +15,22 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 step: 'waiting_for_image',
                 originalImageUrl: null,
                 currentImageUrl: null,
-                transformCount: 0
+                transformCount: 0,
+                lastRequestTime: 0,
+                isProcessing: false
             };
         }
 
         const state = userStates[senderId];
+
+        // Vérifier si une requête est déjà en cours
+        if (state.isProcessing && prompt !== 'IMAGE_ATTACHMENT' && prompt !== 'RESET_CONVERSATION') {
+            await sendMessage(senderId, 
+                "⏳ Une transformation est déjà en cours, veuillez patienter...\n\n" +
+                "💡 Votre demande sera traitée dès que la transformation actuelle sera terminée."
+            );
+            return;
+        }
 
         // Réinitialiser la conversation si demandé
         if (prompt === 'RESET_CONVERSATION') {
@@ -24,7 +38,9 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 step: 'waiting_for_image',
                 originalImageUrl: null,
                 currentImageUrl: null,
-                transformCount: 0
+                transformCount: 0,
+                lastRequestTime: 0,
+                isProcessing: false
             };
             return;
         }
@@ -65,8 +81,23 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 return;
             }
 
+            // Vérifier le délai minimum entre les requêtes
+            const now = Date.now();
+            const timeSinceLastRequest = now - state.lastRequestTime;
+            
+            if (timeSinceLastRequest < MIN_REQUEST_DELAY && state.lastRequestTime > 0) {
+                const remainingTime = Math.ceil((MIN_REQUEST_DELAY - timeSinceLastRequest) / 1000);
+                await sendMessage(senderId, 
+                    `⏱️ Veuillez patienter encore ${remainingTime} seconde(s) avant d'envoyer une nouvelle demande.\n\n` +
+                    "💡 Cela permet d'éviter la surcharge de l'API et d'assurer une meilleure qualité de transformation."
+                );
+                return;
+            }
+
             state.step = 'processing';
+            state.isProcessing = true;
             state.transformCount++;
+            state.lastRequestTime = now;
 
             // Message d'attente
             await sendMessage(senderId, 
@@ -90,6 +121,7 @@ module.exports = async (senderId, prompt, api, attachments) => {
                     // Mettre à jour l'image courante avec le résultat
                     state.currentImageUrl = resultImageUrl;
                     state.step = 'ready_for_next';
+                    state.isProcessing = false;
                     
                     // Envoyer l'image transformée
                     await sendMessage(senderId, {
@@ -117,15 +149,26 @@ module.exports = async (senderId, prompt, api, attachments) => {
             } catch (error) {
                 console.error('Erreur lors de la transformation d\'image:', error.message);
                 
+                // Déterminer le type d'erreur pour un message plus précis
+                let errorMessage = "🚨 Désolé, une erreur s'est produite lors de la transformation de votre image.\n\n";
+                
+                if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                    errorMessage = "⏱️ La transformation a pris trop de temps et a expiré.\n\n";
+                } else if (error.response && error.response.status === 429) {
+                    errorMessage = "🚫 Trop de requêtes ont été envoyées. Veuillez patienter un moment.\n\n";
+                }
+                
                 await sendMessage(senderId, 
-                    "🚨 Désolé, une erreur s'est produite lors de la transformation de votre image.\n\n" +
+                    errorMessage +
                     "💡 Vous pouvez :\n" +
                     "• Réessayer avec une autre description\n" +
-                    "• Envoyer une nouvelle photo"
+                    "• Envoyer une nouvelle photo\n" +
+                    "• Attendre quelques secondes avant de réessayer"
                 );
 
                 // Remettre l'état à ready_for_next pour permettre un nouvel essai
                 state.step = 'ready_for_next';
+                state.isProcessing = false;
                 state.transformCount--;
             }
             return;
@@ -160,7 +203,9 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 step: 'waiting_for_image',
                 originalImageUrl: null,
                 currentImageUrl: null,
-                transformCount: 0
+                transformCount: 0,
+                lastRequestTime: 0,
+                isProcessing: false
             };
         }
     }
