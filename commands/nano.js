@@ -15,6 +15,7 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 step: 'waiting_for_image',
                 originalImageUrl: null,
                 currentImageUrl: null,
+                previousImageUrl: null, // Stocker l'image précédente
                 transformCount: 0,
                 lastRequestTime: 0,
                 isProcessing: false
@@ -38,6 +39,7 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 step: 'waiting_for_image',
                 originalImageUrl: null,
                 currentImageUrl: null,
+                previousImageUrl: null,
                 transformCount: 0,
                 lastRequestTime: 0,
                 isProcessing: false
@@ -49,7 +51,12 @@ module.exports = async (senderId, prompt, api, attachments) => {
         if (prompt === 'IMAGE_ATTACHMENT' && attachments && attachments.length > 0) {
             const imageUrl = attachments[0].payload.url;
             
-            // Réinitialiser complètement pour une nouvelle image
+            // Stocker l'image actuelle comme image précédente avant de la remplacer
+            if (state.currentImageUrl) {
+                state.previousImageUrl = state.currentImageUrl;
+            }
+            
+            // Mettre à jour avec la nouvelle image
             state.originalImageUrl = imageUrl;
             state.currentImageUrl = imageUrl;
             state.step = 'waiting_for_prompt';
@@ -94,22 +101,53 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 return;
             }
 
+            // Détecter si l'utilisateur veut utiliser les deux photos
+            const wantsTwoPhotos = /pour\s+(les|ces)\s+deux\s+photos?|les\s+deux\s+images?|combine|collage|deux\s+photos?/i.test(transformPrompt);
+            
+            // Vérifier si on a deux photos disponibles
+            const hasTwoPhotos = state.previousImageUrl && state.currentImageUrl && state.previousImageUrl !== state.currentImageUrl;
+
             state.step = 'processing';
             state.isProcessing = true;
             state.transformCount++;
             state.lastRequestTime = now;
 
-            // Message d'attente
-            await sendMessage(senderId, 
-                `🎨 Transformation ${state.transformCount} en cours...\n\n` +
-                "⏳ Veuillez patienter, cela peut prendre quelques instants..."
-            );
+            // Message d'attente adapté
+            if (wantsTwoPhotos && hasTwoPhotos) {
+                await sendMessage(senderId, 
+                    `🎨 Transformation de ces deux images en cours...\n\n` +
+                    "⏳ Veuillez patienter, cela peut prendre quelques instants..."
+                );
+            } else {
+                await sendMessage(senderId, 
+                    `🎨 Transformation ${state.transformCount} en cours...\n\n` +
+                    "⏳ Veuillez patienter, cela peut prendre quelques instants..."
+                );
+            }
 
             try {
-                // Appeler l'API Nano Banana avec l'image actuelle
-                const apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}&imageurl=${encodeURIComponent(state.currentImageUrl)}`;
+                let apiUrl;
                 
-                console.log(`Appel API Nano Banana (transformation ${state.transformCount}) avec l'URL: ${apiUrl}`);
+                // Si l'utilisateur veut utiliser deux photos ET qu'elles sont disponibles
+                if (wantsTwoPhotos && hasTwoPhotos) {
+                    // API pour combiner deux images
+                    apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}&imageurl=${encodeURIComponent(state.previousImageUrl)}&imageurl2=${encodeURIComponent(state.currentImageUrl)}`;
+                    console.log(`Appel API Nano Banana avec DEUX images (transformation ${state.transformCount})`);
+                } else {
+                    // Si l'utilisateur demande deux photos mais qu'il n'y en a qu'une
+                    if (wantsTwoPhotos && !hasTwoPhotos) {
+                        await sendMessage(senderId, 
+                            "⚠️ Vous n'avez envoyé qu'une seule photo pour le moment.\n\n" +
+                            "Je vais transformer uniquement cette photo. Pour utiliser deux photos, envoyez une deuxième image avant de faire votre demande."
+                        );
+                    }
+                    
+                    // API normale avec une seule image
+                    apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}&imageurl=${encodeURIComponent(state.currentImageUrl)}`;
+                    console.log(`Appel API Nano Banana avec UNE image (transformation ${state.transformCount})`);
+                }
+                
+                console.log(`URL de l'API: ${apiUrl}`);
                 
                 const response = await axios.get(apiUrl, {
                     timeout: 60000 // 60 secondes de timeout
