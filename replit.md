@@ -4,6 +4,15 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**November 17, 2025 - Support Multi-Images pour la Commande Nano**
+- Ajout de la capacité d'envoyer et traiter plusieurs images simultanément (2, 3, 4+ photos)
+- Conservation de l'ordre des images : 1ère, 2ème, 3ème, etc.
+- Construction dynamique de l'URL API avec `imageurl`, `imageurl2`, `imageurl3`, etc.
+- Messages adaptatifs selon le nombre d'images reçues
+- Support de transformations complexes : face swap, collage, fusion, montage, etc.
+- Exemples de scénarios documentés dans `EXEMPLES_NANO_MULTIPLES_IMAGES.md`
+- L'API peut maintenant traiter des commandes comme "changer le visage de la 1ère photo par celui de la 2ème"
+
 **November 13, 2025 - Automatic CAPTCHA Resolution for Facebook Account Creation**
 - Integrated CapSolver API for automatic CAPTCHA solving in `fbcreate` command
 - Added Puppeteer for browser automation to handle Facebook login checkpoints

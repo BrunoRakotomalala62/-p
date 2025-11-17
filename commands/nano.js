@@ -13,9 +13,8 @@ module.exports = async (senderId, prompt, api, attachments) => {
         if (!userStates[senderId]) {
             userStates[senderId] = {
                 step: 'waiting_for_image',
-                originalImageUrl: null,
+                images: [], // Tableau pour stocker plusieurs images dans l'ordre
                 currentImageUrl: null,
-                previousImageUrl: null, // Stocker l'image précédente
                 transformCount: 0,
                 lastRequestTime: 0,
                 isProcessing: false
@@ -37,9 +36,8 @@ module.exports = async (senderId, prompt, api, attachments) => {
         if (prompt === 'RESET_CONVERSATION') {
             userStates[senderId] = {
                 step: 'waiting_for_image',
-                originalImageUrl: null,
+                images: [],
                 currentImageUrl: null,
-                previousImageUrl: null,
                 transformCount: 0,
                 lastRequestTime: 0,
                 isProcessing: false
@@ -47,32 +45,43 @@ module.exports = async (senderId, prompt, api, attachments) => {
             return;
         }
 
-        // Étape 1: Utilisateur envoie une NOUVELLE image
+        // Étape 1: Utilisateur envoie des NOUVELLES images
         if (prompt === 'IMAGE_ATTACHMENT' && attachments && attachments.length > 0) {
-            const imageUrl = attachments[0].payload.url;
+            // Extraire toutes les images des attachments
+            const newImages = attachments
+                .filter(att => att.type === 'image')
+                .map(att => att.payload.url);
             
-            // Stocker l'image actuelle comme image précédente avant de la remplacer
-            if (state.currentImageUrl) {
-                state.previousImageUrl = state.currentImageUrl;
-            }
-            
-            // Mettre à jour avec la nouvelle image
-            state.originalImageUrl = imageUrl;
-            state.currentImageUrl = imageUrl;
+            // Stocker toutes les images dans l'ordre
+            state.images = newImages;
+            state.currentImageUrl = newImages[0]; // La première image devient l'image actuelle
             state.step = 'waiting_for_prompt';
             state.transformCount = 0;
             
-            await sendMessage(senderId, 
-                "🖼️ J'ai bien reçu votre nouvelle photo !\n\n" +
-                "Quelle transformation souhaitez-vous appliquer à cette image ?\n\n" +
-                "💡 Exemples :\n" +
-                "• changer en bleu le vêtement\n" +
-                "• changer en portant une chemise blanche\n" +
-                "• changer en costume son vêtement\n" +
-                "• make it look like a painting\n" +
-                "• add a sunset background\n\n" +
-                "✨ Vous pourrez ensuite continuer à transformer l'image résultante !"
-            );
+            // Message adapté selon le nombre d'images
+            if (newImages.length === 1) {
+                await sendMessage(senderId, 
+                    "🖼️ J'ai bien reçu votre photo !\n\n" +
+                    "Quelle transformation souhaitez-vous appliquer ?\n\n" +
+                    "💡 Exemples :\n" +
+                    "• changer en bleu le vêtement\n" +
+                    "• changer en portant une chemise blanche\n" +
+                    "• make it look like a painting\n" +
+                    "• add a sunset background"
+                );
+            } else {
+                await sendMessage(senderId, 
+                    `🖼️ J'ai bien reçu vos ${newImages.length} photos !\n\n` +
+                    "Quelle transformation souhaitez-vous appliquer ?\n\n" +
+                    "💡 Exemples avec plusieurs images :\n" +
+                    "• mettre en collage\n" +
+                    "• fusionner les arrière-plans\n" +
+                    "• changer le visage de la 1ère photo par celui de la 2ème\n" +
+                    "• combiner toutes les photos en une seule\n" +
+                    "• créer un montage artistique\n\n" +
+                    "📌 Les images sont dans l'ordre : 1ère, 2ème, 3ème..."
+                );
+            }
             return;
         }
 
@@ -101,21 +110,18 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 return;
             }
 
-            // Détecter si l'utilisateur veut utiliser les deux photos
-            const wantsTwoPhotos = /pour\s+(les|ces)\s+deux\s+photos?|les\s+deux\s+images?|combine|collage|deux\s+photos?/i.test(transformPrompt);
+            // Déterminer le nombre d'images disponibles
+            const numberOfImages = state.images.length;
             
-            // Vérifier si on a deux photos disponibles
-            const hasTwoPhotos = state.previousImageUrl && state.currentImageUrl && state.previousImageUrl !== state.currentImageUrl;
-
             state.step = 'processing';
             state.isProcessing = true;
             state.transformCount++;
             state.lastRequestTime = now;
 
             // Message d'attente adapté
-            if (wantsTwoPhotos && hasTwoPhotos) {
+            if (numberOfImages > 1) {
                 await sendMessage(senderId, 
-                    `🎨 Transformation de ces deux images en cours...\n\n` +
+                    `🎨 Transformation de vos ${numberOfImages} images en cours...\n\n` +
                     "⏳ Veuillez patienter, cela peut prendre quelques instants..."
                 );
             } else {
@@ -126,25 +132,20 @@ module.exports = async (senderId, prompt, api, attachments) => {
             }
 
             try {
-                let apiUrl;
+                let apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}`;
                 
-                // Si l'utilisateur veut utiliser deux photos ET qu'elles sont disponibles
-                if (wantsTwoPhotos && hasTwoPhotos) {
-                    // API pour combiner deux images
-                    apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}&imageurl=${encodeURIComponent(state.previousImageUrl)}&imageurl2=${encodeURIComponent(state.currentImageUrl)}`;
-                    console.log(`Appel API Nano Banana avec DEUX images (transformation ${state.transformCount})`);
+                // Ajouter toutes les images à l'URL dans l'ordre
+                if (numberOfImages === 1) {
+                    apiUrl += `&imageurl=${encodeURIComponent(state.images[0])}`;
+                    console.log(`Appel API Nano Banana avec 1 image (transformation ${state.transformCount})`);
                 } else {
-                    // Si l'utilisateur demande deux photos mais qu'il n'y en a qu'une
-                    if (wantsTwoPhotos && !hasTwoPhotos) {
-                        await sendMessage(senderId, 
-                            "⚠️ Vous n'avez envoyé qu'une seule photo pour le moment.\n\n" +
-                            "Je vais transformer uniquement cette photo. Pour utiliser deux photos, envoyez une deuxième image avant de faire votre demande."
-                        );
+                    // Première image avec imageurl, les suivantes avec imageurl2, imageurl3, etc.
+                    apiUrl += `&imageurl=${encodeURIComponent(state.images[0])}`;
+                    for (let i = 1; i < state.images.length; i++) {
+                        apiUrl += `&imageurl${i + 1}=${encodeURIComponent(state.images[i])}`;
                     }
-                    
-                    // API normale avec une seule image
-                    apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}&imageurl=${encodeURIComponent(state.currentImageUrl)}`;
-                    console.log(`Appel API Nano Banana avec UNE image (transformation ${state.transformCount})`);
+                    console.log(`Appel API Nano Banana avec ${numberOfImages} images (transformation ${state.transformCount})`);
+                    console.log(`Ordre des images: 1ère, 2ème${numberOfImages > 2 ? ', 3ème' : ''}${numberOfImages > 3 ? ', 4ème...' : ''}`);
                 }
                 
                 console.log(`URL de l'API: ${apiUrl}`);
