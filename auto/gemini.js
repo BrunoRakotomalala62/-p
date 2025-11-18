@@ -1,4 +1,4 @@
-Const axios = require('axios');
+const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 const fs = require('fs');
 const path = require('path');

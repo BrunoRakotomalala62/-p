@@ -1,0 +1,74 @@
+Changer l'API URL du gemini.js du répertoire auto/  
+
+Par ceci sans modifier la logique existant 
+
+
+Voici l'API URL :
+
+https://rapido.zetsu.xyz/api/anthropic?q=D%C3%A9crivez+bien+cette+photo&uid=1&model=claude-sonnet-4-5-20250929&image=https%3A%2F%2Fwww.madagascar-tribune.com%2Flocal%2Fcache-vignettes%2FL103xH54%2Fa0228130c8228bd8f100c4318a3150-9c220.png&max_tokens=3000
+
+
+Voici sa réponse Json :
+{
+  "operator": "rapido",
+  "response": "Cette image présente le logo de 𝗗𝘂𝗻𝗴 𝗚𝗮𝘀𝗰𝗮𝗻. Voici une description détaillée :\n\n𝗖𝗼𝗺𝗽𝗼𝘀𝗶𝘁𝗶𝗼𝗻 𝗱𝘂 𝗹𝗼𝗴𝗼 :\n- Le mot \"Dung\" est écrit en 𝗴𝗿𝗮𝗻𝗱𝗲𝘀 𝗹𝗲𝘁𝘁𝗿𝗲𝘀 𝗿𝗼𝘂𝗴𝗲𝘀 𝗺𝗮𝗷𝘂𝘀𝗰𝘂𝗹𝗲𝘀 avec une typographie moderne et géométrique\n- Le mot \"GASCAN\" apparaît en dessous en 𝗹𝗲𝘁𝘁𝗿𝗲𝘀 𝗻𝗼𝗶𝗿𝗲𝘀 𝗰𝗮𝗽𝗶𝘁𝗮𝗹𝗲𝘀, dans une taille beaucoup plus petite\n- Le fond est 𝗯𝗹𝗮𝗻𝗰, créant un contraste net avec les couleurs du texte\n\n𝗦𝘁𝘆𝗹𝗲 𝘃𝗶𝘀𝘂𝗲𝗹 :\n- Design 𝗺𝗶𝗻𝗶𝗺𝗮𝗹𝗶𝘀𝘁𝗲 𝗲𝘁 é𝗽𝘂𝗿é\n- Utilisation d'une palette de couleurs limitée (rouge, noir, blanc)\n- La typographie est 𝘀𝗮𝗻𝘀-𝘀𝗲𝗿𝗶𝗳 (sans empattement), donnant un aspect moderne et professionnel\n- Le logo a une apparence 𝗰𝗼𝗿𝗽𝗼𝗿𝗮𝘁𝗲 typique d'une entreprise ou d'une marque commerciale\n\n𝗛𝗶é𝗿𝗮𝗿𝗰𝗵𝗶𝗲 𝘃𝗶𝘀𝘂𝗲𝗹𝗹𝗲 :\nLe nom \"Dung\" domine clairement le logo par sa taille et sa couleur vive, tandis que \"GASCAN\" sert probablement à identifier le secteur d'activité ou une spécialisation de l'entreprise.",
+  "model": "claude-sonnet-4-5-20250929",
+  "usage": {
+    "input_tokens": 185,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 286,
+    "service_tier": "standard"
+  },
+  "models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+  ]
+}
+
+
+Pour une prompt seulement :
+
+Api URL : 
+https://rapido.zetsu.xyz/api/anthropic?q=Donner+la+d%C3%A9finition+d%27une+mol%C3%A9cule&uid=1&model=claude-sonnet-4-5-20250929
+
+
+Sa réponse Json :
+{
+  "operator": "rapido",
+  "response": "# Définition d'une molécule\n\n## Définition simple\nUne 𝗺𝗼𝗹é𝗰𝘂𝗹𝗲 est un assemblage d'au moins deux atomes liés entre eux par des liaisons chimiques. C'est la plus petite partie d'une substance chimique qui conserve les propriétés de cette substance.\n\n## Caractéristiques principales\n\n### 1. 𝗖𝗼𝗺𝗽𝗼𝘀𝗶𝘁𝗶𝗼𝗻\n- Formée d'𝗮𝘁𝗼𝗺𝗲𝘀 (éléments chimiques)\n- Ces atomes peuvent être identiques (O₂, N₂) ou différents (H₂O, CO₂)\n\n### 2. 𝗟𝗶𝗮𝗶𝘀𝗼𝗻𝘀 𝗰𝗵𝗶𝗺𝗶𝗾𝘂𝗲𝘀\n- Les atomes sont unis par des 𝗹𝗶𝗮𝗶𝘀𝗼𝗻𝘀 𝗰𝗼𝘃𝗮𝗹𝗲𝗻𝘁𝗲𝘀 (partage d'électrons)\n- Ces liaisons sont stables et donnent sa forme à la molécule\n\n### 3. 𝗣𝗿𝗼𝗽𝗿𝗶é𝘁é𝘀\n- Électriquement 𝗻𝗲𝘂𝘁𝗿𝗲 dans son ensemble\n- Possède des propriétés chimiques et physiques spécifiques\n- Peut exister de façon indépendante\n\n## Exemples courants\n\n| Molécule | Formule | Composition |\n|----------|---------|-------------|\n| Eau | H₂O | 2 hydrogène + 1 oxygène |\n| Dioxygène | O₂ | 2 oxygène |\n| Glucose | C₆H₁₂O₆ | 6 carbone + 12 hydrogène + 6 oxygène |\n| Dioxyde de carbone | CO₂ | 1 carbone + 2 oxygène |\n\n## À retenir\nLa molécule est l'𝘂𝗻𝗶𝘁é 𝗱𝗲 𝗯𝗮𝘀𝗲 de la matière en chimie, intermédiaire entre l'atome et la substance macroscopique.",
+  "model": "claude-sonnet-4-5-20250929",
+  "usage": {
+    "input_tokens": 211,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 433,
+    "service_tier": "standard"
+  },
+  "models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+  ]
+}
