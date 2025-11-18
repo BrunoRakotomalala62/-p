@@ -1,4 +1,4 @@
-const axios = require('axios');
+Const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 const fs = require('fs');
 const path = require('path');
@@ -128,27 +128,29 @@ function formatText(text) {
 // Fonction pour le chat simple
 async function chat(prompt, uid) {
     try {
-        const API_ENDPOINT = "https://haji-mix-api.gleeze.com/api/anthropic";
+        // NOUVELLE URL D'API
+        const API_ENDPOINT = "https://rapido.zetsu.xyz/api/anthropic";
+        
+        // Modèle par défaut pour le chat simple, peut être ajusté
+        const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929'; 
 
         const queryParams = new URLSearchParams({
-            ask: prompt,
-            model: 'claude-opus-4-20250514',
+            q: prompt, // 'ask' devient 'q'
+            model: DEFAULT_MODEL,
             uid: uid,
-            roleplay: 'Text',
-            max_tokens: '3000',
-            stream: 'false'
+            // 'roleplay', 'max_tokens', 'stream' ne sont pas nécessaires ou sont gérés côté API
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
         const result = response.data;
 
-        // La réponse est maintenant dans result.answer
-        if (!result || !result.answer) {
+        // La réponse est maintenant dans result.response
+        if (!result || !result.response) {
             throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
         // Formater le texte avec gras et subscripts
-        return formatText(result.answer);
+        return formatText(result.response); // Utiliser result.response
     } catch (error) {
         console.error('Erreur chat Anthropic:', error);
         throw error;
@@ -158,33 +160,36 @@ async function chat(prompt, uid) {
 // Fonction pour le chat avec plusieurs images
 async function chatWithMultipleImages(prompt, uid, imageUrls) {
     try {
-        const API_ENDPOINT = "https://haji-mix-api.gleeze.com/api/anthropic";
-        const API_KEY = "669397c862ff2e8c9b606584f50ccfa7684efe4eccc435c0bf51a3eba23dc225";
+        // NOUVELLE URL D'API
+        const API_ENDPOINT = "https://rapido.zetsu.xyz/api/anthropic";
+        
+        // Modèle par défaut pour l'image, peut être ajusté
+        const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929'; 
 
-        // Pour l'instant, l'API ne supporte qu'une seule image
-        // On prend la première image du tableau
-        const imageUrl = imageUrls[0];
+        // Pour l'instant, l'API ne supporte qu'une seule image (imageUrls[0])
+        const imageUrl = imageUrls[0]; 
+        
+        // Le prompt est souvent vide dans ce scénario, utiliser "Décrivez cette photo" si vide
+        const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez bien cette photo";
 
         const queryParams = new URLSearchParams({
-            ask: prompt,
-            model: 'claude-opus-4-20250514',
+            q: finalPrompt, // 'ask' devient 'q'
+            model: DEFAULT_MODEL,
             uid: uid,
-            roleplay: 'Text',
-            max_tokens: '3000',
-            stream: 'false',
-            img_url: imageUrl,
-            api_key: API_KEY
+            image: imageUrl, // 'img_url' devient 'image'
+            // 'api_key' n'est plus requis dans le queryParams pour cette API (supprimé)
+            // 'roleplay', 'max_tokens', 'stream' ne sont pas nécessaires ou sont gérés côté API
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
         const result = response.data;
 
-        if (!result || !result.answer) {
+        if (!result || !result.response) {
             throw new Error(result?.error || 'Aucune réponse reçue');
         }
 
         // Formater le texte avec gras et subscripts
-        return formatText(result.answer);
+        return formatText(result.response); // Utiliser result.response
     } catch (error) {
         console.error('Erreur chat avec images Anthropic:', error);
         throw error;
@@ -432,3 +437,4 @@ module.exports = {
     chatWithMultipleImages,
     resetConversation
 };
+            
