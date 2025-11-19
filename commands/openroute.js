@@ -111,7 +111,7 @@ async function callOpenRouteAPI(uid, prompt, imageUrl = null) {
     }
 }
 
-module.exports = async (senderId, prompt, api) => {
+module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
         if (!conversationHistory[senderId]) {
             conversationHistory[senderId] = {
@@ -125,6 +125,16 @@ module.exports = async (senderId, prompt, api) => {
             delete conversationHistory[senderId];
             delete pendingImages[senderId];
             await sendMessage(senderId, "🔄 Conversation OpenRoute réinitialisée avec succès! ✨");
+            return;
+        }
+
+        if (prompt === "IMAGE_ATTACHMENT" && imageAttachments && imageAttachments.length > 0) {
+            const imageUrl = imageAttachments[0].payload.url;
+            pendingImages[senderId] = imageUrl;
+            conversationHistory[senderId].hasImage = true;
+            conversationHistory[senderId].imageUrl = imageUrl;
+
+            await sendMessage(senderId, "✨📸 Super ! J'ai bien reçu votre image ! 🖼️\n\n💭 Quelle est votre question concernant cette photo ? 🤔");
             return;
         }
 
