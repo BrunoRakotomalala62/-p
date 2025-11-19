@@ -1,5 +1,5 @@
 entrypoint = "index.js"
-modules = ["nodejs-14", "web"]
+modules = ["web", "nodejs-20"]
 hidden = [".config", "package-lock.json"]
 
 [gitHubImport]
@@ -57,6 +57,10 @@ externalPort = 80
 [[ports]]
 localPort = 33859
 externalPort = 8080
+
+[[ports]]
+localPort = 35553
+externalPort = 9000
 
 [[ports]]
 localPort = 35561
