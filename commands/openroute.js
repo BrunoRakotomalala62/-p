@@ -39,6 +39,12 @@ function convertMarkdownHeaders(text) {
     return processedLines.join('\n');
 }
 
+function replaceCustomTerms(text) {
+    return text
+        .replace(/Sherlock/gi, 'LP Ampinga d\'Or')
+        .replace(/Trailblazer Labs/gi, 'Bruno Rakotomalala');
+}
+
 async function sendLongMessage(senderId, message) {
     const MAX_MESSAGE_LENGTH = 2000;
 
@@ -165,7 +171,8 @@ module.exports = async (senderId, prompt, api) => {
             content: apiResponse.response
         });
 
-        const cleanedResponse = convertMarkdownHeaders(apiResponse.response);
+        let cleanedResponse = replaceCustomTerms(apiResponse.response);
+        cleanedResponse = convertMarkdownHeaders(cleanedResponse);
 
         const formattedResponse = `🍌 BOT OPENROUTE 🌭
 ━━━━━━━━━━━━━━━━━━━━
