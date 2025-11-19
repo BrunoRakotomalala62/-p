@@ -1,0 +1,44 @@
+Voici l'API URL pour un prompt seulement :
+
+https://api-geminiplusieursphoto2026.vercel.app/open?uid=demo123&route=Raconte-moi%20une%20histoire
+
+
+Voici sa réponse Json :
+{"success":true,"uid":"demo123","prompt":"Raconte-moi une histoire","imagesCount":0,"response":"Il était une fois, dans les brumes épaisses de Londres victorien, un détective nommé Sherlock Holmes qui siégeait dans son appartement du 221B Baker Street, pipe à la main, entouré de livres poussiéreux et d'expériences chimiques bouillonnantes. Son fidèle ami, le docteur Watson, rentrait d'une promenade quand un coup frappé à la porte rompit le silence.\n\nC'était une jeune femme élégante, le visage pâle et les yeux emplis de terreur. \"Monsieur Holmes, aidez-moi ! Mon fiancé a disparu la nuit dernière, emporté par un fiacre fantôme sous la pluie battante. La seule piste est ce bouton de manchette gravé d'un serpent enroulé autour d'une épée.\"\n\nHolmes arqua un sourcil, son esprit aiguisé comme une lame. \"Élémentaire, ma chère. Ce symbole est celui de la Loge des Frères du Serpent, une société secrète de banquiers véreux. Suivez-moi !\"\n\nAvec Watson à ses côtés, Holmes se lança dans les ruelles sombres de Whitechapel. Ils pistèrent le fiacre jusqu'à un entrepôt abandonné au bord de la Tamise. À l'intérieur, des ombres dansaient à la lueur des lanternes : le fiancé, ligoté, face à un cercle de conspirateurs masqués.\n\n\"Vous êtes démasqués !\" tonna Holmes, bondissant avec agilité. Un combat s'ensuivit – coups de canne, éclats de verre, et un revolver qui fit voler en éclats une fiole de poison. Le chef de la loge, un lord corrompu, s'effondra, révélant le complot : un vol de bijoux royaux pour financer une révolution.\n\nLa police arriva, les vilains furent emmenés menottes aux poignets. Le fiancé libéré embrassa sa promise, et Holmes, allumant une nouvelle pipe, murmura à Watson : \"Le crime est un puzzle, mon cher, et les pièces s'assemblent toujours.\"\n\nFin. Et toi, quelle histoire aimerais-tu entendre ensuite ?"}
+
+
+Voici l'API URL pour l'analyse d'image + prompt
+
+https://api-geminiplusieursphoto2026.vercel.app/open?uid=demo123&route=D%C3%A9crivez%20bien%20cette%20photo&imagurl=https://encrypted-tbn0.gstatic.com/licensed-image?q=tbn:ANd9GcRDlTBd-Evgs-lklwQAhPDQ4N0ShOXyFnim9_wm9m3XKc7yMPUIjYS27g_Gdh24RH_AMuizZ47M7qtIey3jLfMW3tg-H_hNxlYW2O5BCyM4q_JxMyHcMrtoV3wEImrL-eQDRzqfTur1cGQ&s=19
+
+
+Voici sa réponse Json :
+{"success":true,"uid":"demo123","prompt":"Décrivez bien cette photo","imagesCount":1,"response":"Cette photo montre un portrait net et professionnel d'un homme d'origine asiatique, probablement dans la quarantaine, capturé en gros plan sur un fond bleu uni et vibrant, typique d'un événement formel comme une conférence de presse ou un discours politique.\n\n### Détails du visage et de l'expression :\n- 𝗖𝗵𝗲𝘃𝗲𝘂𝘅 : Courts, noirs, bien coiffés, légèrement gominés sur le dessus, avec une raie sur le côté gauche.\n- 𝗬𝗲𝘂𝘅 : Derrière des lunettes à monture noire rectangulaire et épaisse (style intellectuel moderne), ses yeux sombres regardent directement l'objectif avec intensité et assurance.\n- 𝗩𝗶𝘀𝗮𝗴𝗲 : Traits anguleux et prononcés, peau claire et lisse, pommettes hautes, nez droit. Sa bouche est légèrement entrouverte, comme s'il prononçait un mot ou s'apprêtait à parler, avec une expression sérieuse mais engageante – un léger sourire en coin suggère de la confiance.\n- 𝗕𝗮𝗿𝗯𝗲 : Rasé de près, sans moustache ni bouc.\n\n### Vêtements et accessoires :\n- 𝗖𝗼𝘀𝘁𝘂𝗺𝗲 : Costume sombre (noir ou bleu marine très foncé), bien taillé, avec une chemise blanche impeccable et une cravate verte foncée à motif discret (rayures fines).\n- É𝗽𝗶𝗻𝗴𝗹𝗲𝘁𝘁𝗲𝘀 : Sur la boutonnière gauche de sa veste, deux petits badges distincts :\n  - Un badge vert circulaire avec un motif blanc (possiblement un symbole national ou politique, comme un palmier ou un écusson).\n  - Un badge plus petit, rond et vert clair, évoquant un logo officiel.\n- 𝗠𝗶𝗰𝗿𝗼 : Un micro noir est fixé sur sa cravate, indiquant qu'il s'adresse à un public.\n\nL'image est bien éclairée, avec un focus précis sur le visage, sans flou ni artefacts. Le fond bleu pur met en valeur son apparence formelle et autoritaire. Cela ressemble fortement à une photo officielle d'Anwar Ibrahim, Premier ministre de la Malaisie, lors d'un événement récent (par exemple, une allocution publique). Si c'est bien lui, l'ambiance évoque leadership et discours solennel ! As-tu plus de contexte sur cette photo ?"}
+
+
+Créer une commande appelé : openroute.js dans le répertoire commands/
+
+Et mettre la logique comme ceci exemple scénario :
+
+Utilisateur : bonjour comment ça va ?
+Bot: Réponse Api
+🍌 BOT OPENROUTE🌭
+Réponse api ici
+
+🇲🇬Création Bruno Rakotomalala 🇲🇬
+
+
+Utilisateur : Envoi une image pièce jointe attachement
+Bot : J'ai bien reçu votre image quel est votre question concernant à cette image ? (Reformulé bien avec emoji magnifique)
+
+Utilisateur : Decrivez bien cette photo
+Bot: 
+🍌 BOT OPENROUTE🌭
+Réponse api ici
+
+🇲🇬Création Bruno Rakotomalala 🇲🇬
+
+
+Ajouter bien une conversation continue basé sur l'image précédente et conversation continue basé sur une prompt seulement aussi
+
+Ajouter aussi une découpage dynamique du réponse de l'API et envoyé successif à l'utilisateur la réponse car Facebook Messenger à une limite max 2000
