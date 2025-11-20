@@ -1,0 +1,74 @@
+Voici l'API URL :
+
+https://rapido.zetsu.xyz/api/anthropic?q=D%C3%A9crivez+bien+cette+photo&uid=123&model=claude-sonnet-4-5-20250929&image=https%3A%2F%2Fwww.madagascar-tribune.com%2Flocal%2Fcache-vignettes%2FL103xH54%2Fa0228130c8228bd8f100c4318a3150-9c220.png&max_tokens=&apikey=rapi_4806a41790cd4a83921d56b667ab3f16
+
+
+
+Voici sa réponse Json :
+
+{
+  "operator": "rapido",
+  "response": "# Description de l'image\n\nCette image présente le **logo de Jung** (entreprise allemande spécialisée dans les interrupteurs et systèmes électriques).\n\n## Caractéristiques du logo :\n\n- **Texte stylisé** : Le mot \"jung\" est écrit en lettres minuscules rouges\n- **Design moderne et épuré** : Typographie simple et contemporaine\n- **Couleur dominante** : Rouge vif (couleur corporate de la marque)\n- **Dessous** : Le mot \"SCHAKO\" apparaît en plus petit\n- **Fond blanc** : Maximisant le contraste et la lisibilité\n\nLe logo reflète l'identité visuelle minimaliste et professionnelle typique des entreprises allemandes du secteur technique et industriel.",
+  "model": "claude-sonnet-4-5-20250929",
+  "usage": {
+    "input_tokens": 25,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 194,
+    "service_tier": "standard"
+  },
+  "models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+  ]
+}
+
+
+
+Pour une prompt seulement :
+
+https://rapido.zetsu.xyz/api/anthropic?q=Bonjour+je+suis+avec+toi+aujourd%27hui&uid=123&model=claude-sonnet-4-5-20250929&image=&max_tokens=&apikey=rapi_4806a41790cd4a83921d56b667ab3f16
+
+
+
+Voici sa réponse Json :
+
+{
+  "operator": "rapido",
+  "response": "Bonjour ! 😊\n\nOui, je suis là pour vous aider aujourd'hui. Comment puis-je vous être utile ? N'hésitez pas à me poser vos questions ou à me dire ce dont vous avez besoin.",
+  "model": "claude-sonnet-4-5-20250929",
+  "usage": {
+    "input_tokens": 20,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 63,
+    "service_tier": "standard"
+  },
+  "models": [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+  ]
+}
+

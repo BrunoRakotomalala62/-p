@@ -144,7 +144,16 @@ async function chat(prompt, uid) {
         const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
         console.log('🔗 Appel API chat:', apiUrl);
 
-        const response = await axios.get(apiUrl, { timeout: 60000 });
+        const response = await axios.get(apiUrl, {
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+                'Referer': 'https://rapido.zetsu.xyz/',
+                'Origin': 'https://rapido.zetsu.xyz'
+            }
+        });
         const result = response.data;
 
         console.log('✅ Réponse API chat reçue:', JSON.stringify(result).substring(0, 200));
@@ -184,7 +193,16 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
         console.log('🔗 Appel API image:', apiUrl);
 
-        const response = await axios.get(apiUrl, { timeout: 60000 });
+        const response = await axios.get(apiUrl, {
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+                'Referer': 'https://rapido.zetsu.xyz/',
+                'Origin': 'https://rapido.zetsu.xyz'
+            }
+        });
         const result = response.data;
 
         console.log('✅ Réponse API image reçue:', JSON.stringify(result).substring(0, 200));
