@@ -131,28 +131,34 @@ async function chat(prompt, uid) {
         // NOUVELLE URL D'API
         const API_ENDPOINT = "https://rapido.zetsu.xyz/api/anthropic";
         
-        // Modèle par défaut pour le chat simple, peut être ajusté
-        const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929'; 
+        // Modèle par défaut pour le chat simple
+        const DEFAULT_MODEL = 'claude-3-7-sonnet-20250219'; 
 
         const queryParams = new URLSearchParams({
-            q: prompt, // 'ask' devient 'q'
+            q: prompt,
             model: DEFAULT_MODEL,
-            uid: uid,
-            // 'roleplay', 'max_tokens', 'stream' ne sont pas nécessaires ou sont gérés côté API
+            uid: uid
         });
 
-        const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
+        const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
+        console.log('🔗 Appel API chat:', apiUrl);
+
+        const response = await axios.get(apiUrl, { timeout: 60000 });
         const result = response.data;
+
+        console.log('✅ Réponse API chat reçue:', JSON.stringify(result).substring(0, 200));
 
         // La réponse est maintenant dans result.response
         if (!result || !result.response) {
-            throw new Error(result?.error || 'Aucune réponse reçue');
+            console.error('❌ Réponse API invalide:', result);
+            throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
         // Formater le texte avec gras et subscripts
-        return formatText(result.response); // Utiliser result.response
+        return formatText(result.response);
     } catch (error) {
-        console.error('Erreur chat Anthropic:', error);
+        console.error('❌ Erreur chat Anthropic:', error.message);
+        console.error('Détails:', error.response?.data || error);
         throw error;
     }
 }
@@ -163,8 +169,8 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         // NOUVELLE URL D'API
         const API_ENDPOINT = "https://rapido.zetsu.xyz/api/anthropic";
         
-        // Modèle par défaut pour l'image, peut être ajusté
-        const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929'; 
+        // Modèle par défaut pour l'image
+        const DEFAULT_MODEL = 'claude-3-7-sonnet-20250219'; 
 
         // Pour l'instant, l'API ne supporte qu'une seule image (imageUrls[0])
         const imageUrl = imageUrls[0]; 
@@ -173,25 +179,30 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez bien cette photo";
 
         const queryParams = new URLSearchParams({
-            q: finalPrompt, // 'ask' devient 'q'
+            q: finalPrompt,
             model: DEFAULT_MODEL,
             uid: uid,
-            image: imageUrl, // 'img_url' devient 'image'
-            // 'api_key' n'est plus requis dans le queryParams pour cette API (supprimé)
-            // 'roleplay', 'max_tokens', 'stream' ne sont pas nécessaires ou sont gérés côté API
+            image: imageUrl
         });
 
-        const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
+        const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
+        console.log('🔗 Appel API image:', apiUrl);
+
+        const response = await axios.get(apiUrl, { timeout: 60000 });
         const result = response.data;
 
+        console.log('✅ Réponse API image reçue:', JSON.stringify(result).substring(0, 200));
+
         if (!result || !result.response) {
-            throw new Error(result?.error || 'Aucune réponse reçue');
+            console.error('❌ Réponse API invalide:', result);
+            throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
         // Formater le texte avec gras et subscripts
-        return formatText(result.response); // Utiliser result.response
+        return formatText(result.response);
     } catch (error) {
-        console.error('Erreur chat avec images Anthropic:', error);
+        console.error('❌ Erreur chat avec images Anthropic:', error.message);
+        console.error('Détails:', error.response?.data || error);
         throw error;
     }
 }
@@ -320,24 +331,28 @@ async function handleTextMessage(senderId, message) {
 
         if (imageUrls && imageUrls.length > 0) {
             try {
+                console.log('📸 Traitement avec image(s):', imageUrls.length);
                 response = await chatWithMultipleImages(message || "Décrivez ces photos", senderId, imageUrls);
                 conversationHistoryOld[senderId].hasImage = true;
-                conversationHistoryOld[senderId].imageUrl = imageUrls[0]; // Garder la première pour compatibilité
+                conversationHistoryOld[senderId].imageUrl = imageUrls[0];
             } catch (error) {
-                console.error("Erreur lors de l'appel à chatWithMultipleImages:", error);
-                response = "Désolé, je n'ai pas pu traiter vos images. Assurez-vous que les URLs des images sont accessibles publiquement.";
+                console.error("❌ Erreur lors de l'appel à chatWithMultipleImages:", error.message);
+                console.error("Détails de l'erreur:", error.response?.data || error);
+                response = `Désolé, je n'ai pas pu traiter vos images.\n\nErreur: ${error.message}\n\nAssurez-vous que les URLs des images sont accessibles publiquement.`;
                 delete pendingImages[senderId];
                 conversationHistoryOld[senderId].imageUrl = null;
                 conversationHistoryOld[senderId].hasImage = false;
             }
         } else {
             try {
+                console.log('💬 Traitement sans image, message:', message);
                 response = await chat(message, senderId);
                 conversationHistoryOld[senderId].hasImage = false;
                 conversationHistoryOld[senderId].imageUrl = null;
             } catch (error) {
-                console.error("Erreur lors de l'appel à chat:", error);
-                response = "Désolé, je n'ai pas pu traiter votre demande.";
+                console.error("❌ Erreur lors de l'appel à chat:", error.message);
+                console.error("Détails de l'erreur:", error.response?.data || error);
+                response = `Désolé, je n'ai pas pu traiter votre demande.\n\nErreur: ${error.message}`;
             }
         }
 
