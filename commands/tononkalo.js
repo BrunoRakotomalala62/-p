@@ -24,11 +24,29 @@ module.exports = async (senderId, prompt) => {
         // Récupérer la réponse
         const reply = response.data;
 
+        // Formater la réponse en liste numérotée
+        let formattedMessage = "";
+        
+        if (reply.results && reply.results.length > 0) {
+            formattedMessage = `🎭 Résultats de recherche (Page ${reply.pagination.current_page}):\n\n`;
+            
+            reply.results.forEach((item, index) => {
+                formattedMessage += `${index + 1}. ${item.title} (${item.author})\n`;
+            });
+            
+            // Ajouter les informations de pagination
+            if (reply.pagination.next_page) {
+                formattedMessage += `\n📄 Page suivante disponible: ${reply.pagination.next_page}`;
+            }
+        } else {
+            formattedMessage = "Aucun résultat trouvé.";
+        }
+
         // Attendre 2 secondes avant d'envoyer la réponse
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Envoyer la réponse de l'API à l'utilisateur
-        await sendMessage(senderId, JSON.stringify(reply, null, 2));
+        // Envoyer la réponse formatée à l'utilisateur
+        await sendMessage(senderId, formattedMessage);
     } catch (error) {
         console.error('Erreur lors de l\'appel à l\'API:', error);
 
