@@ -132,26 +132,25 @@ async function chat(prompt, uid) {
         const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
         const API_KEY = 'rapi_4806a41790cd4a83921d56b667ab3f16';
 
-        const queryParams = new URLSearchParams({
+        const params = {
             q: prompt,
-            model: DEFAULT_MODEL,
             uid: uid,
+            model: DEFAULT_MODEL,
             image: '',
             max_tokens: '',
             apikey: API_KEY
-        });
+        };
 
-        const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
+        const apiUrl = `${API_ENDPOINT}?${new URLSearchParams(params).toString()}`;
         console.log('🔗 Appel API chat:', apiUrl);
 
-        const response = await axios.get(apiUrl, {
+        const response = await axios.get(API_ENDPOINT, {
+            params: params,
             timeout: 60000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-                'Referer': 'https://rapido.zetsu.xyz/',
-                'Origin': 'https://rapido.zetsu.xyz'
+                'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8'
             }
         });
         const result = response.data;
@@ -166,7 +165,11 @@ async function chat(prompt, uid) {
         return formatText(result.response);
     } catch (error) {
         console.error('❌ Erreur chat Anthropic:', error.message);
-        console.error('Détails:', error.response?.data || error);
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', error.response.data);
+            console.error('Headers:', error.response.headers);
+        }
         throw error;
     }
 }
@@ -181,26 +184,25 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         const imageUrl = imageUrls[0];
         const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez bien cette photo";
 
-        const queryParams = new URLSearchParams({
+        const params = {
             q: finalPrompt,
-            model: DEFAULT_MODEL,
             uid: uid,
+            model: DEFAULT_MODEL,
             image: imageUrl,
             max_tokens: '',
             apikey: API_KEY
-        });
+        };
 
-        const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
+        const apiUrl = `${API_ENDPOINT}?${new URLSearchParams(params).toString()}`;
         console.log('🔗 Appel API image:', apiUrl);
 
-        const response = await axios.get(apiUrl, {
+        const response = await axios.get(API_ENDPOINT, {
+            params: params,
             timeout: 60000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
-                'Referer': 'https://rapido.zetsu.xyz/',
-                'Origin': 'https://rapido.zetsu.xyz'
+                'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8'
             }
         });
         const result = response.data;
@@ -215,7 +217,11 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         return formatText(result.response);
     } catch (error) {
         console.error('❌ Erreur chat avec images Anthropic:', error.message);
-        console.error('Détails:', error.response?.data || error);
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', error.response.data);
+            console.error('Headers:', error.response.headers);
+        }
         throw error;
     }
 }
