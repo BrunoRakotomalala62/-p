@@ -421,7 +421,15 @@ async function handleImageMessage(senderId, imageUrl) {
         conversationHistoryOld[senderId].hasImage = true;
         conversationHistoryOld[senderId].imageUrl = publicImageUrl;
 
-        await sendMessage(senderId, `✨📸 Merci beaucoup pour cette photo et j'ai bien reçu quel est votre question concernant cette photo 🔍🖼️`);
+        await sendMessage(senderId, `✨📸 Parfait ! J'ai bien reçu votre photo. 
+
+Quelle est votre question concernant cette image ? 🔍
+
+💡 Vous pouvez me demander de :
+• Décrire cette photo en détail
+• Identifier des éléments spécifiques
+• Analyser le contenu
+• Ou toute autre question !`);
 
     } catch (error) {
         console.error('Erreur lors du traitement de l\'image :', error.response ? error.response.data : error.message);
