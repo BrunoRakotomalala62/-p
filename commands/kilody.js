@@ -5,11 +5,54 @@ const sendMessage = require('../handles/sendMessage');
 // Stockage des IDs de session par utilisateur pour maintenir les conversations continues
 const userSessionIds = {};
 
-// URL de base pour l'API Claude
-const API_BASE_URL = 'https://rapido.zetsu.xyz/api/anthropic';
+// URL de base pour la nouvelle API
+const API_BASE_URL = 'https://norch-project.gleeze.com/api/Compound';
 
 // Stockage des images en attente
 const pendingImages = {};
+
+// Fonction pour ajouter des emojis dynamiques selon le contexte
+function addContextualEmojis(text) {
+    const textLower = text.toLowerCase();
+    let emoji = '✨';
+    
+    // Emojis basés sur le contexte
+    if (textLower.includes('science') || textLower.includes('scientifique') || textLower.includes('recherche')) {
+        emoji = '🔬';
+    } else if (textLower.includes('mathématique') || textLower.includes('calcul') || textLower.includes('équation')) {
+        emoji = '🧮';
+    } else if (textLower.includes('histoire') || textLower.includes('historique') || textLower.includes('guerre')) {
+        emoji = '📜';
+    } else if (textLower.includes('géographie') || textLower.includes('pays') || textLower.includes('ville')) {
+        emoji = '🌍';
+    } else if (textLower.includes('art') || textLower.includes('peinture') || textLower.includes('musique')) {
+        emoji = '🎨';
+    } else if (textLower.includes('technologie') || textLower.includes('informatique') || textLower.includes('ordinateur')) {
+        emoji = '💻';
+    } else if (textLower.includes('économie') || textLower.includes('finance') || textLower.includes('argent')) {
+        emoji = '💰';
+    } else if (textLower.includes('santé') || textLower.includes('médecin') || textLower.includes('maladie')) {
+        emoji = '⚕️';
+    } else if (textLower.includes('sport') || textLower.includes('football') || textLower.includes('athlète')) {
+        emoji = '⚽';
+    } else if (textLower.includes('cuisine') || textLower.includes('recette') || textLower.includes('nourriture')) {
+        emoji = '🍳';
+    } else if (textLower.includes('politique') || textLower.includes('gouvernement') || textLower.includes('élection')) {
+        emoji = '🏛️';
+    } else if (textLower.includes('relation') || textLower.includes('international') || textLower.includes('diplomatie')) {
+        emoji = '🌐';
+    } else if (textLower.includes('éducation') || textLower.includes('école') || textLower.includes('étudiant')) {
+        emoji = '📚';
+    } else if (textLower.includes('nature') || textLower.includes('environnement') || textLower.includes('écologie')) {
+        emoji = '🌿';
+    } else if (textLower.includes('amour') || textLower.includes('cœur') || textLower.includes('sentiment')) {
+        emoji = '❤️';
+    } else if (textLower.includes('voyage') || textLower.includes('tourisme') || textLower.includes('vacances')) {
+        emoji = '✈️';
+    }
+    
+    return emoji;
+}
 
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
@@ -65,81 +108,60 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
     try {
         // Initialiser l'ID de session si ce n'est pas déjà fait
         if (!userSessionIds[senderId]) {
-            userSessionIds[senderId] = senderId; // Utiliser senderId comme ID de session
-        }
-
-        // Vérifier si nous avons affaire à un attachement image
-        if (imageAttachments && imageAttachments.length > 0) {
-            // Stocker l'URL de l'image pour cet utilisateur
-            pendingImages[senderId] = imageAttachments[0].payload.url;
-            
-            // Envoyer un message confirmant la réception de l'image
-            await sendMessage(senderId, "📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍");
-            return { skipCommandCheck: true };
+            userSessionIds[senderId] = `user_${senderId}`; // Utiliser senderId comme ID de session
         }
 
         // Si le prompt est vide (commande 'kilody' sans texte)
         if (!prompt || prompt.trim() === '') {
-            await sendMessage(senderId, "😊 BOT 😊\nBonjour! Je suis Kilody, votre assistant IA. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question ou partagez une image pour que je puisse l'analyser!");
+            await sendMessage(senderId, "🤖 Kilody Bot 🤖\n\n✨ Bonjour! Je suis Kilody, votre assistant IA intelligent et polyvalent.\n\n💡 Posez-moi n'importe quelle question sur:\n📚 L'éducation & la science\n🌍 La géographie & l'histoire\n💻 La technologie\n🎨 L'art & la culture\n⚽ Le sport\n🍳 La cuisine\n...et bien plus encore!\n\n➡️ Commencez simplement par taper votre question!");
             return;
         }
 
-        // Envoyer un message d'attente
-        await sendMessage(senderId, "⏳ Analyse en cours... Kilody réfléchit à votre requête! 💭");
+        // Envoyer un message d'attente avec emoji dynamique
+        await sendMessage(senderId, "⏳ Analyse en cours... Kilody réfléchit à votre question! 🧠💭");
 
-        let response;
+        // Construire l'URL de l'API avec les nouveaux paramètres
+        const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(userSessionIds[senderId])}&name=Developer`;
         
-        // Vérifier si nous avons une image en attente pour cet utilisateur
-        if (pendingImages[senderId]) {
-            const imageUrl = pendingImages[senderId];
-            
-            // Construire l'URL de l'API avec l'image
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-3-7-sonnet-20250219&image=${encodeURIComponent(imageUrl)}&system=&max_tokens=3000`;
-            
-            // Appel à l'API avec l'image
-            response = await axios.get(apiUrl);
-        } else {
-            // Appel à l'API sans image (texte seulement)
-            const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(prompt)}&uid=${userSessionIds[senderId]}&model=claude-3-7-sonnet-20250219&system=&max_tokens=3000`;
-            response = await axios.get(apiUrl);
-        }
+        // Appel à l'API
+        const response = await axios.get(apiUrl);
         
         // Débogage : afficher la structure de la réponse
         console.log('Structure complète de la réponse API Kilody:', JSON.stringify(response.data, null, 2));
         
+        // Vérifier si la requête a réussi
+        if (!response.data.success) {
+            throw new Error('La requête API a échoué');
+        }
+        
         // Récupérer la réponse de l'API
-        let reply;
-        if (response.data.response) {
-            reply = response.data.response;
-        } else if (response.data.content) {
-            reply = response.data.content;
-        } else if (response.data.message) {
-            reply = response.data.message;
-        } else if (response.data.text) {
-            reply = response.data.text;
-        } else if (typeof response.data === 'string') {
-            reply = response.data;
-        } else {
-            // Si aucune propriété connue n'est trouvée, utiliser la première valeur non-vide
-            const keys = Object.keys(response.data);
-            reply = keys.length > 0 ? response.data[keys[0]] : 'Réponse vide reçue de l\'API';
+        let reply = response.data.reply;
+        
+        if (!reply) {
+            throw new Error('Aucune réponse reçue de l\'API');
         }
         
         console.log('Réponse extraite par Kilody:', reply);
         
-        // Créer une réponse formatée avec l'en-tête demandé
-        const formattedReply = `😊BOT😊\n${reply}`;
+        // Détecter l'emoji contextuel basé sur le contenu de la réponse
+        const contextEmoji = addContextualEmojis(reply);
+        
+        // Créer une réponse formatée avec l'emoji dynamique et l'en-tête
+        const formattedReply = `${contextEmoji} 𝐊𝐈𝐋𝐎𝐃𝐘 𝐁𝐎𝐓 ${contextEmoji}\n\n${reply}\n\n━━━━━━━━━━━━━━━\n💬 Posez-moi une autre question!`;
 
         // Envoyer la réponse formatée en utilisant la fonction de découpage dynamique
         await sendLongMessage(senderId, formattedReply);
         
-        // Si c'était une demande liée à une image, conserver l'image pour les futures questions
+        // Afficher les informations de mémoire si disponibles
+        if (response.data.memoryCount) {
+            console.log(`💾 Mémoire de conversation: ${response.data.memoryCount} messages`);
+        }
         
     } catch (error) {
-        console.error("Erreur lors de l'appel à l'API Kilody:", error);
+        console.error("Erreur lors de l'appel à l'API Kilody:", error.message);
         
-        // Message d'erreur
-        await sendMessage(senderId, `😊BOT😊\nOups! Une erreur s'est produite lors de la communication avec Kilody. Veuillez réessayer dans quelques instants.`);
+        // Message d'erreur avec emoji
+        await sendMessage(senderId, `❌ 𝐊𝐈𝐋𝐎𝐃𝐘 𝐁𝐎𝐓 ❌\n\n😔 Oups! Une erreur s'est produite lors de la communication avec Kilody.\n\n🔄 Veuillez réessayer dans quelques instants.\n\n💡 Si le problème persiste, contactez l'administrateur.`);
     }
     
     return { skipCommandCheck: true };
@@ -148,6 +170,6 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "kilody",
-    description: "Discutez avec Kilody, une IA avancée capable d'analyser du texte et des images.",
-    usage: "Envoyez 'kilody <question>' pour discuter avec Kilody, ou envoyez une image suivie de questions à son sujet."
+    description: "Discutez avec Kilody, une IA avancée avec des réponses dynamiques et attractives.",
+    usage: "Envoyez 'kilody <question>' pour discuter avec Kilody. Les réponses longues sont automatiquement divisées et envoyées avec des emojis contextuels."
 };
