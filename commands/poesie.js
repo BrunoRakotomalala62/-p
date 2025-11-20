@@ -1,6 +1,13 @@
 
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
+const {
+    sendLongMessage,
+    formatTononkaloHeader,
+    formatTononkaloDetails,
+    formatInstruction,
+    addContextualEmojis
+} = require('../utils/messageFormatter');
 
 // Stockage de l'historique de conversation pour chaque utilisateur
 const conversationHistory = {};
@@ -13,7 +20,16 @@ module.exports = async (senderId, args) => {
         console.log('Input utilisateur:', userInput);
 
         if (!userInput) {
-            return sendMessage(senderId, "❌ Veuillez fournir un mot-clé pour rechercher des poèmes.\nExemple: poesie fitiavana");
+            return sendMessage(senderId, 
+                "❌ Veuillez fournir un mot-clé pour rechercher des poèmes.\n\n" +
+                "📝 Exemple: poesie fitiavana\n\n" +
+                "💡 Mots-clés populaires:\n" +
+                "❤️ fitiavana (amour)\n" +
+                "💙 alahelo (tristesse)\n" +
+                "😄 hafaliana (joie)\n" +
+                "🌟 fiainana (vie)\n" +
+                "🌻 voninkazo (fleurs)"
+            );
         }
 
         // Vérifier si l'utilisateur demande une page spécifique (ex: "page 2", "page 3")
@@ -43,10 +59,11 @@ module.exports = async (senderId, args) => {
             conversationHistory[senderId].page = pageNumber;
             conversationHistory[senderId].timestamp = Date.now();
 
-            // Envoyer la liste des résultats
-            const message = `🔍 Résultats pour "${keyword}" (Page ${pageNumber}):\n\n${searchData.Reponse}\n\n💡 Répondez avec un numéro (1-20) pour voir les détails du poème.`;
+            // Formater et envoyer la liste des résultats
+            const header = formatTononkaloHeader(keyword, pageNumber, 'poesie');
+            const fullMessage = header + searchData.Reponse + formatInstruction();
             
-            await sendMessage(senderId, message);
+            await sendLongMessage(senderId, fullMessage);
             return;
         }
         
@@ -72,8 +89,20 @@ module.exports = async (senderId, args) => {
                 return sendMessage(senderId, "❌ Impossible de récupérer les détails de ce poème.");
             }
 
+            // Formater les détails du poème
+            const formattedDetails = formatTononkaloDetails(
+                detailData.auteur,
+                detailData.mp3,
+                detailData.tonony,
+                'poesie'
+            );
+            
+            // Envoyer les détails formatés avec découpage automatique
+            await sendLongMessage(senderId, formattedDetails, 1500);
+            
             // Envoyer l'audio si disponible
             if (detailData.mp3) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 await sendMessage(senderId, {
                     attachment: {
                         type: 'audio',
@@ -84,11 +113,6 @@ module.exports = async (senderId, args) => {
                     }
                 });
             }
-
-            // Envoyer les détails du poème avec l'URL MP3
-            const message = `📝 Mpanoratra: ${detailData.auteur}\n\n🎵 mp3: ${detailData.mp3}\n\n${detailData.tonony}`;
-            
-            await sendMessage(senderId, message);
 
         } else {
             // L'utilisateur a envoyé un mot-clé pour rechercher
@@ -115,10 +139,11 @@ module.exports = async (senderId, args) => {
                 timestamp: Date.now()
             };
 
-            // Envoyer la liste des résultats
-            const message = `🔍 Résultats pour "${keyword}":\n\n${searchData.Reponse}\n\n💡 Répondez avec un numéro (1-20) pour voir les détails du poème.`;
+            // Formater et envoyer la liste des résultats
+            const header = formatTononkaloHeader(keyword, page, 'poesie');
+            const fullMessage = header + searchData.Reponse + formatInstruction();
             
-            await sendMessage(senderId, message);
+            await sendLongMessage(senderId, fullMessage);
         }
 
     } catch (error) {
