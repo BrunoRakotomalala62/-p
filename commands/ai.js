@@ -1,108 +1,149 @@
-
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// Nouvelle URL de base de l'API
-const BASE_API_URL = 'https://apis-keith.vercel.app/keithai';
-const DATE_API_URL = 'https://date-heure.vercel.app/date?heure=Madagascar';
+const BASE_API_URL = 'https://miko-utilis.vercel.app/api/gpt5';
+const MAX_MESSAGE_LENGTH = 2000;
 
-// Objet pour stocker le contexte des conversations par utilisateur
-const userConversations = {};
+const userContexts = {};
 
-// Fonction pour simplifier les expressions LaTeX
-function simplifyLatex(text) {
-    // Remplacer les expressions LaTeX \[ \] par des espaces
-    text = text.replace(/\\\[(.*?)\\\]/g, '$1');
-    // Remplacer les expressions LaTeX \( \) par des parenthèses simples
-    text = text.replace(/\\\((.*?)\\\)/g, '($1)');
-    // Autres remplacements potentiels pour formater les fractions, etc.
-    text = text.replace(/\\frac{(.*?)}{(.*?)}/g, '$1/$2');
+function toBoldUnicode(text) {
+    const boldMap = {
+        'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵',
+        'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽',
+        'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅',
+        'y': '𝘆', 'z': '𝘇',
+        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛',
+        'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣',
+        'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫',
+        'Y': '𝗬', 'Z': '𝗭',
+        '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳',
+        '8': '𝟴', '9': '𝟵'
+    };
     
-    return text;
+    return text.split('').map(char => boldMap[char] || char).join('');
 }
 
-module.exports = async (senderId, userText) => {
-    // Vérifier si le message est vide ou ne contient que des espaces
-    if (!userText.trim()) {
-        await sendMessage(senderId, 'Veuillez fournir une question ou un sujet pour que je puisse vous aider.');
+function formatTextWithBold(text) {
+    const lines = text.split('\n');
+    let formattedText = '';
+    
+    for (let line of lines) {
+        if (line.trim().startsWith('#')) {
+            const titleText = line.replace(/^#+\s*/, '').trim();
+            formattedText += toBoldUnicode(titleText) + '\n';
+        } else {
+            let processedLine = line.replace(/\*\*(.*?)\*\*/g, (match, p1) => toBoldUnicode(p1));
+            formattedText += processedLine + '\n';
+        }
+    }
+    
+    return formattedText.trim();
+}
+
+async function splitAndSendMessage(senderId, text) {
+    const formattedText = formatTextWithBold(text);
+    
+    if (formattedText.length <= MAX_MESSAGE_LENGTH) {
+        await sendMessage(senderId, formattedText);
         return;
     }
+    
+    const paragraphs = formattedText.split('\n\n');
+    let currentMessage = '';
+    
+    for (const paragraph of paragraphs) {
+        if ((currentMessage + '\n\n' + paragraph).length > MAX_MESSAGE_LENGTH) {
+            if (currentMessage) {
+                await sendMessage(senderId, currentMessage.trim());
+                await new Promise(resolve => setTimeout(resolve, 500));
+                currentMessage = paragraph;
+            } else {
+                const sentences = paragraph.split('. ');
+                for (const sentence of sentences) {
+                    if ((currentMessage + sentence + '. ').length > MAX_MESSAGE_LENGTH) {
+                        if (currentMessage) {
+                            await sendMessage(senderId, currentMessage.trim());
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                        currentMessage = sentence + '. ';
+                    } else {
+                        currentMessage += sentence + '. ';
+                    }
+                }
+            }
+        } else {
+            currentMessage += (currentMessage ? '\n\n' : '') + paragraph;
+        }
+    }
+    
+    if (currentMessage.trim()) {
+        await sendMessage(senderId, currentMessage.trim());
+    }
+}
 
+module.exports = async (senderId, userText, api, imageAttachments) => {
+    if (userText === 'RESET_CONVERSATION') {
+        userContexts[senderId] = null;
+        return;
+    }
+    
+    if (!userContexts[senderId]) {
+        userContexts[senderId] = {
+            pendingImage: null,
+            conversationActive: false
+        };
+    }
+    
+    const context = userContexts[senderId];
+    
+    if (userText === 'IMAGE_ATTACHMENT' && imageAttachments && imageAttachments.length > 0) {
+        const imageUrl = imageAttachments[0].payload.url;
+        context.pendingImage = imageUrl;
+        context.conversationActive = true;
+        
+        await sendMessage(senderId, "📸 𝗝'𝗮𝗶 𝗯𝗶𝗲𝗻 𝗿𝗲𝗰̧𝘂 𝘃𝗼𝘁𝗿𝗲 𝗶𝗺𝗮𝗴𝗲 ! 🖼️\n\n✨ 𝗤𝘂𝗲𝗹𝗹𝗲 𝗲𝘀𝘁 𝘃𝗼𝘁𝗿𝗲 𝗾𝘂𝗲𝘀𝘁𝗶𝗼𝗻 𝗰𝗼𝗻𝗰𝗲𝗿𝗻𝗮𝗻𝘁 𝗰𝗲𝘁𝘁𝗲 𝗽𝗵𝗼𝘁𝗼 ? 🤔");
+        return { skipCommandCheck: true };
+    }
+    
+    if (!userText.trim() || userText === 'IMAGE_ATTACHMENT') {
+        return;
+    }
+    
     try {
-        // Initialiser ou mettre à jour le contexte de conversation pour cet utilisateur
-        if (!userConversations[senderId]) {
-            userConversations[senderId] = [];
+        await sendMessage(senderId, "⏳ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲 𝗿𝗲𝗰̧𝘂, 𝗷𝗲 𝗽𝗿𝗲́𝗽𝗮𝗿𝗲 𝘂𝗻𝗲 𝗿𝗲́𝗽𝗼𝗻𝘀𝗲...");
+        
+        let apiUrl = `${BASE_API_URL}?query=${encodeURIComponent(userText)}&userId=${senderId}`;
+        
+        if (context.pendingImage) {
+            apiUrl += `&imgurl=${encodeURIComponent(context.pendingImage)}`;
         }
         
-        // Ajouter le message de l'utilisateur à l'historique
-        userConversations[senderId].push({
-            role: 'user',
-            content: userText
-        });
-
-        // Envoyer un message de confirmation que la requête est en cours de traitement
-        await sendMessage(senderId, "Message reçu, je prépare une réponse...");
-
-        // Construire l'URL de l'API avec la question et l'uid
-        const apiUrl = `${BASE_API_URL}?q=${encodeURIComponent(userText)}&uid=${senderId}`;
         const response = await axios.get(apiUrl);
-        const reply = response.data.result;
-
-        // Ajouter la réponse de l'assistant à l'historique
-        userConversations[senderId].push({
-            role: 'assistant',
-            content: reply
-        });
-
-        // Limiter l'historique à 10 messages maximum (5 échanges)
-        if (userConversations[senderId].length > 10) {
-            userConversations[senderId] = userConversations[senderId].slice(-10);
-        }
-
-        // Appeler l'API de date pour obtenir la date et l'heure actuelles
-        const dateResponse = await axios.get(DATE_API_URL);
-        const { date_actuelle, heure_actuelle } = dateResponse.data;
-
-        // Attendre 2 secondes avant d'envoyer la réponse pour un délai naturel
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Simplifier les expressions LaTeX dans la réponse
-        const simplifiedReply = simplifyLatex(reply);
         
-        const formattedReply = `
-🤖 • 𝗕𝗿𝘂𝗻𝗼𝗖𝗵𝗮𝘁
-━━━━━━━━━━━━━━
-❓𝗬𝗼𝘂𝗿 𝗤𝘂𝗲𝘀𝘁𝗶𝗼𝗻: ${userText}
-━━━━━━━━━━━━━━
-✅ 𝗔𝗻𝘀𝘄𝗲𝗿: ${simplifiedReply}
-━━━━━━━━━━━━━━
-⏰ 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲: ${date_actuelle}, ${heure_actuelle} à Madagascar
-
-🇲🇬Lien Facebook de l'admin: ✅https://www.facebook.com/bruno.rakotomalala.7549
-        `.trim();
-
-        await sendMessage(senderId, formattedReply);
+        if (!response.data || !response.data.data || !response.data.data.response) {
+            throw new Error('Réponse API invalide');
+        }
+        
+        const aiResponse = response.data.data.response;
+        
+        if (context.pendingImage && response.data.data.imageProcessed) {
+            context.pendingImage = null;
+        }
+        
+        await splitAndSendMessage(senderId, aiResponse);
+        
     } catch (error) {
-        console.error('Erreur lors de l\'appel à l\'API :', error);
-
-        // Envoyer un message d'erreur à l'utilisateur en cas de problème
-        await sendMessage(senderId, `
-🤖 • 𝗕𝗿𝘂𝗻𝗼𝗖𝗵𝗮𝘁
-━━━━━━━━━━━━━━
-❓𝗬𝗼𝘂𝗿 𝗤𝘂𝗲𝘀𝘁𝗶𝗼𝗻: ${userText}
-━━━━━━━━━━━━━━
-✅ 𝗔𝗻𝘀𝘄𝗲𝗿: Désolé, une erreur s'est produite lors du traitement de votre question.
-━━━━━━━━━━━━━━
-⏰ 𝗥𝗲𝘀𝗽𝗼𝗻𝘀𝗲: Impossible de récupérer l'heure.
-
-🇲🇬Lien Facebook de l'admin: ✅https://www.facebook.com/bruno.rakotomalala.7549
-        `.trim());
+        console.error('Erreur lors de l\'appel à l\'API GPT-5:', error);
+        
+        await sendMessage(senderId, 
+            "❌ 𝗗𝗲́𝘀𝗼𝗹𝗲́, 𝘂𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝘀'𝗲𝘀𝘁 𝗽𝗿𝗼𝗱𝘂𝗶𝘁𝗲 𝗹𝗼𝗿𝘀 𝗱𝘂 𝘁𝗿𝗮𝗶𝘁𝗲𝗺𝗲𝗻𝘁 𝗱𝗲 𝘃𝗼𝘁𝗿𝗲 𝗱𝗲𝗺𝗮𝗻𝗱𝗲.\n\n" +
+            "Veuillez réessayer dans quelques instants."
+        );
     }
 };
 
-// Ajouter les informations de la commande
 module.exports.info = {
     name: "ai",
-    description: "Posez directement votre question ou donnez un sujet pour obtenir une réponse générée par l'IA avec conversation continue.",
-    usage: "Envoyez simplement votre question ou sujet."
+    description: "Discutez avec GPT-5 et analysez des images. Envoyez du texte ou une image suivie de votre question.",
+    usage: "Tapez 'ai <votre question>' ou envoyez une image puis posez votre question."
 };

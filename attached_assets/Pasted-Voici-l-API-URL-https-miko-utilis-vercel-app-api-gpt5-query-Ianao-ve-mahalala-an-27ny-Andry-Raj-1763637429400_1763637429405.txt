@@ -1,0 +1,60 @@
+Voici l'API URL :
+
+https://miko-utilis.vercel.app/api/gpt5?query=Ianao+ve+mahalala+an%27ny+Andry+Rajoelina&userId=1
+
+Voici sa réponse Json :
+{
+  "status": true,
+  "data": {
+    "response": "Eny, mahalala.  \nAndry Nirina Rajoelina dia mpanao politika sy mpandraharaha avy any Madagasikara. Teraka tamin’ny 30 mai 1974 izy. Fantatra izy fa **mpitondra an’i Madagasikara** tamin’ny fotoana samihafa:  \n\n- **Tale sy mpandraharaha** teo aloha, indrindra tamin’ny sehatry ny dokam-barotra sy ny fampialam-boly, ary nanangana orinasa sy radio.  \n- Lasa **Ben’ny tanànan’Antananarivo** tamin’ny 2007.  \n- Tamin’ny taona 2009, nandray ny fitondrana taorian’ny krizy ara-politika, ka nitana ny toeran’ny Filohan’ny Filan-kevi-panjakana Transitoara izy hatramin’ny 2014.  \n- Niverina tamin’ny fifidianana ka voafidy ho **Filoha manam-pahefana** tamin’ny 2018, ary mbola mitondra ny firenena taorian’ny fifidianana 2023.\n\nAndry Rajoelina dia anisan’ny politisiana manan-kery sy be fanehoan-kevitra ao Madagasikara, misy mpanohana sy mpitsikera ny fitantanany.  \n\nTianao ve hahalala kokoa momba ny politika sy ny tetikasan’ny fitondrany?",
+    "model": "gpt-5",
+    "messageCount": 7
+  }
+}
+
+
+
+Pour l'analyse d'image voici l'API URL 
+
+https://miko-utilis.vercel.app/api/gpt5?query=D%C3%A9crivez+bien+cette+photo&userId=1&imgurl=https%3A%2F%2Fencrypted-tbn0.gstatic.com%2Flicensed-image%3Fq%3Dtbn%3AANd9GcRDlTBd-Evgs-lklwQAhPDQ4N0ShOXyFnim9_wm9m3XKc7yMPUIjYS27g_Gdh24RH_AMuizZ47M7qtIey3jLfMW3tg-H_hNxlYW2O5BCyM4q_JxMyHcMrtoV3wEImrL-eQDRzqfTur1cGQ%26s%3D19
+
+
+Voici sa réponse Json :
+{
+  "status": true,
+  "data": {
+    "response": "Sur la photo, on voit une personne portant un costume noir accompagné d’une chemise blanche et d’une cravate vert foncé. Deux micros sont placés devant, indiquant qu’elle est probablement en train de s’exprimer lors d’un événement formel. Sur le revers gauche de sa veste, il y a deux insignes : l’un est petit et représente un drapeau, et l’autre est rond avec un motif vert. L’arrière-plan est uni et bleu, donnant un aspect officiel et institutionnel à la scène.",
+    "model": "gpt-5",
+    "messageCount": 11,
+    "imageProcessed": true
+  }
+}
+
+
+
+Changer par ces Api URL l'API URL du commande ai.js et mettre la logique comme ceci :
+
+Utilisateur : Bonjour comment ça va ?
+Bot: Réponse Api prompt seulement 
+
+Utilisateur : Envoi une image pièce jointe attachement
+
+Bot: J'ai bien reçu votre image, quel est votre question concernant cette photo ? (Reformulé bien cette message avec emoji)
+
+Utilisateur : decrivez cette photo
+
+Bot: réponse Api (image analyse URL)
+
+Utilisateur : merci beaucoup
+
+Bot: réponse api
+
+Ect...
+
+Pour la conversation continue
+
+Ajouter une découpage dynamique et envoyé successifs à l'utilisateur la réponse car Facebook à une limite max 2000 pour le message 
+
+Ajouter aussi une caractère unicode gras pour les titres et les mots clé et supprimer l'affichage du # et mettre le texte après dieze en caractères unicode gras titre 
+
+
