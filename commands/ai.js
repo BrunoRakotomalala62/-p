@@ -23,6 +23,121 @@ function toBoldUnicode(text) {
     return text.split('').map(char => boldMap[char] || char).join('');
 }
 
+function addDynamicEmojis(text) {
+    const emojiMap = {
+        'bonjour': '👋',
+        'salut': '👋',
+        'hello': '👋',
+        'merci': '🙏',
+        'thank': '🙏',
+        'oui': '✅',
+        'yes': '✅',
+        'non': '❌',
+        'no': '❌',
+        'important': '⚠️',
+        'attention': '⚠️',
+        'note': '📝',
+        'exemple': '💡',
+        'example': '💡',
+        'question': '❓',
+        'réponse': '💬',
+        'answer': '💬',
+        'temps': '⏰',
+        'time': '⏰',
+        'date': '📅',
+        'argent': '💰',
+        'money': '💰',
+        'prix': '💵',
+        'price': '💵',
+        'coeur': '❤️',
+        'love': '❤️',
+        'aimer': '💖',
+        'bien': '👍',
+        'good': '👍',
+        'excellent': '🌟',
+        'super': '🎉',
+        'bravo': '👏',
+        'félicitation': '🎊',
+        'succès': '🏆',
+        'success': '🏆',
+        'travail': '💼',
+        'work': '💼',
+        'étude': '📚',
+        'study': '📚',
+        'livre': '📖',
+        'book': '📖',
+        'musique': '🎵',
+        'music': '🎵',
+        'photo': '📸',
+        'image': '🖼️',
+        'vidéo': '🎬',
+        'video': '🎬',
+        'sport': '⚽',
+        'santé': '🏥',
+        'health': '🏥',
+        'manger': '🍽️',
+        'food': '🍔',
+        'nourriture': '🍕',
+        'voyage': '✈️',
+        'travel': '🌍',
+        'maison': '🏠',
+        'home': '🏡',
+        'famille': '👨‍👩‍👧‍👦',
+        'family': '👨‍👩‍👧‍👦',
+        'ami': '👫',
+        'friend': '👬',
+        'fête': '🎉',
+        'party': '🎊',
+        'cadeau': '🎁',
+        'gift': '🎁',
+        'étoile': '⭐',
+        'star': '⭐',
+        'soleil': '☀️',
+        'sun': '☀️',
+        'lune': '🌙',
+        'moon': '🌙',
+        'fleur': '🌸',
+        'flower': '🌺',
+        'arbre': '🌳',
+        'tree': '🌲',
+        'eau': '💧',
+        'water': '💦',
+        'feu': '🔥',
+        'fire': '🔥',
+        'rapide': '⚡',
+        'fast': '⚡',
+        'nouveau': '🆕',
+        'new': '🆕',
+        'idée': '💡',
+        'idea': '💡',
+        'conseil': '💭',
+        'tip': '💡',
+        'internet': '🌐',
+        'web': '🌐',
+        'ordinateur': '💻',
+        'computer': '💻',
+        'téléphone': '📱',
+        'phone': '📱',
+        'message': '💬',
+        'email': '📧',
+        'mail': '📧'
+    };
+    
+    let enhancedText = text;
+    const words = text.toLowerCase().split(/\s+/);
+    
+    for (const [keyword, emoji] of Object.entries(emojiMap)) {
+        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const matches = enhancedText.match(regex);
+        if (matches && matches.length > 0) {
+            enhancedText = enhancedText.replace(regex, (match) => `${match} ${emoji}`);
+            break;
+        }
+    }
+    
+    return enhancedText;
+}
+
 function formatTextWithBold(text) {
     const lines = text.split('\n');
     let formattedText = '';
@@ -41,12 +156,20 @@ function formatTextWithBold(text) {
 }
 
 async function splitAndSendMessage(senderId, text) {
-    const formattedText = formatTextWithBold(text);
+    const header = '🌭✨ CHATGPT OPENAI🇲🇬🍟\n---------------------------------';
+    const footer = '-----++++------+++++-----+++\n👷👉Create by Bruno ✅✅';
     
-    if (formattedText.length <= MAX_MESSAGE_LENGTH) {
-        await sendMessage(senderId, formattedText);
+    const enhancedText = addDynamicEmojis(text);
+    const formattedText = formatTextWithBold(enhancedText);
+    const fullMessage = `${header}\n\n${formattedText}\n\n${footer}`;
+    
+    if (fullMessage.length <= MAX_MESSAGE_LENGTH) {
+        await sendMessage(senderId, fullMessage);
         return;
     }
+    
+    await sendMessage(senderId, header);
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     const paragraphs = formattedText.split('\n\n');
     let currentMessage = '';
@@ -78,7 +201,10 @@ async function splitAndSendMessage(senderId, text) {
     
     if (currentMessage.trim()) {
         await sendMessage(senderId, currentMessage.trim());
+        await new Promise(resolve => setTimeout(resolve, 300));
     }
+    
+    await sendMessage(senderId, footer);
 }
 
 module.exports = async (senderId, userText, api, imageAttachments) => {
