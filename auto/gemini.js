@@ -128,16 +128,17 @@ function formatText(text) {
 // Fonction pour le chat simple
 async function chat(prompt, uid) {
     try {
-        // NOUVELLE URL D'API
         const API_ENDPOINT = "https://rapido.zetsu.xyz/api/anthropic";
-        
-        // Modèle par défaut pour le chat simple
-        const DEFAULT_MODEL = 'claude-3-7-sonnet-20250219'; 
+        const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+        const API_KEY = 'rapi_4806a41790cd4a83921d56b667ab3f16';
 
         const queryParams = new URLSearchParams({
             q: prompt,
             model: DEFAULT_MODEL,
-            uid: uid
+            uid: uid,
+            image: '',
+            max_tokens: '',
+            apikey: API_KEY
         });
 
         const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
@@ -148,13 +149,11 @@ async function chat(prompt, uid) {
 
         console.log('✅ Réponse API chat reçue:', JSON.stringify(result).substring(0, 200));
 
-        // La réponse est maintenant dans result.response
         if (!result || !result.response) {
             console.error('❌ Réponse API invalide:', result);
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
-        // Formater le texte avec gras et subscripts
         return formatText(result.response);
     } catch (error) {
         console.error('❌ Erreur chat Anthropic:', error.message);
@@ -166,23 +165,20 @@ async function chat(prompt, uid) {
 // Fonction pour le chat avec plusieurs images
 async function chatWithMultipleImages(prompt, uid, imageUrls) {
     try {
-        // NOUVELLE URL D'API
         const API_ENDPOINT = "https://rapido.zetsu.xyz/api/anthropic";
-        
-        // Modèle par défaut pour l'image
-        const DEFAULT_MODEL = 'claude-3-7-sonnet-20250219'; 
+        const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+        const API_KEY = 'rapi_4806a41790cd4a83921d56b667ab3f16';
 
-        // Pour l'instant, l'API ne supporte qu'une seule image (imageUrls[0])
-        const imageUrl = imageUrls[0]; 
-        
-        // Le prompt est souvent vide dans ce scénario, utiliser "Décrivez cette photo" si vide
+        const imageUrl = imageUrls[0];
         const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez bien cette photo";
 
         const queryParams = new URLSearchParams({
             q: finalPrompt,
             model: DEFAULT_MODEL,
             uid: uid,
-            image: imageUrl
+            image: imageUrl,
+            max_tokens: '',
+            apikey: API_KEY
         });
 
         const apiUrl = `${API_ENDPOINT}?${queryParams.toString()}`;
@@ -198,7 +194,6 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
-        // Formater le texte avec gras et subscripts
         return formatText(result.response);
     } catch (error) {
         console.error('❌ Erreur chat avec images Anthropic:', error.message);
