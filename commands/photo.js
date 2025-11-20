@@ -21,27 +21,45 @@ module.exports = async (senderId, prompt) => {
 
         // Vérifier si des images sont retournées
         if (images && images.length > 0) {
-            // Boucler sur chaque image avec un intervalle d'une seconde entre chaque envoi
-            for (let i = 0; i < images.length; i++) {
-                const imageUrl = images[i];
+            // Diviser les images en groupes de 10
+            const batchSize = 10;
+            const batches = [];
+            
+            for (let i = 0; i < images.length; i += batchSize) {
+                batches.push(images.slice(i, i + batchSize));
+            }
 
-                // Envoyer un message avec l'image
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: {
-                            url: imageUrl,
-                            is_reusable: true
+            // Envoyer chaque groupe de 10 images
+            for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+                const batch = batches[batchIndex];
+                
+                // Envoyer chaque image du groupe
+                for (let i = 0; i < batch.length; i++) {
+                    const imageUrl = batch[i];
+
+                    // Envoyer un message avec l'image
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'image',
+                            payload: {
+                                url: imageUrl,
+                                is_reusable: true
+                            }
                         }
-                    }
-                });
+                    });
 
-                // Attendre une seconde avant d'envoyer la prochaine image
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                    // Petit délai entre les images du même groupe (100ms)
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                // Attendre 2 secondes avant d'envoyer le prochain groupe
+                if (batchIndex < batches.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             }
 
             // Envoyer un message final une fois toutes les images envoyées
-            await sendMessage(senderId, "Toutes les images ont été envoyées.");
+            await sendMessage(senderId, `Toutes les images ont été envoyées (${images.length} photos en ${batches.length} groupe(s) de 10).`);
         } else {
             // Si aucune image n'est trouvée, informer l'utilisateur
             await sendMessage(senderId, "Aucune image trouvée pour votre recherche.");
