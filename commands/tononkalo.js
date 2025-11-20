@@ -1,63 +1,153 @@
 const axios = require('axios');
-const sendMessage = require('../handles/sendMessage'); // Importer la fonction sendMessage
+const sendMessage = require('../handles/sendMessage');
 
-module.exports = async (senderId, prompt) => {
+// Stockage de l'historique de conversation pour chaque utilisateur
+const conversationHistory = {};
+
+module.exports = async (senderId, args) => {
     try {
-        // Envoyer un message de confirmation que le message a été reçu
-        await sendMessage(senderId, "Message reçu, je prépare une réponse...");
+        console.log('Commande tononkalo appelée avec args:', args);
+        // Gérer le cas où args est une chaîne de caractères ou un tableau
+        const userInput = typeof args === 'string' ? args.trim() : (Array.isArray(args) ? args.join(' ').trim() : '');
+        console.log('Input utilisateur:', userInput);
 
-        // Extraire les paramètres pour l'API
-        const params = prompt.split(' ');
-        const tononkalo = params[0]; // Le premier mot après la commande sera le tononkalo
-        const page = params[1] || 1; // Le deuxième mot, ou 1 par défaut
-
-        // Construire les URLs pour les API
-        const rechercheUrl = `https://manoratra-liste-tononkalo.vercel.app/recherche?tononkalo=${encodeURIComponent(tononkalo)}&page=${encodeURIComponent(page)}`;
-        const rechercheAuteurUrl = `https://manoratra-liste-tononkalo.vercel.app/recherche_auteur?auteur=${encodeURIComponent(tononkalo)}&titre=HIANOKA`; // Exemple titre
-        const auteurUrl = `https://manoratra-liste-tononkalo.vercel.app/auteur?query=mpanoratra&page=${encodeURIComponent(page)}`;
-        const recherchePoemeUrl = `https://manoratra-liste-tononkalo.vercel.app/recherche_poeme?poeme=${encodeURIComponent(tononkalo)}&page=${encodeURIComponent(page)}`;
-
-        // Appel aux différentes API (vous pouvez choisir celle que vous souhaitez)
-        // Exemple: appeler l'API de recherche de tononkalo
-        const response = await axios.get(rechercheUrl);
-
-        // Récupérer la réponse
-        const reply = response.data;
-
-        // Formater la réponse en liste numérotée
-        let formattedMessage = "";
-        
-        if (reply.results && reply.results.length > 0) {
-            formattedMessage = `🎭 Résultats de recherche (Page ${reply.pagination.current_page}):\n\n`;
-            
-            reply.results.forEach((item, index) => {
-                formattedMessage += `${index + 1}. ${item.title} (${item.author})\n`;
-            });
-            
-            // Ajouter les informations de pagination
-            if (reply.pagination.next_page) {
-                formattedMessage += `\n📄 Page suivante disponible: ${reply.pagination.next_page}`;
-            }
-        } else {
-            formattedMessage = "Aucun résultat trouvé.";
+        if (!userInput) {
+            return sendMessage(senderId, "❌ Veuillez fournir un mot-clé pour rechercher des tononkalo.\nExemple: tononkalo fitiavana");
         }
 
-        // Attendre 2 secondes avant d'envoyer la réponse
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Vérifier si l'utilisateur demande une page spécifique (ex: "page 2", "page 3")
+        const pageMatch = userInput.match(/^page\s+(\d+)$/i);
+        
+        if (pageMatch) {
+            const pageNumber = parseInt(pageMatch[1]);
+            
+            if (!conversationHistory[senderId]) {
+                return sendMessage(senderId, "❌ Veuillez d'abord effectuer une recherche avant de demander une page spécifique.\nExemple: tononkalo fitiavana");
+            }
+            
+            const keyword = conversationHistory[senderId].keyword;
+            
+            // Appel à l'API pour la page demandée
+            const searchUrl = `https://tonontako-audio.vercel.app/recherche?tononkalo=${encodeURIComponent(keyword)}&page=${pageNumber}`;
+            console.log('URL de recherche pour page:', searchUrl);
+            
+            const searchResponse = await axios.get(searchUrl);
+            const searchData = searchResponse.data;
 
-        // Envoyer la réponse formatée à l'utilisateur
-        await sendMessage(senderId, formattedMessage);
+            if (!searchData || !searchData.Reponse) {
+                return sendMessage(senderId, `❌ Aucun résultat trouvé pour la page ${pageNumber}.`);
+            }
+
+            // Mettre à jour l'historique avec la nouvelle page
+            conversationHistory[senderId].page = pageNumber;
+            conversationHistory[senderId].timestamp = Date.now();
+
+            // Envoyer la liste des résultats
+            const message = `🔍 Résultats pour "${keyword}" (Page ${pageNumber}):\n\n${searchData.Reponse}\n\n💡 Répondez avec un numéro (1-20) pour voir les détails du tononkalo.`;
+            
+            await sendMessage(senderId, message);
+            return;
+        }
+        
+        // Vérifier si l'utilisateur a envoyé un numéro (sélection d'un tononkalo)
+        const numeroMatch = userInput.match(/^\d+$/);
+        
+        if (numeroMatch && conversationHistory[senderId]) {
+            // L'utilisateur a sélectionné un numéro
+            const numero = parseInt(userInput);
+            const lastSearch = conversationHistory[senderId];
+
+            if (numero < 1 || numero > 20) {
+                return sendMessage(senderId, "❌ Veuillez choisir un numéro entre 1 et 20.");
+            }
+
+            // Appel à la deuxième API pour obtenir les détails du tononkalo
+            const detailUrl = `https://tonontako-audio.vercel.app/tonony?numero=${numero}&tononkalo=${encodeURIComponent(lastSearch.keyword)}&page=${lastSearch.page}`;
+            
+            const detailResponse = await axios.get(detailUrl);
+            const detailData = detailResponse.data;
+
+            if (!detailData || !detailData.tonony) {
+                return sendMessage(senderId, "❌ Impossible de récupérer les détails de ce tononkalo.");
+            }
+
+            // Envoyer l'audio si disponible
+            if (detailData.mp3) {
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: 'audio',
+                        payload: {
+                            url: detailData.mp3,
+                            is_reusable: true
+                        }
+                    }
+                });
+            }
+
+            // Envoyer les détails du tononkalo avec l'URL MP3
+            const message = `📝 Mpanoratra: ${detailData.auteur}\n\n🎵 mp3: ${detailData.mp3}\n\n${detailData.tonony}`;
+            
+            await sendMessage(senderId, message);
+
+        } else {
+            // L'utilisateur a envoyé un mot-clé pour rechercher
+            const keyword = userInput;
+            const page = 1;
+
+            // Appel à la première API pour la recherche
+            const searchUrl = `https://tonontako-audio.vercel.app/recherche?tononkalo=${encodeURIComponent(keyword)}&page=${page}`;
+            console.log('URL de recherche:', searchUrl);
+            
+            const searchResponse = await axios.get(searchUrl);
+            console.log('Réponse API reçue:', JSON.stringify(searchResponse.data));
+            const searchData = searchResponse.data;
+
+            if (!searchData || !searchData.Reponse) {
+                console.log('Pas de résultats dans la réponse');
+                return sendMessage(senderId, "❌ Aucun résultat trouvé pour votre recherche.");
+            }
+
+            // Sauvegarder l'historique de recherche pour cet utilisateur
+            conversationHistory[senderId] = {
+                keyword: keyword,
+                page: page,
+                timestamp: Date.now()
+            };
+
+            // Envoyer la liste des résultats
+            const message = `🔍 Résultats pour "${keyword}":\n\n${searchData.Reponse}\n\n💡 Répondez avec un numéro (1-20) pour voir les détails du tononkalo.`;
+            
+            await sendMessage(senderId, message);
+        }
+
     } catch (error) {
-        console.error('Erreur lors de l\'appel à l\'API:', error);
-
-        // Envoyer un message d'erreur à l'utilisateur en cas de problème
-        await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre message.");
+        console.error('Erreur dans la commande tononkalo:', error);
+        console.error('Détails de l\'erreur:', error.response ? error.response.data : error.message);
+        
+        if (error.response) {
+            console.error('Code status:', error.response.status);
+            console.error('Données de réponse:', error.response.data);
+        }
+        
+        await sendMessage(senderId, `❌ Une erreur s'est produite lors de la recherche de tononkalo. Veuillez réessayer.\nDétails: ${error.message}`);
     }
 };
 
+// Nettoyer l'historique ancien (plus de 30 minutes)
+setInterval(() => {
+    const now = Date.now();
+    const thirtyMinutes = 30 * 60 * 1000;
+    
+    for (const userId in conversationHistory) {
+        if (now - conversationHistory[userId].timestamp > thirtyMinutes) {
+            delete conversationHistory[userId];
+        }
+    }
+}, 5 * 60 * 1000); // Vérifier toutes les 5 minutes
+
 // Ajouter les informations de la commande
 module.exports.info = {
-    name: "tononkalo",  // Le nom de la commande
-    description: "Recherchez des poèmes par tononkalo et pagination.",  // Nouvelle description
-    usage: "Envoyez 'tononkalo <nom> <page>' pour rechercher des poèmes."  // Nouvelle façon d'utiliser la commande
+    name: "tononkalo",
+    description: "Recherche et affiche des tononkalo malagasy avec audio.",
+    usage: "Envoyez 'tononkalo <mot-clé>' pour rechercher, puis répondez avec un numéro (1-20) pour voir les détails."
 };
