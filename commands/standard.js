@@ -204,8 +204,8 @@ function beautifyResponse(response) {
     // Appliquer le formatage unicode
     formatted = formatWithUnicode(formatted);
     
-    // Ajouter des emojis contextuels
-    formatted = addContextualEmojis(formatted);
+    // NE PAS ajouter des emojis contextuels automatiquement
+    // formatted = addContextualEmojis(formatted);
     
     // Améliorer les séparateurs
     formatted = formatted.replace(/---+/g, '━━━━━━━━━━━━━━━━━━');
