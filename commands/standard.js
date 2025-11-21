@@ -108,9 +108,75 @@ function addContextualEmojis(text) {
     return processedText;
 }
 
+// Fonction pour nettoyer les symboles LaTeX
+function cleanLatexSyntax(text) {
+    return text
+        // Supprimer les $ (délimiteurs LaTeX)
+        .replace(/\$\$/g, "")
+        .replace(/\$/g, "")
+        // Supprimer les \( et \) (délimiteurs LaTeX)
+        .replace(/\\\(|\\\\\(|\\\\\\\(/g, "")
+        .replace(/\\\)|\\\\\)|\\\\\\\)/g, "")
+        // Remplacer \frac{a}{b} par a/b
+        .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
+        // Supprimer \mathbf{} mais garder le contenu
+        .replace(/\\mathbf\{([^{}]+)\}/g, "$1")
+        // Remplacer les symboles mathématiques LaTeX
+        .replace(/\\implies/g, "=>")
+        .replace(/\\Rightarrow/g, "=>")
+        .replace(/\\Leftarrow/g, "<=")
+        .replace(/\\iff/g, "<=>")
+        .replace(/\\boxed\{([^{}]+)\}/g, "[$1]")
+        .replace(/\\quad/g, " ")
+        .replace(/\\qquad/g, "  ")
+        .replace(/\\cdot/g, "×")
+        .replace(/\\times/g, "×")
+        .replace(/\\div/g, "÷")
+        .replace(/\\pm/g, "±")
+        .replace(/\\mp/g, "∓")
+        .replace(/\\leq/g, "≤")
+        .replace(/\\geq/g, "≥")
+        .replace(/\\neq/g, "≠")
+        .replace(/\\approx/g, "≈")
+        .replace(/\\equiv/g, "≡")
+        .replace(/\\in/g, "∈")
+        .replace(/\\notin/g, "∉")
+        .replace(/\\subset/g, "⊂")
+        .replace(/\\supset/g, "⊃")
+        .replace(/\\cup/g, "∪")
+        .replace(/\\cap/g, "∩")
+        .replace(/\\emptyset/g, "∅")
+        .replace(/\\infty/g, "∞")
+        .replace(/\\sum/g, "Σ")
+        .replace(/\\prod/g, "Π")
+        .replace(/\\int/g, "∫")
+        .replace(/\\sqrt\{([^{}]+)\}/g, "√($1)")
+        .replace(/\\pi/g, "π")
+        .replace(/\\alpha/g, "α")
+        .replace(/\\beta/g, "β")
+        .replace(/\\gamma/g, "γ")
+        .replace(/\\delta/g, "δ")
+        .replace(/\\theta/g, "θ")
+        .replace(/\\lambda/g, "λ")
+        .replace(/\\mu/g, "μ")
+        .replace(/\\sigma/g, "σ")
+        .replace(/\\omega/g, "ω")
+        // Supprimer \text{} mais garder le contenu
+        .replace(/\\text\{([^{}]+)\}/g, "$1")
+        // Supprimer les modulos
+        .replace(/\\equiv[^\\]*\\pmod\{([^{}]+)\}/g, "≡ (mod $1)")
+        // Supprimer les autres commandes LaTeX
+        .replace(/\\[a-zA-Z]+/g, "")
+        .replace(/\\\\/g, "")
+        .replace(/\{|\}/g, "");
+}
+
 // Fonction pour formater magnifiquement la réponse
 function beautifyResponse(response) {
     let formatted = response;
+    
+    // Nettoyer les symboles LaTeX en premier
+    formatted = cleanLatexSyntax(formatted);
     
     // Appliquer le formatage unicode
     formatted = formatWithUnicode(formatted);
