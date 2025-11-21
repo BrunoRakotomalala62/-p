@@ -341,12 +341,18 @@ module.exports = async (senderId, userText, api) => {
             `${supportsImage ? `• Envoyez une image, puis utilisez ${commandName}\n` : ''}` +
             `• stop - pour désactiver la commande\n` +
             `• supprimer - pour réinitialiser la conversation\n\n` +
-            `⚠️ 𝗡𝗢𝗧𝗘 𝗜𝗠𝗣𝗢𝗥𝗧𝗔𝗡𝗧𝗘:\n` +
-            `Le système de commandes charge les commandes au démarrage.\n` +
-            `Vous devez redémarrer le bot pour que la commande "${commandName}" soit active.\n\n` +
+            `🔄 𝗥𝗘𝗗𝗘́𝗠𝗔𝗥𝗥𝗔𝗚𝗘 𝗔𝗨𝗧𝗢𝗠𝗔𝗧𝗜𝗤𝗨𝗘...\n` +
+            `Le serveur va redémarrer automatiquement dans 3 secondes pour charger la nouvelle commande.\n\n` +
             `💡 𝗔𝗽𝗿𝗲̀𝘀 𝗹𝗲 𝗿𝗲𝗱𝗲́𝗺𝗮𝗿𝗿𝗮𝗴𝗲, 𝘁𝗲𝘀𝘁𝗲𝘇:\n` +
             `${commandName} Bonjour, qui es-tu?`
         );
+        
+        console.log(`✅ Commande "${commandName}" créée avec succès. Redémarrage du serveur...`);
+        
+        setTimeout(() => {
+            console.log('🔄 Redémarrage automatique du serveur pour charger la nouvelle commande...');
+            process.exit(0);
+        }, 3000);
         
     } catch (error) {
         console.error('Erreur lors de la création de la commande:', error);
