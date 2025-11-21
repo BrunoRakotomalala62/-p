@@ -1,0 +1,34 @@
+Voilà l'API URL pour l'analyse de l'image :
+
+https://norch-project.gleeze.com/api/gemini?prompt=What+can+you+help+me+with%3F&imageurl=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2F1%2F15%2FCat_August_2010-4.jpg
+
+
+Voici sa réponse Json :
+{
+  "model": "gemini-2.5-flash",
+  "prompt": "What can you help me with?",
+  "imageurl": "https://upload.wikimedia.org/wikipedia/commons/1/15/Cat_August_2010-4.jpg",
+  "response": "This image features a **tabby cat** lounging on a set of **white, textured stairs or ledges**.\n\nHere's a detailed description:\n\n*   **Subject:** A beautiful, medium-sized tabby cat is the central focus of the image. It has distinctive grey-brown fur with dark brown or black stripes running across its body, especially visible on its legs and tail. Its chest and muzzle show lighter, creamy-tan fur.\n*   **Pose:** The cat is lying down, stretched out comfortably on one of the white steps, facing directly towards the viewer. Its front paws are extended forward, with one paw (the right one from the viewer's perspective) clearly showing its dark paw pads. Its left rear paw is also visible, tucked close to its body.\n*   **Eyes:** The cat's most striking feature might be its captivating, bright green or hazel eyes, which are looking directly at the camera with an alert yet relaxed expression.\n*   **Background:** The cat is positioned on a series of stark white steps or ledges. The vertical wall to its left (from the viewer's perspective) and the horizontal steps are uniformly white, providing a clean, minimalist backdrop that makes the cat's patterned fur stand out. The white surfaces show some texture and minor imperfections, such as slight discoloration, small cracks, or peeling paint in certain areas, particularly on the vertical wall section.\n*   **Composition & Lighting:** The cat occupies the middle ground of the image, perfectly framed by the horizontal lines of the steps. The lighting appears bright and natural, highlighting the textures of both the cat's fur and the white surfaces. There are soft shadows, but the scene is well-lit, emphasizing the details.\n\nThe overall impression is one of calm and watchfulness, with the cat appearing perfectly at ease in its sunny spot.",
+  "author": "April Manalo"
+}
+
+
+Voici pour la conversation seulement :
+
+https://norch-project.gleeze.com/api/gemini?prompt=qui+es-tu%3F
+
+Voici sa réponse Json :
+{
+  "model": "gemini-2.5-flash",
+  "prompt": "qui es-tu?",
+  "imageurl": null,
+  "response": "Je suis un grand modèle linguistique, entraîné par Google.\n\nMon but est de vous aider en répondant à vos questions, en générant du texte, en fournissant des informations et en accomplissant diverses tâches linguistiques.",
+  "author": "April Manalo"
+}
+
+
+
+Créer une commande appelé standard.js en utilisant les deux URL api précédent et ajouter une conversation continue basé sur une image précédent en utilisant uid=...
+Et pour la conversation continue aussi pour le prompt seulement
+
+Ajouter une caractère unicode pour les titres et les mot clé et supprimer l'affiche de # et mettre le titre après # par des caractères unicode et ajouter aussi des emoji magnifique dans la réponse de l'API selon le contexte et mettre magnifique l'affichage du réponse pour attirer l'attention de l'utilisateur.
