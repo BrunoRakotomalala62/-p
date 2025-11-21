@@ -114,8 +114,16 @@ function convertToBold(text) {
 
 // Fonction pour formater le texte avec gras et subscript
 function formatText(text) {
-    // D'abord convertir les subscripts mathématiques (U_0, U_n, etc.)
-    let formattedText = convertMathSubscript(text);
+    // Supprimer les marqueurs de titre Markdown (#, ##, ###, etc.)
+    let formattedText = text.replace(/^#{1,6}\s+/gm, '');
+    
+    // Convertir les exposants avec ^ (z^A, z^B, etc.)
+    formattedText = formattedText.replace(/([a-zA-Z])\^([a-zA-Z0-9])/g, (match, p1, p2) => {
+        return p1 + convertToSuperscript(p2);
+    });
+    
+    // Convertir les subscripts mathématiques (U_0, U_n, etc.)
+    formattedText = convertMathSubscript(formattedText);
     
     // Ensuite convertir le texte entre ** ** en gras Unicode
     formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, (match, p1) => {
