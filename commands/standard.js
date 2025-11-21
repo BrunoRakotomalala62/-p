@@ -101,7 +101,6 @@ function addContextualEmojis(text) {
     let processedText = text;
     emojiPatterns.forEach(({ pattern, emoji }) => {
         processedText = processedText.replace(pattern, (match) => {
-            // Vérifier si l'emoji n'est pas déjà présent juste après
             return match + emoji;
         });
     });
@@ -134,7 +133,7 @@ async function chatText(prompt, uid) {
         
         const queryParams = new URLSearchParams({
             prompt: prompt,
-            uid: uid  // Pour la conversation continue
+            uid: uid
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
@@ -159,7 +158,7 @@ async function chatWithImage(prompt, imageUrl, uid) {
         const queryParams = new URLSearchParams({
             prompt: prompt,
             imageurl: imageUrl,
-            uid: uid  // Pour la conversation continue avec image
+            uid: uid
         });
 
         const response = await axios.get(`${API_ENDPOINT}?${queryParams.toString()}`);
@@ -216,126 +215,7 @@ async function sendLongMessage(senderId, message) {
     }
 }
 
-// Fonction pour traiter les messages texte
-async function handleTextMessage(senderId, message) {
-    try {
-        // Initialiser l'historique si nécessaire
-        if (!conversationHistory.has(senderId)) {
-            conversationHistory.set(senderId, {
-                messages: [],
-                hasImage: false,
-                imageUrl: null
-            });
-        }
-
-        const userHistory = conversationHistory.get(senderId);
-
-        // Commande pour réinitialiser la conversation
-        if (message && message.toLowerCase() === 'clear') {
-            conversationHistory.delete(senderId);
-            delete pendingImages[senderId];
-            await sendMessage(senderId, "🔄 ✨ Conversation réinitialisée avec succès! Prêt pour une nouvelle discussion! 🌟");
-            return;
-        }
-
-        // Vérifier si on a des images en attente
-        const hasImages = pendingImages[senderId] && pendingImages[senderId].length > 0;
-        
-        if ((!message || message.trim() === '') && !hasImages && !userHistory.hasImage) {
-            await sendMessage(senderId, `
-╔══════════════════════════════╗
-    ✨ STANDARD AI 🌟
-╚══════════════════════════════╝
-
-Bienvenue! 👋 Je suis votre assistant intelligent.
-
-💬 Posez-moi n'importe quelle question
-🖼️ Partagez une image pour l'analyser
-🔄 Tapez "clear" pour réinitialiser
-
-Comment puis-je vous aider aujourd'hui? 😊
-            `);
-            return;
-        }
-
-        // Message d'attente
-        await sendMessage(senderId, "⏳ ✨ Analyse en cours... Standard AI réfléchit! 💭✨");
-
-        let response;
-        let imageUrl = pendingImages[senderId]?.[0] || userHistory.imageUrl;
-
-        // Si on a une image
-        if (imageUrl) {
-            try {
-                response = await chatWithImage(message || "Décrivez cette image", imageUrl, senderId);
-                userHistory.hasImage = true;
-                userHistory.imageUrl = imageUrl;
-            } catch (error) {
-                console.error("Erreur lors de l'appel à chatWithImage:", error);
-                response = "❌ Désolé, je n'ai pas pu traiter votre image. Assurez-vous que l'URL de l'image est accessible publiquement.";
-                delete pendingImages[senderId];
-                userHistory.imageUrl = null;
-                userHistory.hasImage = false;
-            }
-        } else {
-            // Conversation texte seulement
-            try {
-                response = await chatText(message, senderId);
-                userHistory.hasImage = false;
-                userHistory.imageUrl = null;
-            } catch (error) {
-                console.error("Erreur lors de l'appel à chatText:", error);
-                response = "❌ Désolé, je n'ai pas pu traiter votre demande.";
-            }
-        }
-
-        if (!response) {
-            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API.");
-            return;
-        }
-
-        // Formater magnifiquement la réponse
-        const beautifiedResponse = beautifyResponse(response);
-
-        // Créer le message final formaté
-        const formattedResponse = `
-╔══════════════════════════════╗
-  ✨ STANDARD AI 🌟 RÉPONSE
-╚══════════════════════════════╝
-
-${beautifiedResponse}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤖 Powered by Standard AI ✨
-💡 Tapez "clear" pour recommencer
-`;
-
-        // Envoyer la réponse formatée
-        await sendLongMessage(senderId, formattedResponse);
-
-        // Supprimer les images en attente après traitement
-        if (pendingImages[senderId]) {
-            delete pendingImages[senderId];
-        }
-
-    } catch (error) {
-        console.error("❌ Erreur Standard AI:", error?.response?.data || error.message || error);
-        await sendMessage(senderId, `
-╔══════════════════════════════╗
-    ⚠️ ERREUR TECHNIQUE ⚠️
-╚══════════════════════════════╝
-
-Une erreur s'est produite lors de la communication avec Standard AI.
-
-🔄 Veuillez réessayer dans quelques instants.
-💡 Si le problème persiste, tapez "clear"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        `);
-    }
-}
-
-// Fonction pour traiter les images
+// Fonction principale pour gérer les images
 async function handleImageMessage(senderId, imageUrl) {
     try {
         await sendMessage(senderId, "⏳ 🖼️ Traitement de votre image en cours... ✨");
@@ -393,9 +273,132 @@ async function handleImageMessage(senderId, imageUrl) {
     }
 }
 
-module.exports = {
-    handleTextMessage,
-    handleImageMessage,
-    chatText,
-    chatWithImage
+// Fonction principale exportée - appelée par le système de commandes
+module.exports = async function(senderId, commandPrompt, api) {
+    try {
+        // Gestion spéciale pour les images envoyées via le système
+        if (commandPrompt === "IMAGE_ATTACHMENT" && api) {
+            const imageAttachments = arguments[3];
+            if (imageAttachments && imageAttachments.length > 0) {
+                for (const image of imageAttachments) {
+                    await handleImageMessage(senderId, image.payload.url);
+                }
+                return;
+            }
+        }
+
+        // Initialiser l'historique si nécessaire
+        if (!conversationHistory.has(senderId)) {
+            conversationHistory.set(senderId, {
+                messages: [],
+                hasImage: false,
+                imageUrl: null
+            });
+        }
+
+        const userHistory = conversationHistory.get(senderId);
+
+        // Commande pour réinitialiser la conversation
+        if (commandPrompt && commandPrompt.toLowerCase() === 'clear') {
+            conversationHistory.delete(senderId);
+            delete pendingImages[senderId];
+            await sendMessage(senderId, "🔄 ✨ Conversation réinitialisée avec succès! Prêt pour une nouvelle discussion! 🌟");
+            return;
+        }
+
+        // Vérifier si on a des images en attente
+        const hasImages = pendingImages[senderId] && pendingImages[senderId].length > 0;
+        
+        if ((!commandPrompt || commandPrompt.trim() === '') && !hasImages && !userHistory.hasImage) {
+            await sendMessage(senderId, `
+╔══════════════════════════════╗
+    ✨ STANDARD AI 🌟
+╚══════════════════════════════╝
+
+Bienvenue! 👋 Je suis votre assistant intelligent.
+
+💬 Posez-moi n'importe quelle question
+🖼️ Partagez une image pour l'analyser
+🔄 Tapez "clear" pour réinitialiser
+
+Comment puis-je vous aider aujourd'hui? 😊
+            `);
+            return;
+        }
+
+        // Message d'attente
+        await sendMessage(senderId, "⏳ ✨ Analyse en cours... Standard AI réfléchit! 💭✨");
+
+        let response;
+        let imageUrl = pendingImages[senderId]?.[0] || userHistory.imageUrl;
+
+        // Si on a une image
+        if (imageUrl) {
+            try {
+                response = await chatWithImage(commandPrompt || "Décrivez cette image", imageUrl, senderId);
+                userHistory.hasImage = true;
+                userHistory.imageUrl = imageUrl;
+            } catch (error) {
+                console.error("Erreur lors de l'appel à chatWithImage:", error);
+                response = "❌ Désolé, je n'ai pas pu traiter votre image. Assurez-vous que l'URL de l'image est accessible publiquement.";
+                delete pendingImages[senderId];
+                userHistory.imageUrl = null;
+                userHistory.hasImage = false;
+            }
+        } else {
+            // Conversation texte seulement
+            try {
+                response = await chatText(commandPrompt, senderId);
+                userHistory.hasImage = false;
+                userHistory.imageUrl = null;
+            } catch (error) {
+                console.error("Erreur lors de l'appel à chatText:", error);
+                response = "❌ Désolé, je n'ai pas pu traiter votre demande.";
+            }
+        }
+
+        if (!response) {
+            await sendMessage(senderId, "⚠️ Aucune réponse reçue de l'API.");
+            return;
+        }
+
+        // Formater magnifiquement la réponse
+        const beautifiedResponse = beautifyResponse(response);
+
+        // Créer le message final formaté
+        const formattedResponse = `
+╔══════════════════════════════╗
+  ✨ STANDARD AI 🌟 RÉPONSE
+╚══════════════════════════════╝
+
+${beautifiedResponse}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤖 Powered by Standard AI ✨
+💡 Tapez "clear" pour recommencer
+`;
+
+        // Envoyer la réponse formatée
+        await sendLongMessage(senderId, formattedResponse);
+
+        // Supprimer les images en attente après traitement
+        if (pendingImages[senderId]) {
+            delete pendingImages[senderId];
+        }
+
+    } catch (error) {
+        console.error("❌ Erreur Standard AI:", error?.response?.data || error.message || error);
+        await sendMessage(senderId, `
+╔══════════════════════════════╗
+    ⚠️ ERREUR TECHNIQUE ⚠️
+╚══════════════════════════════╝
+
+Une erreur s'est produite lors de la communication avec Standard AI.
+
+🔄 Veuillez réessayer dans quelques instants.
+💡 Si le problème persiste, tapez "clear"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        `);
+    }
 };
