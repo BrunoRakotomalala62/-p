@@ -31,11 +31,12 @@ function validateApiUrl(url) {
     }
 }
 
-function generateCommandTemplate(commandName, apiUrl, supportsImage = false, queryParam = 'query', imageParam = 'imgurl') {
+function generateCommandTemplate(commandName, apiUrl, supportsImage = false, queryParam = 'query', imageParam = 'imgurl', uidParam = 'userId') {
     const safeCommandName = sanitizeString(commandName);
     const safeApiUrl = sanitizeString(apiUrl);
     const safeQueryParam = sanitizeString(queryParam);
     const safeImageParam = sanitizeString(imageParam);
+    const safeUidParam = sanitizeString(uidParam);
     const imageHandlingCode = supportsImage ? `
     if (userText === 'IMAGE_ATTACHMENT' && imageAttachments && imageAttachments.length > 0) {
         const imageUrl = imageAttachments[0].payload.url;
@@ -187,7 +188,7 @@ module.exports = async (senderId, userText, api, imageAttachments) => {
     try {
         await sendMessage(senderId, "⏳ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲 𝗿𝗲𝗰̧𝘂, 𝗷𝗲 𝗽𝗿𝗲́𝗽𝗮𝗿𝗲 𝘂𝗻𝗲 𝗿𝗲́𝗽𝗼𝗻𝘀𝗲...");
         
-        let apiUrl = \`\${BASE_API_URL}?${safeQueryParam}=\${encodeURIComponent(userText)}&userId=\${senderId}\`;
+        let apiUrl = \`\${BASE_API_URL}?${safeQueryParam}=\${encodeURIComponent(userText)}&${safeUidParam}=\${senderId}\`;
         ${imageUrlCode}
         
         const response = await axios.get(apiUrl);
@@ -241,11 +242,12 @@ module.exports = async (senderId, userText, api) => {
             "📌 𝗢𝗽𝘁𝗶𝗼𝗻𝘀:\n" +
             "• image - Active le support des images\n" +
             "• query:<nom> - Nom du paramètre pour le texte (défaut: query)\n" +
-            "• imageurl:<nom> - Nom du paramètre pour l'image (défaut: imgurl)\n\n" +
+            "• imageurl:<nom> - Nom du paramètre pour l'image (défaut: imgurl)\n" +
+            "• uid:<nom> - Nom du paramètre pour l'ID utilisateur (défaut: userId)\n\n" +
             "📌 𝗘𝘅𝗲𝗺𝗽𝗹𝗲𝘀:\n" +
             "• commandstore hi https://api.exemple.com/chat\n" +
-            "• commandstore assistant https://api.exemple.com/ai image query:prompt imageurl:imageurl\n" +
-            "• commandstore gemini https://norch-project.gleeze.com/api/gemini image query:prompt imageurl:imageurl\n\n" +
+            "• commandstore assistant https://api.exemple.com/ai image query:prompt imageurl:imageurl uid:user\n" +
+            "• commandstore gemini https://norch-project.gleeze.com/api/gemini image query:prompt imageurl:imageurl uid:uid\n\n" +
             "💡 Les paramètres personnalisés permettent d'adapter la commande à n'importe quelle API!\n\n" +
             "✨ Une fois créée, utilisez votre commande:\n" +
             "• hi qui es-tu?\n" +
@@ -261,6 +263,7 @@ module.exports = async (senderId, userText, api) => {
     let supportsImage = false;
     let queryParam = 'query';
     let imageParam = 'imgurl';
+    let uidParam = 'userId';
     
     for (let i = 2; i < args.length; i++) {
         const arg = args[i];
@@ -270,6 +273,8 @@ module.exports = async (senderId, userText, api) => {
             queryParam = arg.split(':')[1];
         } else if (arg.startsWith('imageurl:')) {
             imageParam = arg.split(':')[1];
+        } else if (arg.startsWith('uid:')) {
+            uidParam = arg.split(':')[1];
         }
     }
     
@@ -310,10 +315,11 @@ module.exports = async (senderId, userText, api) => {
             `📡 API: ${apiUrl}\n` +
             `🖼️ Support images: ${supportsImage ? 'Oui ✅' : 'Non ❌'}\n` +
             `📝 Paramètre texte: ${queryParam}\n` +
-            `${supportsImage ? `🖼️ Paramètre image: ${imageParam}\n` : ''}`
+            `${supportsImage ? `🖼️ Paramètre image: ${imageParam}\n` : ''}` +
+            `👤 Paramètre utilisateur: ${uidParam}`
         );
         
-        const commandCode = generateCommandTemplate(commandName, apiUrl, supportsImage, queryParam, imageParam);
+        const commandCode = generateCommandTemplate(commandName, apiUrl, supportsImage, queryParam, imageParam, uidParam);
         
         await fs.writeFile(commandPath, commandCode, 'utf8');
         
@@ -354,5 +360,5 @@ module.exports = async (senderId, userText, api) => {
 module.exports.info = {
     name: "commandstore",
     description: "Génère automatiquement une commande IA personnalisée à partir d'une URL API avec paramètres personnalisables.",
-    usage: "commandstore <nom> <url_api> [options]\n\nOptions:\n• image - Active le support des images\n• query:<nom> - Nom du paramètre pour le texte (défaut: query)\n• imageurl:<nom> - Nom du paramètre pour l'image (défaut: imgurl)\n\nExemples:\n• commandstore hi https://api.exemple.com/chat\n• commandstore assistant https://api.exemple.com/ai image query:prompt imageurl:imageurl\n• commandstore gemini https://norch-project.gleeze.com/api/gemini image query:prompt imageurl:imageurl"
+    usage: "commandstore <nom> <url_api> [options]\n\nOptions:\n• image - Active le support des images\n• query:<nom> - Nom du paramètre pour le texte (défaut: query)\n• imageurl:<nom> - Nom du paramètre pour l'image (défaut: imgurl)\n• uid:<nom> - Nom du paramètre pour l'ID utilisateur (défaut: userId)\n\nExemples:\n• commandstore hi https://api.exemple.com/chat\n• commandstore assistant https://api.exemple.com/ai image query:prompt imageurl:imageurl uid:user\n• commandstore gemini https://norch-project.gleeze.com/api/gemini image query:prompt imageurl:imageurl uid:uid"
 };
