@@ -4,6 +4,23 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**November 21, 2025 - Système de Génération Automatique de Commandes IA**
+- Ajout de la commande `commandstore` pour créer automatiquement des commandes IA personnalisées
+- Génération de code à partir d'une URL API fournie par l'utilisateur
+- Support optionnel de l'analyse d'images dans les commandes générées
+- Validation stricte des entrées utilisateur (noms de commandes et URLs)
+- Sanitization des entrées pour prévenir l'injection de code
+- Template robuste gérant plusieurs formats de réponse API
+- Documentation complète dans `COMMANDSTORE_GUIDE.md`
+- Caractéristiques des commandes générées :
+  - Conversation continue avec contexte utilisateur
+  - Formatage avancé avec texte en gras Unicode
+  - Division automatique des messages longs
+  - Gestion d'erreurs robuste
+  - Support optionnel des images
+- Commandes de contrôle : `stop` (désactiver), `supprimer` (réinitialiser)
+- Nécessite un redémarrage du bot pour activer les nouvelles commandes
+
 **November 17, 2025 - Support Multi-Images pour la Commande Nano**
 - Ajout de la capacité d'envoyer et traiter plusieurs images simultanément (2, 3, 4+ photos)
 - Conservation de l'ordre des images : 1ère, 2ème, 3ème, etc.
