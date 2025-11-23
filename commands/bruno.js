@@ -235,15 +235,23 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
             apiUrl = `https://norch-project.gleeze.com/api/Gpt4.1nano?text=${encodeURIComponent(prompt)}&uid=${senderId}`;
         }
 
-        // Appel à l'API
-        const response = await axios.get(apiUrl);
+        // Appel à l'API avec un timeout de 60 secondes (l'API peut être lente)
+        const response = await axios.get(apiUrl, {
+            timeout: 60000, // 60 secondes
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
 
         // Récupérer la réponse de l'API
         let reply = '';
-        if (response.data && response.data.result) {
+        if (response.data && response.data.success && response.data.result) {
+            reply = response.data.result;
+        } else if (response.data && response.data.result) {
             reply = response.data.result;
         } else {
-            reply = JSON.stringify(response.data); // Fallback pour voir la structure
+            console.error('Structure de réponse inattendue:', JSON.stringify(response.data));
+            reply = "Désolé, j'ai reçu une réponse inattendue de l'API.";
         }
 
         // Formater la réponse avec des caractères unicode et emojis
@@ -253,17 +261,33 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         await sendLongMessage(senderId, formattedReply);
 
     } catch (error) {
-        console.error("Erreur lors de l'appel à l'API Ronald:", error);
+        console.error("Erreur lors de l'appel à l'API Bruno:", error.message);
+        console.error("Détails de l'erreur:", error.response?.data || error);
+
+        // Déterminer le type d'erreur
+        let errorMessage = '';
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            errorMessage = `⏱️ L'API met trop de temps à répondre. L'analyse peut prendre jusqu'à 30 secondes pour les images complexes. Veuillez réessayer.`;
+        } else if (error.response) {
+            errorMessage = `❌ L'API a retourné une erreur (Code: ${error.response.status}).\nDétails: ${JSON.stringify(error.response.data)}`;
+        } else if (error.request) {
+            errorMessage = `🌐 Impossible de contacter l'API. Vérifiez votre connexion internet.`;
+        } else {
+            errorMessage = `⚠️ Erreur: ${error.message}`;
+        }
 
         // Message d'erreur stylisé
         await sendMessage(senderId, `
 ⚠️ *OUPS! ERREUR TECHNIQUE* ⚠️
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Une erreur s'est produite lors de la communication avec Bruno.
-Veuillez réessayer dans quelques instants.
+${errorMessage}
 
-🔄 Si le problème persiste, essayez une autre commande
-ou contactez l'administrateur.
+🔄 Suggestions:
+• Vérifiez votre connexion internet
+• Réessayez dans quelques instants
+• Pour les images, assurez-vous qu'elles sont accessibles publiquement
+
+💡 Si le problème persiste, contactez l'administrateur.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
     }
