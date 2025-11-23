@@ -1,0 +1,17 @@
+Changer par ceci l'API URL du commande luffy.js 
+
+
+Voici mon api URL :
+https://norch-project.gleeze.com/api/Compound?prompt=Explain+quantum+computing+in+simple+terms&uid=demo_user&name=Developer
+
+
+Voici sa réponse Json :
+{
+  "success": true,
+  "reply": "𝐐𝐮𝐚𝐧𝐭𝐮𝐦 𝐜𝐨𝐦𝐩𝐮𝐭𝐢𝐧𝐠 is a new kind of computer that works a bit like the strange rules you find in quantum physics.\n\n### Classical vs. Quantum\n\n| What a regular (classical) computer uses | What a quantum computer uses |\n|---|---|\n| 𝐁𝐢𝐭𝐬 that are either 0 *or* 1 | 𝐐𝐮𝐛𝐢𝐭𝐬 that can be 0, 1, 𝐨𝐫 𝐛𝐨𝐭𝐡 𝐚𝐭 𝐭𝐡𝐞 𝐬𝐚𝐦𝐞 𝐭𝐢𝐦𝐞 (a property called *superposition*) |\n\n### Key ideas, explained simply\n\n1. 𝐐𝐮𝐛𝐢𝐭𝐬 𝐚𝐧𝐝 𝐬𝐮𝐩𝐞𝐫𝐩𝐨𝐬𝐢𝐭𝐢𝐨𝐧  \n   - Imagine a coin that can be heads, tails, or spinning in the air so it’s “both” until you look. A qubit is like that spinning coin: it holds many possibilities at once, letting the computer explore many solutions in parallel.\n\n2. 𝐄𝐧𝐭𝐚𝐧𝐠𝐥𝐞𝐦𝐞𝐧𝐭  \n   - When two qubits become “entangled,” the state of one instantly influences the other, no matter how far apart they are. It’s like having two dice that always show matching numbers even if you roll them in different rooms. This creates strong correlations that help the computer solve problems faster.\n\n3. 𝐈𝐧𝐭𝐞𝐫𝐟𝐞𝐫𝐞𝐧𝐜𝐞  \n   - Quantum computers can make the wrong answers cancel each other out and the right answers reinforce each other, much like waves overlapping. This lets them zero in on the correct solution.\n\n### Why it matters\n\n- 𝐒𝐩𝐞𝐞𝐝 𝐟𝐨𝐫 𝐜𝐞𝐫𝐭𝐚𝐢𝐧 𝐩𝐫𝐨𝐛𝐥𝐞𝐦𝐬: Tasks like factoring huge numbers, searching unsorted databases, or simulating molecules can be dramatically faster on a quantum computer than on a classical one.\n- 𝐍𝐞𝐰 𝐩𝐨𝐬𝐬𝐢𝐛𝐢𝐥𝐢𝐭𝐢𝐞𝐬: Chemistry, cryptography, optimization, and machine learning could all benefit from the extra computational power.\n\n### What you can’t do yet\n\n- Quantum computers are still experimental and noisy; they’re great for specific, carefully chosen problems but not yet a replacement for everyday laptops.\n- Building and controlling many stable qubits is extremely hard, so most current machines have only a few dozen usable qubits.\n\n### Bottom line\n\nThink of a quantum computer as a 𝐦𝐚𝐬𝐬𝐢𝐯𝐞𝐥𝐲 𝐩𝐚𝐫𝐚𝐥𝐥𝐞𝐥 𝐞𝐱𝐩𝐥𝐨𝐫𝐞𝐫 that can test many possibilities at once, thanks to superposition, and can link those possibilities together through entanglement. When the right “interference” pattern is set up, the correct answer stands out, letting the machine solve some problems far faster than any classical computer we have today.",
+  "uid": "demo_user",
+  "name": "Developer",
+  "memoryCount": 2,
+  "author": "April Manalo"
+}
+
