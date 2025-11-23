@@ -7,11 +7,11 @@ module.exports = async (senderId, prompt, uid) => {
         await sendMessage(senderId, "✨ Merci pour ta question ! Je prépare une réponse épique pour toi... ⏳🔍");
 
         // Construire l'URL de l'API pour résoudre la question avec UID
-        const apiUrl = `https://kaiz-apis.gleeze.com/api/luffy-ai?question=${encodeURIComponent(prompt)}&uid=${uid}`;
+        const apiUrl = `https://norch-project.gleeze.com/api/Compound?prompt=${encodeURIComponent(prompt)}&uid=${uid}&name=Developer`;
         const response = await axios.get(apiUrl);
 
         // Récupérer la bonne clé dans la réponse de l'API
-        const reply = response.data.response;
+        const reply = response.data.reply;
 
         // Attendre 2 secondes avant d'envoyer la réponse
         await new Promise(resolve => setTimeout(resolve, 2000));
