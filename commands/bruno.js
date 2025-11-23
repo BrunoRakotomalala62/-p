@@ -7,6 +7,124 @@ const userSessionIds = {};
 // Stockage des images en attente
 const pendingImages = {};
 
+// Fonction pour formater la réponse avec des caractères unicode et emojis
+function formatResponse(text) {
+    // Emojis contextuels selon les mots-clés
+    const emojiMap = {
+        'bonjour': '👋',
+        'merci': '🙏',
+        'question': '❓',
+        'réponse': '💡',
+        'aide': '🆘',
+        'important': '⚠️',
+        'attention': '⚡',
+        'exemple': '📋',
+        'conseil': '💡',
+        'astuce': '✨',
+        'information': 'ℹ️',
+        'note': '📝',
+        'image': '🖼️',
+        'photo': '📸',
+        'analyse': '🔍',
+        'résultat': '✅',
+        'erreur': '❌',
+        'succès': '🎉',
+        'problème': '⚠️',
+        'solution': '💡',
+        'créer': '🎨',
+        'art': '🎨',
+        'design': '✨',
+        'couleur': '🎨',
+        'composition': '🖼️',
+        'chat': '🐱',
+        'chien': '🐕',
+        'animal': '🐾',
+        'nature': '🌿',
+        'fleur': '🌸',
+        'arbre': '🌳',
+        'ciel': '☁️',
+        'soleil': '☀️',
+        'lune': '🌙',
+        'étoile': '⭐',
+        'eau': '💧',
+        'feu': '🔥',
+        'terre': '🌍',
+        'musique': '🎵',
+        'livre': '📚',
+        'étude': '📖',
+        'science': '🔬',
+        'technologie': '💻',
+        'code': '💻',
+        'programmation': '⌨️',
+        'temps': '⏰',
+        'calendrier': '📅',
+        'histoire': '📜',
+        'futur': '🔮',
+        'idée': '💭',
+        'pensée': '🧠',
+        'cœur': '❤️',
+        'amour': '💕',
+        'joie': '😊',
+        'tristesse': '😢',
+        'bonheur': '😄',
+        'force': '💪',
+        'santé': '🏥',
+        'nourriture': '🍽️',
+        'voyage': '✈️',
+        'maison': '🏠',
+        'ville': '🏙️',
+        'pays': '🗺️'
+    };
+
+    // Remplacer les titres commençant par # par des caractères unicode stylés
+    let formattedText = text;
+    
+    // Remplacer ### par ▸▸▸ (sous-sous-titre)
+    formattedText = formattedText.replace(/^### (.+)$/gm, '▸▸▸ $1');
+    
+    // Remplacer ## par ▸▸ (sous-titre)
+    formattedText = formattedText.replace(/^## (.+)$/gm, '▸▸ $1');
+    
+    // Remplacer # par ▸ (titre principal)
+    formattedText = formattedText.replace(/^# (.+)$/gm, '▸ $1');
+    
+    // Remplacer les listes à puces - par •
+    formattedText = formattedText.replace(/^- /gm, '• ');
+    
+    // Ajouter des emojis contextuels basés sur les mots-clés
+    for (const [keyword, emoji] of Object.entries(emojiMap)) {
+        const regex = new RegExp(`\\b${keyword}s?\\b`, 'gi');
+        if (regex.test(formattedText) && !formattedText.includes(emoji)) {
+            // Ajouter l'emoji au début si le mot-clé est présent
+            const match = formattedText.match(regex);
+            if (match) {
+                formattedText = formattedText.replace(regex, (matched) => `${matched} ${emoji}`);
+                break; // Ajouter un seul emoji pour éviter la surcharge
+            }
+        }
+    }
+    
+    // Embellir les sections avec des séparateurs
+    formattedText = formattedText.replace(/^▸ (.+)$/gm, '\n╔═══════════════════════\n║ ✨ $1\n╚═══════════════════════');
+    formattedText = formattedText.replace(/^▸▸ (.+)$/gm, '\n┌───────────────\n│ 💫 $1\n└───────────────');
+    formattedText = formattedText.replace(/^▸▸▸ (.+)$/gm, '\n├─ ⭐ $1');
+    
+    // Ajouter un en-tête stylisé
+    const header = `
+╔═══════════════════════════════════╗
+║   🤖 ✨ RÉPONSE DE BRUNO ✨ 🤖   ║
+╚═══════════════════════════════════╝
+`;
+    
+    // Ajouter un pied de page
+    const footer = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Propulsé par GPT-5 | ⚡ Rapide & Précis
+`;
+    
+    return header + formattedText + footer;
+}
+
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
 async function sendLongMessage(senderId, message) {
     const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères par message Facebook
@@ -105,22 +223,31 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         // Envoyer un message d'attente stylisé
         await sendMessage(senderId, "✨🧠 Analyse en cours... ⏳💫");
 
-        // Construire l'URL de l'API Anthropic
-        const apiUrl = `https://rapido.zetsu.xyz/api/anthropic?q=${encodeURIComponent(prompt)}&uid=${senderId}&model=claude-haiku-4-5-20251001&max_tokens=`;
+        // Construire l'URL de l'API selon si on a une image ou non
+        let apiUrl;
+        if (pendingImages[senderId]) {
+            // Cas avec image : utiliser l'URL de l'image stockée
+            apiUrl = `https://norch-project.gleeze.com/api/Gpt4.1nano?text=${encodeURIComponent(prompt)}&imageUrl=${encodeURIComponent(pendingImages[senderId])}&uid=${senderId}`;
+            // Supprimer l'image en attente après utilisation
+            delete pendingImages[senderId];
+        } else {
+            // Cas sans image : conversation texte uniquement
+            apiUrl = `https://norch-project.gleeze.com/api/Gpt4.1nano?text=${encodeURIComponent(prompt)}&uid=${senderId}`;
+        }
 
-        // Appel à l'API Anthropic
+        // Appel à l'API
         const response = await axios.get(apiUrl);
 
-        // Récupérer la réponse de l'API (structure Anthropic)
+        // Récupérer la réponse de l'API
         let reply = '';
-        if (response.data && response.data.response) {
-            reply = response.data.response;
+        if (response.data && response.data.result) {
+            reply = response.data.result;
         } else {
             reply = JSON.stringify(response.data); // Fallback pour voir la structure
         }
 
-        // Créer une réponse formatée selon le nouveau format demandé
-        const formattedReply = `📝 REPONSE DE BRUNO 🤖\n${reply}`;
+        // Formater la réponse avec des caractères unicode et emojis
+        const formattedReply = formatResponse(reply);
 
         // Envoyer la réponse formatée en utilisant la nouvelle fonction
         await sendLongMessage(senderId, formattedReply);
