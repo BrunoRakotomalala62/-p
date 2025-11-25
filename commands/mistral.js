@@ -5,6 +5,36 @@ const sendMessage = require('../handles/sendMessage');
 const pendingImages = {};
 const conversationHistory = {};
 
+// Fonction pour nettoyer la réponse de l'API
+function cleanResponse(text) {
+    // Supprimer les formules LaTeX entre \( \) et \[ \]
+    let cleaned = text.replace(/\\\(.*?\\\)/g, '');
+    cleaned = cleaned.replace(/\\\[.*?\\\]/g, '');
+    
+    // Supprimer les symboles markdown ### ## #
+    cleaned = cleaned.replace(/^###\s*/gm, '');
+    cleaned = cleaned.replace(/^##\s*/gm, '');
+    cleaned = cleaned.replace(/^#\s*/gm, '');
+    
+    // Remplacer les tirets longs par des tirets simples
+    cleaned = cleaned.replace(/━+/g, '');
+    
+    // Améliorer l'espacement : ajouter des lignes vides entre les sections
+    // Ajouter un saut de ligne après les points suivis d'une lettre majuscule
+    cleaned = cleaned.replace(/\.\s+([A-Z])/g, '.\n\n$1');
+    
+    // Ajouter un saut de ligne avant les listes (•, -, *)
+    cleaned = cleaned.replace(/([^\n])\n([•\-\*])/g, '$1\n\n$2');
+    
+    // Nettoyer les espaces multiples
+    cleaned = cleaned.replace(/ {2,}/g, ' ');
+    
+    // Nettoyer les sauts de ligne multiples (maximum 2)
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    
+    return cleaned.trim();
+}
+
 // Fonction pour découper un message en morceaux de moins de 2000 caractères
 function splitMessage(text, maxLength = 2000) {
     const chunks = [];
@@ -122,7 +152,7 @@ module.exports = async (senderId, prompt, uid, imageAttachments) => {
 
         // Vérifier si la réponse est valide
         if (response.data && response.data.success && response.data.response) {
-            const botResponse = response.data.response;
+            const botResponse = cleanResponse(response.data.response);
             const model = response.data.model || 'Grok-4';
             
             // Incrémenter le compteur de messages
@@ -130,11 +160,9 @@ module.exports = async (senderId, prompt, uid, imageAttachments) => {
 
             // Formater la réponse
             let formattedReply = `🤖 𝗚𝗥𝗢𝗞-𝟰 𝗔𝗜 ${hasImage ? '📸' : '💬'}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${botResponse}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔢 Message #${conversationHistory[senderId].messageCount} | 🧠 ${model}`;
 
             // Réinitialiser l'image après l'avoir utilisée
