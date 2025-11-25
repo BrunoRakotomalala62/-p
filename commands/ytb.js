@@ -86,8 +86,32 @@ ${streamUrl}
                             await sendMessage(senderId, messageText);
                             
                         } else {
-                            // Si /download échoue, envoyer quand même le lien /stream
-                            const messageText = `
+                            // Vérifier si c'est une erreur de protection YouTube
+                            const errorMsg = response.data.error || '';
+                            if (errorMsg.includes('Sign in to confirm') || errorMsg.includes('bot')) {
+                                const blockedMessage = `
+⚠️ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗢𝗧𝗘́𝗚𝗘́𝗘 ⚠️
+━━━━━━━━━━━━━━━━━━━
+
+❌ Cette vidéo est protégée par YouTube et ne peut pas être téléchargée automatiquement.
+
+🎤 𝗧𝗶𝘁𝗿𝗲 : ${userContext.selectedVideo.title}
+
+━━━━━━━━━━━━━━━━━━━
+💡 𝗦𝗼𝗹𝘂𝘁𝗶𝗼𝗻𝘀 :
+
+1️⃣ Essayez une autre vidéo de votre recherche
+2️⃣ Cherchez une version différente de cette chanson
+3️⃣ Téléchargez directement depuis YouTube
+
+━━━━━━━━━━━━━━━━━━━
+ℹ️ Certaines vidéos ont des protections YouTube qui bloquent le téléchargement automatique.
+                                `.trim();
+                                
+                                await sendMessage(senderId, blockedMessage);
+                            } else {
+                                // Autre erreur, envoyer le lien quand même
+                                const messageText = `
 🎵 ${choice === 'MP3' ? '𝗠𝗨𝗦𝗜𝗖' : '𝗩𝗜𝗗𝗘𝗢'} 𝗥𝗘𝗦𝗨𝗟𝗧 🎵
 ━━━━━━━━━━━━━━━━━━━
 
@@ -102,22 +126,24 @@ ${streamUrl}
 
 ━━━━━━━━━━━━━━━━━━━
 ✨ 𝗖𝗹𝗶𝗾𝘂𝗲𝘇 𝘀𝘂𝗿 𝗹𝗲 𝗹𝗶𝗲𝗻 𝗽𝗼𝘂𝗿 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 ! 📲
-                            `.trim();
+⚠️ Si le lien ne fonctionne pas, essayez une autre vidéo.
+                                `.trim();
 
-                            // Envoyer l'image de la miniature si disponible
-                            if (userContext.selectedVideo.thumb) {
-                                await sendMessage(senderId, {
-                                    attachment: {
-                                        type: 'image',
-                                        payload: {
-                                            url: userContext.selectedVideo.thumb,
-                                            is_reusable: true
+                                // Envoyer l'image de la miniature si disponible
+                                if (userContext.selectedVideo.thumb) {
+                                    await sendMessage(senderId, {
+                                        attachment: {
+                                            type: 'image',
+                                            payload: {
+                                                url: userContext.selectedVideo.thumb,
+                                                is_reusable: true
+                                            }
                                         }
-                                    }
-                                });
-                            }
+                                    });
+                                }
 
-                            await sendMessage(senderId, messageText);
+                                await sendMessage(senderId, messageText);
+                            }
                         }
                     } catch (error) {
                         // En cas d'erreur, envoyer quand même le lien de streaming direct
