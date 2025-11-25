@@ -2,98 +2,223 @@
 const sendMessage = require('../handles/sendMessage');
 const axios = require('axios');
 
-// Stockage des recherches des utilisateurs
+// API de base
+const API_BASE_URL = 'https://creation-api.vercel.app';
+
+// Stockage des recherches et sélections des utilisateurs
 const userSearches = {};
 
 module.exports = async (senderId, prompt) => {
     try {
-        // Vérifier si l'utilisateur a déjà effectué une recherche
+        // Initialiser le contexte utilisateur si nécessaire
         if (!userSearches[senderId]) {
             userSearches[senderId] = {
                 query: '',
-                videos: []
+                videos: [],
+                selectedVideo: null,
+                step: 'search' // search -> select_video -> select_format
             };
         }
 
-        // Si l'entrée est un nombre, c'est une sélection de vidéo pour téléchargement
-        if (!isNaN(prompt) && prompt > 0) {
-            const videoIndex = parseInt(prompt) - 1;
+        const userContext = userSearches[senderId];
+
+        // Étape 3: Sélection du format (MP3 ou MP4)
+        if (userContext.step === 'select_format' && userContext.selectedVideo) {
+            const choice = prompt.trim().toUpperCase();
             
-            // Vérifier si l'index est valide
-            if (videoIndex >= 0 && videoIndex < userSearches[senderId].videos.length) {
-                const selectedVideo = userSearches[senderId].videos[videoIndex];
-                
+            if (choice === 'MP3' || choice === 'MP4') {
                 // Message d'attente
                 await sendMessage(senderId, "⏳ Préparation du téléchargement en cours...");
                 
                 try {
-                    // Utiliser l'API ytmusic pour obtenir les informations de téléchargement
-                    const searchUrl = `https://api-library-kohi.onrender.com/api/ytmusic?query=${encodeURIComponent(selectedVideo.title)}`;
-                    const searchResponse = await axios.get(searchUrl);
+                    const videoUrl = userContext.selectedVideo.url;
+                    let quality = 'highest'; // Par défaut
                     
-                    if (searchResponse.data && searchResponse.data.status && searchResponse.data.data) {
-                        const musicData = searchResponse.data.data;
+                    // Pour MP4, demander la qualité si on veut être plus précis
+                    // Pour l'instant, on utilise "highest" par défaut
+                    
+                    // Construire l'URL de streaming direct
+                    const streamUrl = `${API_BASE_URL}/stream?urlytb=${encodeURIComponent(videoUrl)}&type=${choice}&quality=${quality}`;
+                    
+                    // Obtenir les informations avec /download d'abord
+                    const downloadUrl = `${API_BASE_URL}/download?urlytb=${encodeURIComponent(videoUrl)}&type=${choice}&quality=${quality}`;
+                    
+                    try {
+                        const response = await axios.get(downloadUrl, { timeout: 30000 });
                         
-                        // Construire le message de réponse
+                        if (response.data && response.data.success) {
+                            const videoInfo = response.data;
+                            
+                            // Construire le message de réponse
+                            const messageText = `
+🎵 ${choice === 'MP3' ? '𝗠𝗨𝗦𝗜𝗖' : '𝗩𝗜𝗗𝗘𝗢'} 𝗥𝗘𝗦𝗨𝗟𝗧 🎵
+━━━━━━━━━━━━━━━━━━━
+
+🎤 𝗧𝗶𝘁𝗿𝗲 : ${videoInfo.title || userContext.selectedVideo.title}
+
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${videoInfo.duration || userContext.selectedVideo.duration}
+
+📱 𝗙𝗼𝗿𝗺𝗮𝘁 : ${choice}
+
+🎯 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ : ${videoInfo.quality || quality}
+
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗗𝗜𝗥𝗘𝗖𝗧 :
+${streamUrl}
+
+━━━━━━━━━━━━━━━━━━━
+✨ 𝗖𝗹𝗶𝗾𝘂𝗲𝘇 𝘀𝘂𝗿 𝗹𝗲 𝗹𝗶𝗲𝗻 𝗽𝗼𝘂𝗿 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 𝗱𝗶𝗿𝗲𝗰𝘁𝗲𝗺𝗲𝗻𝘁 𝘃𝗲𝗿𝘀 𝘃𝗼𝘁𝗿𝗲 𝘁𝗲́𝗹𝗲́𝗽𝗵𝗼𝗻𝗲 ! 📲
+                            `.trim();
+
+                            // Envoyer l'image de la miniature si disponible
+                            if (userContext.selectedVideo.thumb) {
+                                await sendMessage(senderId, {
+                                    attachment: {
+                                        type: 'image',
+                                        payload: {
+                                            url: userContext.selectedVideo.thumb,
+                                            is_reusable: true
+                                        }
+                                    }
+                                });
+                            }
+
+                            // Envoyer le message texte avec le lien
+                            await sendMessage(senderId, messageText);
+                            
+                        } else {
+                            // Si /download échoue, envoyer quand même le lien /stream
+                            const messageText = `
+🎵 ${choice === 'MP3' ? '𝗠𝗨𝗦𝗜𝗖' : '𝗩𝗜𝗗𝗘𝗢'} 𝗥𝗘𝗦𝗨𝗟𝗧 🎵
+━━━━━━━━━━━━━━━━━━━
+
+🎤 𝗧𝗶𝘁𝗿𝗲 : ${userContext.selectedVideo.title}
+
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${userContext.selectedVideo.duration}
+
+📱 𝗙𝗼𝗿𝗺𝗮𝘁 : ${choice}
+
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗗𝗜𝗥𝗘𝗖𝗧 :
+${streamUrl}
+
+━━━━━━━━━━━━━━━━━━━
+✨ 𝗖𝗹𝗶𝗾𝘂𝗲𝘇 𝘀𝘂𝗿 𝗹𝗲 𝗹𝗶𝗲𝗻 𝗽𝗼𝘂𝗿 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 ! 📲
+                            `.trim();
+
+                            // Envoyer l'image de la miniature si disponible
+                            if (userContext.selectedVideo.thumb) {
+                                await sendMessage(senderId, {
+                                    attachment: {
+                                        type: 'image',
+                                        payload: {
+                                            url: userContext.selectedVideo.thumb,
+                                            is_reusable: true
+                                        }
+                                    }
+                                });
+                            }
+
+                            await sendMessage(senderId, messageText);
+                        }
+                    } catch (error) {
+                        // En cas d'erreur, envoyer quand même le lien de streaming direct
+                        console.error("Erreur lors de la récupération des infos:", error.message);
+                        
                         const messageText = `
-🎵 𝗠𝗨𝗦𝗜𝗖 𝗥𝗘𝗦𝗨𝗟𝗧 🎵
+🎵 ${choice === 'MP3' ? '𝗠𝗨𝗦𝗜𝗖' : '𝗩𝗜𝗗𝗘𝗢'} 𝗥𝗘𝗦𝗨𝗟𝗧 🎵
 ━━━━━━━━━━━━━━━━━━━
 
-🎤 𝗧𝗶𝘁𝗿𝗲 : ${musicData.title}
+🎤 𝗧𝗶𝘁𝗿𝗲 : ${userContext.selectedVideo.title}
 
-⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${musicData.duration}
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${userContext.selectedVideo.duration}
 
-👁️ 𝗩𝘂𝗲𝘀 : ${musicData.views.toLocaleString()}
+📱 𝗙𝗼𝗿𝗺𝗮𝘁 : ${choice}
 
-🔗 𝗟𝗶𝗲𝗻 : ${musicData.url}
-
-🎧 𝗔𝘂𝗱𝗶𝗼 : ${musicData.audioUrl}
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗗𝗜𝗥𝗘𝗖𝗧 :
+${streamUrl}
 
 ━━━━━━━━━━━━━━━━━━━
-✨ 𝗕𝗼𝗻𝗻𝗲 𝗲́𝗰𝗼𝘂𝘁𝗲 ! 🎶
+✨ 𝗖𝗹𝗶𝗾𝘂𝗲𝘇 𝘀𝘂𝗿 𝗹𝗲 𝗹𝗶𝗲𝗻 𝗽𝗼𝘂𝗿 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 ! 📲
                         `.trim();
 
-                        // Envoyer l'image de la miniature
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'image',
-                                payload: {
-                                    url: musicData.thumbnail,
-                                    is_reusable: true
+                        // Envoyer l'image de la miniature si disponible
+                        if (userContext.selectedVideo.thumb) {
+                            await sendMessage(senderId, {
+                                attachment: {
+                                    type: 'image',
+                                    payload: {
+                                        url: userContext.selectedVideo.thumb,
+                                        is_reusable: true
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
 
-                        // Envoyer le message texte
                         await sendMessage(senderId, messageText);
-                        
-                    } else {
-                        await sendMessage(senderId, "❌ Impossible de récupérer le lien de téléchargement.");
                     }
+                    
+                    // Réinitialiser le contexte pour une nouvelle recherche
+                    userContext.step = 'search';
+                    userContext.selectedVideo = null;
+                    
                 } catch (error) {
                     console.error("Erreur lors du téléchargement:", error);
-                    await sendMessage(senderId, "❌ Désolé, une erreur s'est produite lors de la préparation du téléchargement.");
+                    await sendMessage(senderId, "❌ Désolé, une erreur s'est produite lors de la préparation du téléchargement. Veuillez réessayer.");
                 }
+            } else {
+                await sendMessage(senderId, "❌ Format invalide. Veuillez répondre avec 'MP3' ou 'MP4'.");
+            }
+        }
+        // Étape 2: Sélection de la vidéo (numéro)
+        else if (userContext.step === 'select_video' && !isNaN(prompt) && prompt > 0) {
+            const videoIndex = parseInt(prompt) - 1;
+            
+            // Vérifier si l'index est valide
+            if (videoIndex >= 0 && videoIndex < userContext.videos.length) {
+                userContext.selectedVideo = userContext.videos[videoIndex];
+                userContext.step = 'select_format';
+                
+                // Demander le format
+                const formatMessage = `
+✅ 𝗩𝗶𝗱𝗲́𝗼 𝘀𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲́𝗲 :
+📌 ${userContext.selectedVideo.title}
+
+━━━━━━━━━━━━━━━━━━━
+
+𝗖𝗵𝗼𝗶𝘀𝗶𝘀𝘀𝗲𝘇 𝗹𝗲 𝗳𝗼𝗿𝗺𝗮𝘁 :
+
+🎵 MP3 - Audio seulement (128kbps)
+🎬 MP4 - Vidéo (qualité: highest par défaut)
+
+━━━━━━━━━━━━━━━━━━━
+💬 𝗥𝗲́𝗽𝗼𝗻𝗱𝗲𝘇 𝗮𝘃𝗲𝗰 : MP3 ou MP4
+                `.trim();
+                
+                await sendMessage(senderId, formatMessage);
             } else {
                 await sendMessage(senderId, "❌ Numéro de vidéo invalide. Veuillez choisir un numéro valide.");
             }
-        } else {
-            // C'est une nouvelle recherche
+        }
+        // Étape 1: Nouvelle recherche
+        else {
+            // Réinitialiser le contexte pour une nouvelle recherche
+            userContext.step = 'select_video';
+            userContext.selectedVideo = null;
+            
             // Message d'attente
             await sendMessage(senderId, "🔍 Recherche en cours...");
             
             // Appel à l'API de recherche YouTube
-            const searchUrl = `https://api-youtube-vraie-vercel.vercel.app/recherche?titre=${encodeURIComponent(prompt)}`;
-            const searchResponse = await axios.get(searchUrl);
+            const searchUrl = `${API_BASE_URL}/recherche?titre=${encodeURIComponent(prompt)}`;
+            const searchResponse = await axios.get(searchUrl, { timeout: 30000 });
             
             // Vérifier si des vidéos ont été trouvées
-            if (searchResponse.data && searchResponse.data.videos && searchResponse.data.videos.length > 0) {
+            if (searchResponse.data && searchResponse.data.success && searchResponse.data.videos && searchResponse.data.videos.length > 0) {
                 // Stocker les vidéos pour cet utilisateur
-                userSearches[senderId].query = prompt;
+                userContext.query = prompt;
                 
                 // Limiter à 80 résultats maximum
                 const allVideos = searchResponse.data.videos.slice(0, 80);
-                userSearches[senderId].videos = allVideos;
+                userContext.videos = allVideos;
                 
                 // Envoyer les résultats par groupes de 20
                 const BATCH_SIZE = 20;
@@ -115,11 +240,12 @@ module.exports = async (senderId, prompt) => {
                     // Ajouter les vidéos de ce lot
                     batchVideos.forEach((video, index) => {
                         const globalIndex = startIndex + index + 1;
-                        message += `${globalIndex}- ${video.title}\n\n`;
+                        message += `${globalIndex}. ${video.title}\n⏱️ ${video.duration}\n\n`;
                     });
                     
                     // Ajouter les instructions seulement au dernier lot
                     if (batchIndex === totalBatches - 1) {
+                        message += `━━━━━━━━━━━━━━━━━━━\n`;
                         message += `✅ *Envoyez le numéro* de la vidéo que vous souhaitez télécharger.\n\n`;
                         message += `📊 Total: ${allVideos.length} résultats trouvés`;
                     }
@@ -134,17 +260,24 @@ module.exports = async (senderId, prompt) => {
                 }
             } else {
                 await sendMessage(senderId, "❌ Aucune vidéo trouvée pour votre recherche.");
+                userContext.step = 'search';
             }
         }
     } catch (error) {
         console.error("Erreur lors de l'exécution de la commande ytb:", error);
-        await sendMessage(senderId, "❌ Désolé, une erreur s'est produite lors du traitement de votre demande.");
+        await sendMessage(senderId, "❌ Désolé, une erreur s'est produite lors du traitement de votre demande. Veuillez réessayer.");
+        
+        // Réinitialiser le contexte en cas d'erreur
+        if (userSearches[senderId]) {
+            userSearches[senderId].step = 'search';
+            userSearches[senderId].selectedVideo = null;
+        }
     }
 };
 
 // Ajouter les informations de la commande
 module.exports.info = {
     name: "ytb",
-    description: "Recherche et télécharge des vidéos YouTube en format MP3.",
-    usage: "Envoyez 'ytb <nom de la chanson ou artiste>' pour rechercher, puis répondez avec le numéro de la vidéo pour télécharger."
+    description: "Recherche et télécharge des vidéos YouTube en format MP3 ou MP4 avec téléchargement direct.",
+    usage: "Envoyez 'ytb <nom de la chanson ou artiste>' pour rechercher, puis répondez avec le numéro de la vidéo, ensuite choisissez MP3 ou MP4 pour télécharger directement."
 };
