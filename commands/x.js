@@ -254,81 +254,51 @@ async function handleVideoDownload(senderId, video) {
 Préparation du téléchargement...
         `.trim());
 
-        const videoDetailsUrl = `${API_BASE}/video/${video.id}`;
         let slug = '';
         if (video.url_page) {
             const parts = video.url_page.split('/');
             slug = parts[parts.length - 1] || '';
         }
         
-        console.log('Récupération détails vidéo:', videoDetailsUrl);
+        const directDownloadUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}`;
         
-        const detailsResponse = await axiosWithRetry(`${videoDetailsUrl}?slug=${encodeURIComponent(slug)}`);
+        console.log('URL de téléchargement:', directDownloadUrl);
         
-        if (detailsResponse.data) {
-            const videoData = detailsResponse.data;
-            
-            if (videoData.url_mp4) {
-                const downloadUrl = `${API_BASE}/stream?url_mp4=${encodeURIComponent(videoData.url_mp4)}&filename=${encodeURIComponent(videoData.titre || 'video')}.mp4`;
-                
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'video',
-                            payload: {
-                                url: downloadUrl,
-                                is_reusable: true
-                            }
-                        }
-                    });
-
-                    await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
+        await sendMessage(senderId, `
+✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
-🎬 ${videoData.titre || video.titre}
-                    `.trim());
-                } catch (videoError) {
-                    console.log('Envoi vidéo échoué, envoi du lien:', videoError.message);
-                    
-                    await sendLongMessage(senderId, `
-⚠️ 𝗩𝗜𝗗𝗘́𝗢 𝗧𝗥𝗢𝗣 𝗩𝗢𝗟𝗨𝗠𝗜𝗡𝗘𝗨𝗦𝗘 ⚠️
-━━━━━━━━━━━━━━━━━━━
-🎬 ${videoData.titre || video.titre}
+🎬 ${video.titre}
 
-La vidéo est trop volumineuse pour Messenger.
+📥 Cliquez sur le lien ci-dessous pour télécharger :
+        `.trim());
+        
+        await sendMessage(senderId, directDownloadUrl);
+        
+        await sendMessage(senderId, `
+💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
+1. Cliquez sur le lien
+2. Attendez le chargement
+3. La vidéo sera téléchargée automatiquement
 
-📥 Téléchargez directement via ce lien :
-${downloadUrl}
-
-🔗 Lien alternatif :
-${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}
-                    `.trim());
-                }
-
-            } else {
-                await sendMessage(senderId, `
-❌ 𝗘𝗥𝗥𝗘𝗨𝗥 ❌
-━━━━━━━━━━━━━━━━━━━
-Impossible de récupérer l'URL de téléchargement.
-Veuillez réessayer plus tard. 🔧
-                `.trim());
-            }
-        }
+🔄 Tapez "x" pour une nouvelle recherche
+        `.trim());
 
     } catch (error) {
         console.error('Erreur téléchargement vidéo:', error.message);
         
-        const directDownloadUrl = `${API_BASE}/download/${video.id}`;
+        let slug = '';
+        if (video.url_page) {
+            const parts = video.url_page.split('/');
+            slug = parts[parts.length - 1] || '';
+        }
         
-        await sendLongMessage(senderId, `
-⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗔𝗟𝗧𝗘𝗥𝗡𝗔𝗧𝗜𝗙 ⚠️
+        const directDownloadUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}`;
+        
+        await sendMessage(senderId, `
+⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
 ━━━━━━━━━━━━━━━━━━━
-La vidéo est trop volumineuse pour Messenger.
-
-📥 Téléchargez directement via ce lien :
+📥 Téléchargez via ce lien :
 ${directDownloadUrl}
-
-Erreur: ${error.message}
         `.trim());
     }
 }
