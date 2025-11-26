@@ -313,7 +313,7 @@ async function handleVideoDownload(senderId, video, quality = '360p') {
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre.substring(0, 50)}...
 📊 Qualité : ${quality}
-Vérification de la taille...
+Préparation de la vidéo...
         `.trim());
 
         let downloadUrl = video.download_url;
@@ -333,64 +333,90 @@ Vérification de la taille...
         
         console.log(`Taille vidéo (${quality}): ${sizeMB} MB`);
         
-        if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
+        if (videoSize > 0 && videoSize >= MAX_DIRECT_SEND_SIZE) {
             await sendMessage(senderId, `
-📦 Taille: ${sizeMB} MB (< 25 MB)
-📤 Envoi direct de la vidéo...
+📦 Taille: ${sizeMB} MB (> 25 MB)
+📤 Envoi du lien de téléchargement...
             `.trim());
             
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'video',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
-                        }
-                    }
-                });
-                
-                await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
+            await sendMessage(senderId, `
+✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
 📊 Qualité : ${quality}
 📦 Taille: ${sizeMB} MB
 
-🔄 Tapez "dailymotion" pour une nouvelle recherche
-                `.trim());
-                return;
-            } catch (sendError) {
-                console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
-            }
-        }
-        
-        const sizeInfo = videoSize > 0 ? `${sizeMB} MB (> 25 MB)` : 'inconnue';
-        
-        await sendMessage(senderId, `
-📦 Taille: ${sizeInfo}
-📤 Envoi du lien de téléchargement...
-        `.trim());
-        
-        await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
-━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Qualité : ${quality}
-
 📥 Cliquez sur le lien ci-dessous pour télécharger :
-        `.trim());
-        
-        await sendMessage(senderId, downloadUrl);
-        
-        await sendMessage(senderId, `
+            `.trim());
+            
+            await sendMessage(senderId, downloadUrl);
+            
+            await sendMessage(senderId, `
 💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
 1. Cliquez sur le lien
 2. Attendez le chargement
 3. La vidéo sera téléchargée automatiquement sur votre téléphone
 
 🔄 Tapez "dailymotion" pour une nouvelle recherche
+            `.trim());
+            return;
+        }
+        
+        const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'Téléchargement';
+        
+        await sendMessage(senderId, `
+📦 ${sizeInfo}
+📤 Envoi direct de la vidéo en cours...
         `.trim());
+        
+        try {
+            await sendMessage(senderId, {
+                attachment: {
+                    type: 'video',
+                    payload: {
+                        url: downloadUrl,
+                        is_reusable: true
+                    }
+                }
+            });
+            
+            await sendMessage(senderId, `
+✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
+━━━━━━━━━━━━━━━━━━━
+🎬 ${video.titre}
+📊 Qualité : ${quality}
+${videoSize > 0 ? `📦 Taille: ${sizeMB} MB` : ''}
+
+🔄 Tapez "dailymotion" pour une nouvelle recherche
+            `.trim());
+            return;
+        } catch (sendError) {
+            console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
+            
+            await sendMessage(senderId, `
+⚠️ Envoi direct échoué, envoi du lien...
+            `.trim());
+            
+            await sendMessage(senderId, `
+✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
+━━━━━━━━━━━━━━━━━━━
+🎬 ${video.titre}
+📊 Qualité : ${quality}
+
+📥 Cliquez sur le lien ci-dessous pour télécharger :
+            `.trim());
+            
+            await sendMessage(senderId, downloadUrl);
+            
+            await sendMessage(senderId, `
+💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
+1. Cliquez sur le lien
+2. Attendez le chargement
+3. La vidéo sera téléchargée automatiquement sur votre téléphone
+
+🔄 Tapez "dailymotion" pour une nouvelle recherche
+            `.trim());
+        }
 
     } catch (error) {
         console.error('Erreur téléchargement vidéo:', error.message);
