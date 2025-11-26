@@ -68,8 +68,37 @@ module.exports = async (senderId, prompt, api) => {
 Veuillez choisir un numéro entre 1 et ${userSession.videos.length}.
                     `.trim());
                 }
+            } else if (input.toLowerCase().startsWith('page ')) {
+                const pageNum = parseInt(input.replace(/^page\s+/i, ''));
+                if (!isNaN(pageNum) && pageNum > 0 && userSession.query) {
+                    const totalPages = userSession.totalPages || 1;
+                    if (pageNum <= totalPages) {
+                        await handleVideoSearch(senderId, userSession.query, pageNum);
+                    } else {
+                        await sendMessage(senderId, `
+❌ 𝗣𝗮𝗴𝗲 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+La page ${pageNum} n'existe pas.
+Pages disponibles : 1 à ${totalPages}
+                        `.trim());
+                    }
+                } else if (!userSession.query) {
+                    await sendMessage(senderId, `
+❌ 𝗔𝘂𝗰𝘂𝗻𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 𝗮𝗰𝘁𝗶𝘃𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+Veuillez d'abord effectuer une recherche.
+Exemple : dailymotion Ambondrona saino
+                    `.trim());
+                } else {
+                    await sendMessage(senderId, `
+❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗱𝗲 𝗽𝗮𝗴𝗲 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+Utilisez : dailymotion page <numéro>
+Exemple : dailymotion page 2
+                    `.trim());
+                }
             } else {
-                await handleVideoSearch(senderId, input);
+                await handleVideoSearch(senderId, input, 1);
             }
         } else {
             await sendMessage(senderId, `
@@ -84,6 +113,9 @@ dailymotion <terme de recherche>
 dailymotion Ambondrona saino
 
 🔢 Après la recherche, envoyez le numéro de la vidéo pour la télécharger.
+
+📄 𝗣𝗮𝗴𝗶𝗻𝗮𝘁𝗶𝗼𝗻 :
+dailymotion page 2
             `.trim());
         }
 
@@ -98,11 +130,11 @@ Veuillez réessayer plus tard. 🔧
     }
 };
 
-async function handleVideoSearch(senderId, query) {
+async function handleVideoSearch(senderId, query, page = 1) {
     try {
-        await sendMessage(senderId, `🔍 Recherche Dailymotion "${query}" en cours... ⏳`);
+        await sendMessage(senderId, `🔍 Recherche Dailymotion "${query}" (page ${page}) en cours... ⏳`);
         
-        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}`;
+        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&page=${page}`;
         console.log('Appel API Dailymotion:', searchUrl);
         
         const response = await axiosWithRetry(searchUrl);
@@ -111,12 +143,20 @@ async function handleVideoSearch(senderId, query) {
         
         if (response.data && response.data.videos && response.data.videos.length > 0) {
             const videos = response.data.videos;
-            const total = response.data.total || videos.length;
+            const pagination = response.data.pagination || {};
+            const currentPage = pagination.page_actuelle || page;
+            const totalPages = pagination.total_pages || 1;
+            const totalResults = pagination.total_resultats || videos.length;
+            const hasMore = pagination.a_plus_de_resultats || false;
             const qualites = response.data.qualites_disponibles || ['360p'];
             
             userSessions.set(senderId, {
                 videos: videos,
                 query: query,
+                currentPage: currentPage,
+                totalPages: totalPages,
+                totalResults: totalResults,
+                hasMore: hasMore,
                 baseUrl: response.data.base_url || API_BASE,
                 qualites: qualites
             });
@@ -125,7 +165,8 @@ async function handleVideoSearch(senderId, query) {
 🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗗𝗔𝗜𝗟𝗬𝗠𝗢𝗧𝗜𝗢𝗡 🎬
 ━━━━━━━━━━━━━━━━━━━
 🔎 Recherche : ${query}
-📊 Vidéos trouvées : ${total}
+📄 Page : ${currentPage}/${totalPages}
+📊 Total : ${totalResults} vidéos
 ━━━━━━━━━━━━━━━━━━━
             `.trim();
             
@@ -158,13 +199,25 @@ async function handleVideoSearch(senderId, query) {
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
             
+            let paginationInfo = '';
+            if (totalPages > 1) {
+                paginationInfo = `\n📄 𝗣𝗮𝗴𝗶𝗻𝗮𝘁𝗶𝗼𝗻 :`;
+                if (currentPage > 1) {
+                    paginationInfo += `\n• dailymotion page ${currentPage - 1} - Page précédente`;
+                }
+                if (hasMore || currentPage < totalPages) {
+                    paginationInfo += `\n• dailymotion page ${currentPage + 1} - Page suivante`;
+                }
+                paginationInfo += `\n• Pages disponibles : 1 à ${totalPages}`;
+            }
+            
             let footerText = `
 ━━━━━━━━━━━━━━━━━━━
 📥 Envoyez le numéro (1-${maxVideos}) pour télécharger
 
-🔄 Commandes :
+🔄 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝗲𝘀 :
 • dailymotion <numéro> - Télécharger
-• dailymotion <nouvelle recherche> - Nouvelle recherche
+• dailymotion <nouvelle recherche> - Nouvelle recherche${paginationInfo}
             `.trim();
             
             await sendMessage(senderId, footerText);
@@ -173,8 +226,8 @@ async function handleVideoSearch(senderId, query) {
             await sendMessage(senderId, `
 ❌ 𝗔𝘂𝗰𝘂𝗻 𝗿𝗲́𝘀𝘂𝗹𝘁𝗮𝘁 ❌
 ━━━━━━━━━━━━━━━━━━━
-Aucune vidéo trouvée pour "${query}".
-Veuillez essayer avec d'autres mots-clés. 🔍
+Aucune vidéo trouvée pour "${query}" (page ${page}).
+Veuillez essayer avec d'autres mots-clés ou une autre page. 🔍
             `.trim());
         }
 
@@ -307,8 +360,8 @@ module.exports.clearSession = (senderId) => {
 
 module.exports.info = {
     name: "dailymotion",
-    description: "Recherche et télécharge des vidéos Dailymotion (VIP uniquement). Envoyez 'dailymotion <recherche>' pour chercher, puis répondez avec le numéro pour télécharger.",
-    usage: "dailymotion <terme de recherche> | Puis envoyez un numéro (1-10) pour télécharger",
+    description: "Recherche et télécharge des vidéos Dailymotion (VIP uniquement). Envoyez 'dailymotion <recherche>' pour chercher, puis répondez avec le numéro pour télécharger. Supporte la pagination avec 'dailymotion page <numéro>'.",
+    usage: "dailymotion <terme de recherche> | dailymotion page <numéro> | Puis envoyez un numéro (1-10) pour télécharger",
     author: "Bruno",
     isVIP: true
 };
