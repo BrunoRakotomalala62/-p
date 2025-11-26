@@ -5,13 +5,13 @@ const API_BASE = 'https://scraping-video.onrender.com';
 
 const userSessions = new Map();
 
-module.exports = async (senderId, args, event) => {
+module.exports = async (senderId, prompt, api) => {
     try {
         const userSession = userSessions.get(senderId) || {};
         
-        if (args && args.length > 0) {
-            const input = args.join(' ').trim();
-            
+        const input = (typeof prompt === 'string') ? prompt.trim() : '';
+        
+        if (input && input.length > 0) {
             if (/^\d+$/.test(input) && userSession.videos && userSession.videos.length > 0) {
                 const videoIndex = parseInt(input) - 1;
                 
