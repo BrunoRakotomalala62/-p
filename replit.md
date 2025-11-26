@@ -4,6 +4,18 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**November 26, 2025 - Commande X Video Search & Download**
+- Ajout de la commande `x` pour rechercher et télécharger des vidéos
+- Utilise l'API externe `https://scraping-video.onrender.com/`
+- Fonctionnalités :
+  - Recherche de vidéos par mots-clés (`x <recherche>`)
+  - Affichage de la liste des résultats avec image de couverture
+  - Téléchargement en envoyant le numéro de la vidéo (1-10)
+  - Gestion des sessions utilisateurs pour la sélection
+  - Support de la pagination
+  - Lien de téléchargement alternatif pour les vidéos volumineuses
+- Endpoints API utilisés : `/recherche`, `/video/:id`, `/stream`, `/download/:id`
+
 **November 21, 2025 - Système de Génération Automatique de Commandes IA**
 - Ajout de la commande `commandstore` pour créer automatiquement des commandes IA personnalisées
 - Génération de code à partir d'une URL API fournie par l'utilisateur
