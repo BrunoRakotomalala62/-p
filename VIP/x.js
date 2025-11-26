@@ -5,7 +5,7 @@ const API_BASE = 'https://scraping-video.vercel.app';
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
-const MAX_DIRECT_SEND_SIZE = 24 * 1024 * 1024; // 24 Mo en bytes
+const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024; // 25 Mo en bytes
 
 const userSessions = new Map();
 
@@ -296,7 +296,7 @@ Vérification de la taille...
             
             if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
                 await sendMessage(senderId, `
-📦 Taille: ${sizeMB} MB (< 24 MB)
+📦 Taille: ${sizeMB} MB (< 25 MB)
 📤 Envoi direct de la vidéo...
                 `.trim());
                 
@@ -325,7 +325,7 @@ Vérification de la taille...
                     console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
                 }
             } else {
-                const sizeInfo = videoSize > 0 ? `${sizeMB} MB (> 24 MB)` : 'inconnue';
+                const sizeInfo = videoSize > 0 ? `${sizeMB} MB (> 25 MB)` : 'inconnue';
                 await sendMessage(senderId, `
 📦 Taille: ${sizeInfo}
 📤 Envoi du lien de téléchargement...
