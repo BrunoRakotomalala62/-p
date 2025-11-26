@@ -8,6 +8,8 @@ const RETRY_DELAY = 3000;
 
 const userSessions = new Map();
 
+const QUALITY_OPTIONS = ['1080p', '720p', '480p', '380p', '360p', '240p', 'auto'];
+
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -49,18 +51,65 @@ async function getVideoSize(url) {
     }
 }
 
+function isQualityInput(input) {
+    const normalizedInput = input.toLowerCase().replace(/\s/g, '');
+    return QUALITY_OPTIONS.some(q => q.toLowerCase() === normalizedInput);
+}
+
+function normalizeQuality(input) {
+    const normalizedInput = input.toLowerCase().replace(/\s/g, '');
+    const found = QUALITY_OPTIONS.find(q => q.toLowerCase() === normalizedInput);
+    return found || '360p';
+}
+
 module.exports = async (senderId, prompt, api) => {
     try {
         const userSession = userSessions.get(senderId) || {};
         const input = (typeof prompt === 'string') ? prompt.trim() : '';
         
         if (input && input.length > 0) {
-            if (/^\d+$/.test(input) && userSession.videos && userSession.videos.length > 0) {
+            if (userSession.pendingQuality && userSession.selectedVideo) {
+                if (isQualityInput(input)) {
+                    const quality = normalizeQuality(input);
+                    await handleVideoDownload(senderId, userSession.selectedVideo, quality);
+                } else {
+                    const qualites = userSession.qualites || QUALITY_OPTIONS;
+                    await sendMessage(senderId, `
+❌ 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+Veuillez choisir une qualité valide :
+${qualites.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+💡 Exemple : 360p ou 720p
+                    `.trim());
+                }
+            } else if (/^\d+$/.test(input) && userSession.videos && userSession.videos.length > 0) {
                 const videoIndex = parseInt(input) - 1;
                 
                 if (videoIndex >= 0 && videoIndex < userSession.videos.length) {
                     const selectedVideo = userSession.videos[videoIndex];
-                    await handleVideoDownload(senderId, selectedVideo);
+                    const qualites = userSession.qualites || QUALITY_OPTIONS;
+                    
+                    userSessions.set(senderId, {
+                        ...userSession,
+                        selectedVideo: selectedVideo,
+                        pendingQuality: true
+                    });
+                    
+                    await sendMessage(senderId, `
+🎬 𝗩𝗜𝗗𝗘́𝗢 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́𝗘 🎬
+━━━━━━━━━━━━━━━━━━━
+📹 ${selectedVideo.titre}
+
+📊 𝗖𝗵𝗼𝗶𝘀𝗶𝘀𝘀𝗲𝘇 𝗹𝗮 𝗾𝘂𝗮𝗹𝗶𝘁𝗲́ :
+━━━━━━━━━━━━━━━━━━━
+${qualites.map((q, i) => `${i + 1}. ${q} ${q === '1080p' ? '(HD)' : q === '720p' ? '(HD)' : q === '480p' ? '(SD)' : q === '360p' ? '(Recommandé)' : ''}`).join('\n')}
+
+💡 Envoyez la qualité souhaitée
+Exemple : 360p ou 720p
+
+⚠️ Note : Les vidéos HD peuvent dépasser 25 MB
+                    `.trim());
                 } else {
                     await sendMessage(senderId, `
 ❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
@@ -112,7 +161,9 @@ dailymotion <terme de recherche>
 💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 :
 dailymotion Ambondrona saino
 
-🔢 Après la recherche, envoyez le numéro de la vidéo pour la télécharger.
+🔢 Après la recherche :
+1. Envoyez le numéro de la vidéo
+2. Choisissez la qualité (360p, 720p, etc.)
 
 📄 𝗣𝗮𝗴𝗶𝗻𝗮𝘁𝗶𝗼𝗻 :
 dailymotion page 2
@@ -148,7 +199,7 @@ async function handleVideoSearch(senderId, query, page = 1) {
             const totalPages = pagination.total_pages || 1;
             const totalResults = pagination.total_resultats || videos.length;
             const hasMore = pagination.a_plus_de_resultats || false;
-            const qualites = response.data.qualites_disponibles || ['360p'];
+            const qualites = response.data.qualites_disponibles || QUALITY_OPTIONS;
             
             userSessions.set(senderId, {
                 videos: videos,
@@ -158,7 +209,9 @@ async function handleVideoSearch(senderId, query, page = 1) {
                 totalResults: totalResults,
                 hasMore: hasMore,
                 baseUrl: response.data.base_url || API_BASE,
-                qualites: qualites
+                qualites: qualites,
+                pendingQuality: false,
+                selectedVideo: null
             });
             
             let headerText = `
@@ -213,10 +266,11 @@ async function handleVideoSearch(senderId, query, page = 1) {
             
             let footerText = `
 ━━━━━━━━━━━━━━━━━━━
-📥 Envoyez le numéro (1-${maxVideos}) pour télécharger
+📥 Envoyez le numéro (1-${maxVideos}) pour sélectionner
+📊 Qualités disponibles : ${qualites.slice(0, 4).join(', ')}...
 
 🔄 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝗲𝘀 :
-• dailymotion <numéro> - Télécharger
+• dailymotion <numéro> - Sélectionner une vidéo
 • dailymotion <nouvelle recherche> - Nouvelle recherche${paginationInfo}
             `.trim();
             
@@ -243,26 +297,41 @@ Veuillez réessayer plus tard. 🔧
     }
 }
 
-async function handleVideoDownload(senderId, video) {
+async function handleVideoDownload(senderId, video, quality = '360p') {
     try {
         const userSession = userSessions.get(senderId) || {};
         const baseUrl = userSession.baseUrl || API_BASE;
+        
+        userSessions.set(senderId, {
+            ...userSession,
+            pendingQuality: false,
+            selectedVideo: null
+        });
         
         await sendMessage(senderId, `
 ⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre.substring(0, 50)}...
+📊 Qualité : ${quality}
 Vérification de la taille...
         `.trim());
 
-        const downloadUrl = video.download_url;
+        let downloadUrl = video.download_url;
+        
+        if (downloadUrl.includes('qualite=')) {
+            downloadUrl = downloadUrl.replace(/qualite=\w+/, `qualite=${quality}`);
+        } else if (downloadUrl.includes('?')) {
+            downloadUrl += `&qualite=${quality}`;
+        } else {
+            downloadUrl += `?qualite=${quality}`;
+        }
         
         console.log('URL de téléchargement:', downloadUrl);
         
         const videoSize = await getVideoSize(downloadUrl);
         const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
         
-        console.log(`Taille vidéo: ${sizeMB} MB`);
+        console.log(`Taille vidéo (${quality}): ${sizeMB} MB`);
         
         if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
             await sendMessage(senderId, `
@@ -285,6 +354,7 @@ Vérification de la taille...
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
+📊 Qualité : ${quality}
 📦 Taille: ${sizeMB} MB
 
 🔄 Tapez "dailymotion" pour une nouvelle recherche
@@ -306,6 +376,7 @@ Vérification de la taille...
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
+📊 Qualité : ${quality}
 
 📥 Cliquez sur le lien ci-dessous pour télécharger :
         `.trim());
@@ -342,11 +413,50 @@ module.exports.handleNumber = async (senderId, number) => {
         
         if (videoIndex >= 0 && videoIndex < userSession.videos.length) {
             const selectedVideo = userSession.videos[videoIndex];
-            await handleVideoDownload(senderId, selectedVideo);
+            const qualites = userSession.qualites || QUALITY_OPTIONS;
+            
+            userSessions.set(senderId, {
+                ...userSession,
+                selectedVideo: selectedVideo,
+                pendingQuality: true
+            });
+            
+            await sendMessage(senderId, `
+🎬 𝗩𝗜𝗗𝗘́𝗢 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́𝗘 🎬
+━━━━━━━━━━━━━━━━━━━
+📹 ${selectedVideo.titre}
+
+📊 𝗖𝗵𝗼𝗶𝘀𝗶𝘀𝘀𝗲𝘇 𝗹𝗮 𝗾𝘂𝗮𝗹𝗶𝘁𝗲́ :
+━━━━━━━━━━━━━━━━━━━
+${qualites.map((q, i) => `${i + 1}. ${q} ${q === '1080p' ? '(HD)' : q === '720p' ? '(HD)' : q === '480p' ? '(SD)' : q === '360p' ? '(Recommandé)' : ''}`).join('\n')}
+
+💡 Envoyez la qualité souhaitée
+Exemple : 360p ou 720p
+
+⚠️ Note : Les vidéos HD peuvent dépasser 25 MB
+            `.trim());
             return true;
         }
     }
     return false;
+};
+
+module.exports.handleQuality = async (senderId, qualityInput) => {
+    const userSession = userSessions.get(senderId);
+    
+    if (userSession && userSession.pendingQuality && userSession.selectedVideo) {
+        if (isQualityInput(qualityInput)) {
+            const quality = normalizeQuality(qualityInput);
+            await handleVideoDownload(senderId, userSession.selectedVideo, quality);
+            return true;
+        }
+    }
+    return false;
+};
+
+module.exports.isPendingQuality = (senderId) => {
+    const session = userSessions.get(senderId);
+    return session && session.pendingQuality && session.selectedVideo;
 };
 
 module.exports.hasActiveSession = (senderId) => {
@@ -360,8 +470,8 @@ module.exports.clearSession = (senderId) => {
 
 module.exports.info = {
     name: "dailymotion",
-    description: "Recherche et télécharge des vidéos Dailymotion (VIP uniquement). Envoyez 'dailymotion <recherche>' pour chercher, puis répondez avec le numéro pour télécharger. Supporte la pagination avec 'dailymotion page <numéro>'.",
-    usage: "dailymotion <terme de recherche> | dailymotion page <numéro> | Puis envoyez un numéro (1-10) pour télécharger",
+    description: "Recherche et télécharge des vidéos Dailymotion (VIP uniquement). Envoyez 'dailymotion <recherche>' pour chercher, sélectionnez un numéro, puis choisissez la qualité (360p, 720p, etc.). Supporte la pagination.",
+    usage: "dailymotion <terme de recherche> | dailymotion page <numéro> | Numéro (1-10) | Qualité (360p, 720p, etc.)",
     author: "Bruno",
     isVIP: true
 };
