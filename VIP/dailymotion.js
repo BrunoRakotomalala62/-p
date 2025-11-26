@@ -1,7 +1,7 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'http://applemusic-beta.vercel.app';
+const API_BASE = 'https://applemusic-production.up.railway.app';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
