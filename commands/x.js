@@ -175,22 +175,6 @@ async function handleVideoSearch(senderId, query, page = 1) {
                 totalPages: totalPages
             });
             
-            if (videos[0] && videos[0].image_url) {
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'image',
-                            payload: {
-                                url: videos[0].image_url,
-                                is_reusable: true
-                            }
-                        }
-                    });
-                } catch (imgError) {
-                    console.log('Image non disponible:', imgError.message);
-                }
-            }
-            
             let headerText = `
 🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗗𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 🎬
 ━━━━━━━━━━━━━━━━━━━
@@ -203,15 +187,31 @@ async function handleVideoSearch(senderId, query, page = 1) {
             await sendMessage(senderId, headerText);
             
             const maxVideos = Math.min(videos.length, 10);
-            let videoListText = '';
             
             for (let i = 0; i < maxVideos; i++) {
                 const video = videos[i];
-                const title = video.titre.length > 60 ? video.titre.substring(0, 57) + '...' : video.titre;
-                videoListText += `${i + 1}. ${title}\n\n`;
+                const title = video.titre.length > 80 ? video.titre.substring(0, 77) + '...' : video.titre;
+                
+                await sendMessage(senderId, `${i + 1}. ${title}`);
+                
+                if (video.image_url) {
+                    try {
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'image',
+                                payload: {
+                                    url: video.image_url,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+                    } catch (imgError) {
+                        console.log(`Image ${i + 1} non disponible:`, imgError.message);
+                    }
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
-            
-            await sendLongMessage(senderId, videoListText.trim(), 500);
             
             let footerText = `
 ━━━━━━━━━━━━━━━━━━━
