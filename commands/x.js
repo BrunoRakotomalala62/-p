@@ -283,7 +283,7 @@ Vérification de la taille...
         }
         
         const directApiUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=${quality}`;
-        const dynamicDownloadUrl = `${getBaseUrl()}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=${quality}`;
+        const dynamicDownloadUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=${quality}`;
         
         console.log('URL API:', directApiUrl);
         console.log('URL dynamique:', dynamicDownloadUrl);
@@ -362,7 +362,7 @@ Vérification de la taille...
             slug = parts[parts.length - 1] || '';
         }
         
-        const dynamicDownloadUrl = `${getBaseUrl()}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=360`;
+        const dynamicDownloadUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=360`;
         
         await sendMessage(senderId, `
 ⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
