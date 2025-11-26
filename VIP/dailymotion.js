@@ -378,12 +378,49 @@ Préparation...
         console.log('URL de téléchargement:', downloadUrl);
         
         if (format === 'MP3') {
+            const audioSize = await getVideoSize(downloadUrl);
+            const sizeMB = (audioSize / (1024 * 1024)).toFixed(2);
+            
+            console.log(`Taille audio MP3 (${quality}): ${sizeMB} MB`);
+            
+            const sizeInfo = audioSize > 0 ? `${sizeMB} MB` : 'Téléchargement';
+            
             await sendMessage(senderId, `
-🎵 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗣𝗥𝗘̂𝗧 🎵
+📦 ${sizeInfo}
+📤 Envoi de l'audio et du lien...
+            `.trim());
+            
+            let audioSentSuccessfully = false;
+            
+            if (audioSize > 0 && audioSize < MAX_DIRECT_SEND_SIZE) {
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'audio',
+                            payload: {
+                                url: downloadUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    audioSentSuccessfully = true;
+                    console.log('Audio MP3 envoyé avec succès en pièce jointe');
+                } catch (sendError) {
+                    console.log('Erreur envoi direct de l\'audio:', sendError.message);
+                    audioSentSuccessfully = false;
+                }
+            } else {
+                console.log(`Audio trop volumineux (${sizeMB} MB), envoi en pièce jointe non possible`);
+            }
+            
+            await sendMessage(senderId, `
+${audioSentSuccessfully ? '✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
 📊 Qualité : ${quality}
 📁 Format : MP3 (Audio)
+${audioSize > 0 ? `📦 Taille: ${sizeMB} MB` : ''}
+${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 25 MB, envoi direct impossible` : ''}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
             `.trim());
@@ -391,7 +428,7 @@ Préparation...
             await sendMessage(senderId, downloadUrl);
             
             await sendMessage(senderId, `
-💡 Cliquez sur le lien pour télécharger l'audio MP3
+💡 ${audioSentSuccessfully ? 'Audio envoyé + lien de téléchargement ci-dessus' : 'Cliquez sur le lien pour télécharger'}
 
 🔄 Tapez "dailymotion" pour une nouvelle recherche
             `.trim());
