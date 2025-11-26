@@ -2,8 +2,63 @@ const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://scraping-video.onrender.com';
+const MAX_MESSAGE_LENGTH = 2000;
 
 const userSessions = new Map();
+
+async function sendLongMessage(senderId, text, delay = 1000) {
+    const chunks = splitMessage(text, MAX_MESSAGE_LENGTH);
+    
+    for (let i = 0; i < chunks.length; i++) {
+        await sendMessage(senderId, chunks[i]);
+        if (i < chunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
+function splitMessage(text, maxLength) {
+    if (text.length <= maxLength) {
+        return [text];
+    }
+
+    const chunks = [];
+    let currentText = text;
+
+    while (currentText.length > 0) {
+        if (currentText.length <= maxLength) {
+            chunks.push(currentText);
+            break;
+        }
+
+        let splitIndex = maxLength;
+
+        const lastNewline = currentText.lastIndexOf('\n', maxLength);
+        if (lastNewline > maxLength * 0.5) {
+            splitIndex = lastNewline;
+        } else {
+            const lastSpace = currentText.lastIndexOf(' ', maxLength);
+            if (lastSpace > maxLength * 0.5) {
+                splitIndex = lastSpace;
+            } else {
+                const lastPunctuation = Math.max(
+                    currentText.lastIndexOf('.', maxLength),
+                    currentText.lastIndexOf('!', maxLength),
+                    currentText.lastIndexOf('?', maxLength),
+                    currentText.lastIndexOf(',', maxLength)
+                );
+                if (lastPunctuation > maxLength * 0.5) {
+                    splitIndex = lastPunctuation + 1;
+                }
+            }
+        }
+
+        chunks.push(currentText.substring(0, splitIndex).trim());
+        currentText = currentText.substring(splitIndex).trim();
+    }
+
+    return chunks;
+}
 
 module.exports = async (senderId, prompt, api) => {
     try {
@@ -23,6 +78,18 @@ module.exports = async (senderId, prompt, api) => {
 ❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
 ━━━━━━━━━━━━━━━━━━━
 Veuillez choisir un numéro entre 1 et ${userSession.videos.length}.
+                    `.trim());
+                }
+            } else if (input.toLowerCase().startsWith('page ')) {
+                const pageNum = parseInt(input.replace(/^page\s+/i, ''));
+                if (!isNaN(pageNum) && pageNum > 0 && userSession.query) {
+                    await handleVideoSearch(senderId, userSession.query, pageNum);
+                } else {
+                    await sendMessage(senderId, `
+❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗱𝗲 𝗽𝗮𝗴𝗲 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+Utilisez : x page <numéro>
+Exemple : x page 2
                     `.trim());
                 }
             } else {
@@ -45,7 +112,7 @@ x action movie
         }
 
     } catch (error) {
-        console.error('Erreur commande x:', error);
+        console.error('Erreur commande x:', error.message);
         await sendMessage(senderId, `
 ❌ 𝗘𝗥𝗥𝗘𝗨𝗥 ❌
 ━━━━━━━━━━━━━━━━━━━
@@ -60,7 +127,16 @@ async function handleVideoSearch(senderId, query, page = 1) {
         await sendMessage(senderId, `🔍 Recherche de "${query}" en cours... ⏳`);
         
         const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&uid=${senderId}&page=${page}`;
-        const response = await axios.get(searchUrl, { timeout: 30000 });
+        console.log('Appel API:', searchUrl);
+        
+        const response = await axios.get(searchUrl, { 
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
         if (response.data && response.data.videos && response.data.videos.length > 0) {
             const videos = response.data.videos;
@@ -74,31 +150,6 @@ async function handleVideoSearch(senderId, query, page = 1) {
                 totalPages: totalPages
             });
             
-            let videoListText = `
-🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗗𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 🎬
-━━━━━━━━━━━━━━━━━━━
-🔎 Recherche : ${query}
-📄 Page : ${currentPage}/${totalPages}
-📊 Vidéos trouvées : ${videos.length}
-━━━━━━━━━━━━━━━━━━━
-
-`;
-
-            for (let i = 0; i < Math.min(videos.length, 10); i++) {
-                const video = videos[i];
-                const title = video.titre.length > 50 ? video.titre.substring(0, 47) + '...' : video.titre;
-                videoListText += `${i + 1}. ${title}\n`;
-            }
-
-            videoListText += `
-━━━━━━━━━━━━━━━━━━━
-📥 Envoyez le numéro (1-${Math.min(videos.length, 10)}) pour télécharger
-
-🔄 Commandes :
-• x page <numéro> - Changer de page
-• x <nouvelle recherche> - Nouvelle recherche
-            `;
-
             if (videos[0] && videos[0].image_url) {
                 try {
                     await sendMessage(senderId, {
@@ -115,7 +166,38 @@ async function handleVideoSearch(senderId, query, page = 1) {
                 }
             }
             
-            await sendMessage(senderId, videoListText.trim());
+            let headerText = `
+🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗗𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 🎬
+━━━━━━━━━━━━━━━━━━━
+🔎 Recherche : ${query}
+📄 Page : ${currentPage}/${totalPages}
+📊 Vidéos trouvées : ${videos.length}
+━━━━━━━━━━━━━━━━━━━
+            `.trim();
+            
+            await sendMessage(senderId, headerText);
+            
+            const maxVideos = Math.min(videos.length, 10);
+            let videoListText = '';
+            
+            for (let i = 0; i < maxVideos; i++) {
+                const video = videos[i];
+                const title = video.titre.length > 60 ? video.titre.substring(0, 57) + '...' : video.titre;
+                videoListText += `${i + 1}. ${title}\n\n`;
+            }
+            
+            await sendLongMessage(senderId, videoListText.trim(), 500);
+            
+            let footerText = `
+━━━━━━━━━━━━━━━━━━━
+📥 Envoyez le numéro (1-${maxVideos}) pour télécharger
+
+🔄 Commandes :
+• x page <numéro> - Changer de page
+• x <nouvelle recherche> - Nouvelle recherche
+            `.trim();
+            
+            await sendMessage(senderId, footerText);
 
         } else {
             await sendMessage(senderId, `
@@ -127,8 +209,14 @@ Veuillez essayer avec d'autres mots-clés. 🔍
         }
 
     } catch (error) {
-        console.error('Erreur recherche vidéo:', error);
-        throw error;
+        console.error('Erreur recherche vidéo:', error.message);
+        await sendMessage(senderId, `
+❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 ❌
+━━━━━━━━━━━━━━━━━━━
+Impossible de contacter le serveur.
+Erreur: ${error.message}
+Veuillez réessayer plus tard. 🔧
+        `.trim());
     }
 }
 
@@ -148,7 +236,14 @@ Préparation du téléchargement...
             slug = parts[parts.length - 1] || '';
         }
         
-        const detailsResponse = await axios.get(`${videoDetailsUrl}?slug=${encodeURIComponent(slug)}`, { timeout: 30000 });
+        console.log('Récupération détails vidéo:', videoDetailsUrl);
+        
+        const detailsResponse = await axios.get(`${videoDetailsUrl}?slug=${encodeURIComponent(slug)}`, { 
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
         
         if (detailsResponse.data) {
             const videoData = detailsResponse.data;
@@ -156,24 +251,39 @@ Préparation du téléchargement...
             if (videoData.url_mp4) {
                 const downloadUrl = `${API_BASE}/stream?url_mp4=${encodeURIComponent(videoData.url_mp4)}&filename=${encodeURIComponent(videoData.titre || 'video')}.mp4`;
                 
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'video',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'video',
+                            payload: {
+                                url: downloadUrl,
+                                is_reusable: true
+                            }
                         }
-                    }
-                });
+                    });
 
-                await sendMessage(senderId, `
+                    await sendMessage(senderId, `
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${videoData.titre || video.titre}
+                    `.trim());
+                } catch (videoError) {
+                    console.log('Envoi vidéo échoué, envoi du lien:', videoError.message);
+                    
+                    await sendLongMessage(senderId, `
+⚠️ 𝗩𝗜𝗗𝗘́𝗢 𝗧𝗥𝗢𝗣 𝗩𝗢𝗟𝗨𝗠𝗜𝗡𝗘𝗨𝗦𝗘 ⚠️
+━━━━━━━━━━━━━━━━━━━
+🎬 ${videoData.titre || video.titre}
 
-📥 Si la vidéo ne s'affiche pas, utilisez ce lien direct :
+La vidéo est trop volumineuse pour Messenger.
+
+📥 Téléchargez directement via ce lien :
 ${downloadUrl}
-                `.trim());
+
+🔗 Lien alternatif :
+${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}
+                    `.trim());
+                }
 
             } else {
                 await sendMessage(senderId, `
@@ -186,27 +296,20 @@ Veuillez réessayer plus tard. 🔧
         }
 
     } catch (error) {
-        console.error('Erreur téléchargement vidéo:', error);
+        console.error('Erreur téléchargement vidéo:', error.message);
         
-        try {
-            const directDownloadUrl = `${API_BASE}/download/${video.id}`;
-            
-            await sendMessage(senderId, `
+        const directDownloadUrl = `${API_BASE}/download/${video.id}`;
+        
+        await sendLongMessage(senderId, `
 ⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗔𝗟𝗧𝗘𝗥𝗡𝗔𝗧𝗜𝗙 ⚠️
 ━━━━━━━━━━━━━━━━━━━
 La vidéo est trop volumineuse pour Messenger.
 
 📥 Téléchargez directement via ce lien :
 ${directDownloadUrl}
-            `.trim());
-        } catch (altError) {
-            await sendMessage(senderId, `
-❌ 𝗘𝗥𝗥𝗘𝗨𝗥 ❌
-━━━━━━━━━━━━━━━━━━━
-Une erreur s'est produite lors du téléchargement.
-Veuillez réessayer plus tard. 🔧
-            `.trim());
-        }
+
+Erreur: ${error.message}
+        `.trim());
     }
 }
 
