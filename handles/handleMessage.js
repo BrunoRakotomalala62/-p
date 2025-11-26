@@ -77,8 +77,15 @@ const handleMessage = async (event, api) => {
         message.text.toLowerCase().startsWith('uid')
     );
 
-    // Si l'utilisateur n'est pas abonné et que ce n'est pas une commande autorisée
-    if (!subscription.isSubscribed && !isCommandAllowed) {
+    // NOUVELLE LOGIQUE D'ACCÈS:
+    // - VIP (uidvip.txt) → accès aux deux répertoires commands/ ET VIP/
+    // - Abonné normal (uid.txt seulement) → accès uniquement à commands/
+    // - Non abonné → pas d'accès (sauf commande uid)
+    
+    const hasFullAccess = vipStatus.isVIP || subscription.isSubscribed;
+
+    // Si l'utilisateur n'a aucun accès et que ce n'est pas une commande autorisée
+    if (!hasFullAccess && !isCommandAllowed) {
         await sendMessage(senderId, 
             "✨ *ACCÈS EXCLUSIF* ✨\n\n" +
             "🤖 Bonjour! Pour profiter de toutes les fonctionnalités de ce bot intelligent, un abonnement est nécessaire.\n\n" +
@@ -97,14 +104,22 @@ const handleMessage = async (event, api) => {
         return;
     }
 
-    // Si l'abonnement expire bientôt (moins de 3 jours) et qu'on n'a pas encore envoyé l'alerte
-    if (subscription.isSubscribed && subscription.daysLeft <= 3 && !expirationAlertSent[senderId]) {
+    // Alerte d'expiration pour les abonnés normaux
+    if (subscription.isSubscribed && !subscription.isAdmin && subscription.daysLeft <= 3 && !expirationAlertSent[senderId]) {
         await sendMessage(senderId, 
             `⚠️ Attention! Votre abonnement expire dans ${subscription.daysLeft} jour(s).\n` +
             "Pour renouveler, contactez le 0345788639 (2000 AR/mois)."
         );
-        // Marquer que l'alerte a été envoyée à cet utilisateur
         expirationAlertSent[senderId] = true;
+    }
+    
+    // Alerte d'expiration pour les utilisateurs VIP
+    if (vipStatus.isVIP && !vipStatus.isAdmin && vipStatus.daysLeft <= 3 && !expirationAlertSent[`vip_${senderId}`]) {
+        await sendMessage(senderId, 
+            `👑 Attention! Votre abonnement VIP expire dans ${vipStatus.daysLeft} jour(s).\n` +
+            "Pour renouveler votre accès VIP, contactez l'administrateur."
+        );
+        expirationAlertSent[`vip_${senderId}`] = true;
     }
 
     // Commande "stop" pour désactiver toutes les commandes persistantes
