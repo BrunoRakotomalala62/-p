@@ -4,9 +4,20 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**November 26, 2025 - Amélioration Commande X avec Qualité 360p**
+- Ajout de la fonctionnalité d'envoi direct de vidéo MP4 en qualité 360p
+- Logique de taille intelligente :
+  - Si la vidéo 360p < 24 Mo : envoi direct du fichier MP4 dans Messenger
+  - Si la vidéo 360p > 24 Mo : envoi du lien de téléchargement dynamique
+- Nouvelle route `/download/:id?slug=video&quality=360` pour les téléchargements dynamiques
+- Fonctions utilitaires ajoutées :
+  - `getVideoSize()` : récupère la taille du fichier via requête HEAD
+  - `getBaseUrl()` : génère l'URL de base dynamique (Replit ou localhost)
+- Messages utilisateur améliorés avec indication de la taille et qualité
+
 **November 26, 2025 - Commande X Video Search & Download**
 - Ajout de la commande `x` pour rechercher et télécharger des vidéos
-- Utilise l'API externe `https://scraping-video.onrender.com/`
+- Utilise l'API externe `https://scraping-video.vercel.app/`
 - Fonctionnalités :
   - Recherche de vidéos par mots-clés (`x <recherche>`)
   - Affichage de la liste des résultats avec image de couverture
