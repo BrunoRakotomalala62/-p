@@ -399,7 +399,8 @@ module.exports.clearSession = (senderId) => {
 
 module.exports.info = {
     name: "x",
-    description: "Recherche et télécharge des vidéos. Envoyez 'x <recherche>' pour chercher, puis répondez avec le numéro pour télécharger.",
+    description: "Recherche et télécharge des vidéos (VIP uniquement). Envoyez 'x <recherche>' pour chercher, puis répondez avec le numéro pour télécharger.",
     usage: "x <terme de recherche> | Puis envoyez un numéro (1-10) pour télécharger",
-    author: "Bruno"
+    author: "Bruno",
+    isVIP: true
 };

@@ -3,11 +3,23 @@ const path = require('path');
 const sendMessage = require('./sendMessage');
 const axios = require('axios');
 const { checkSubscription } = require('../utils/subscription');
+const { checkVIPStatus } = require('../utils/vipSubscription');
 const geminiModule = require('../auto/gemini');
 
 // Charger toutes les commandes du dossier 'commands'
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
 const commands = {};
+
+// Charger toutes les commandes VIP du dossier 'VIP'
+const vipDir = path.join(__dirname, '../VIP');
+const vipCommands = {};
+
+// S'assurer que le dossier VIP existe
+if (!fs.existsSync(vipDir)) {
+    fs.mkdirSync(vipDir, { recursive: true });
+}
+
+const vipCommandFiles = fs.readdirSync(vipDir).filter(file => file.endsWith('.js'));
 
 // 状态 de pagination global pour être accessible dans ce module
 const userPaginationStates = {};
@@ -23,9 +35,17 @@ for (const file of commandFiles) {
     }
 }
 
+// Charger les commandes VIP
+for (const file of vipCommandFiles) {
+    const commandName = file.replace('.js', '');
+    vipCommands[commandName] = require(`../VIP/${file}`);
+}
+
 console.log('Les commandes suivantes ont été chargées :', Object.keys(commands));
+console.log('Les commandes VIP suivantes ont été chargées :', Object.keys(vipCommands));
 
 const activeCommands = {};
+const activeVIPCommands = {}; // Suivre les commandes VIP actives
 const imageHistory = {};
 const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères pour chaque message envoyé
 
@@ -42,6 +62,9 @@ const handleMessage = async (event, api) => {
 
     // Vérifier l'abonnement de l'utilisateur
     const subscription = checkSubscription(senderId);
+    
+    // Vérifier le statut VIP de l'utilisateur
+    const vipStatus = checkVIPStatus(senderId);
     
     // Envoyer un message de bienvenue si c'est le premier message de l'utilisateur
     if (!userPaginationStates[senderId] && !activeCommands[senderId]) {
@@ -86,8 +109,9 @@ const handleMessage = async (event, api) => {
 
     // Commande "stop" pour désactiver toutes les commandes persistantes
     if (message.text && message.text.toLowerCase() === 'stop') {
-        const previousCommand = activeCommands[senderId];
+        const previousCommand = activeCommands[senderId] || activeVIPCommands[senderId];
         activeCommands[senderId] = null;
+        activeVIPCommands[senderId] = null;
         const responseMessage = previousCommand 
             ? `La commande ${previousCommand} a été désactivée. Vous pouvez maintenant utiliser d'autres commandes ou discuter librement.`
             : "Vous n'aviez pas de commande active. Vous pouvez continuer à discuter librement.";
@@ -97,7 +121,8 @@ const handleMessage = async (event, api) => {
     
     // Commande "supprimer" pour réinitialiser la mémoire de la commande active sans la désactiver
     if (message.text && message.text.toLowerCase() === 'supprimer') {
-        const activeCommand = activeCommands[senderId];
+        const activeCommand = activeCommands[senderId] || activeVIPCommands[senderId];
+        const isVIPCommand = activeVIPCommands[senderId] !== null && activeVIPCommands[senderId] !== undefined;
         
         if (activeCommand) {
             // Conserver la commande active mais réinitialiser son contexte
@@ -105,12 +130,12 @@ const handleMessage = async (event, api) => {
                 // On peut notifier l'utilisateur que la conversation est réinitialisée
                 await sendMessage(senderId, `🔄 Conversation avec la commande ${activeCommand} réinitialisée. Vous pouvez continuer avec un nouveau sujet.`);
                 
-                // Réinitialiser l'historique spécifique à la commande si la commande stocke son propre état
-                // Note: Cette réinitialisation dépend de la commande, nous ne pouvons pas accéder directement 
-                // à la mémoire interne de chaque commande, mais nous pouvons envoyer un signal
-                
                 // Envoyer un message spécial à la commande pour indiquer une réinitialisation
-                await commands[activeCommand](senderId, "RESET_CONVERSATION", api);
+                if (isVIPCommand) {
+                    await vipCommands[activeCommand](senderId, "RESET_CONVERSATION", api);
+                } else {
+                    await commands[activeCommand](senderId, "RESET_CONVERSATION", api);
+                }
             } catch (error) {
                 console.error(`Erreur lors de la réinitialisation de la commande ${activeCommand}:`, error);
                 await sendMessage(senderId, `Une erreur s'est produite lors de la réinitialisation de la commande ${activeCommand}.`);
@@ -128,10 +153,13 @@ const handleMessage = async (event, api) => {
 
         if (imageAttachments.length > 0) {
             // Si une commande est active, elle gère les pièces jointes
-            if (activeCommands[senderId]) {
-                const activeCommand = activeCommands[senderId];
+            const activeCommand = activeCommands[senderId] || activeVIPCommands[senderId];
+            const isVIPCommand = activeVIPCommands[senderId] !== null && activeVIPCommands[senderId] !== undefined;
+            
+            if (activeCommand) {
                 try {
-                    const result = await commands[activeCommand](senderId, "IMAGE_ATTACHMENT", api, imageAttachments);
+                    const commandHandler = isVIPCommand ? vipCommands[activeCommand] : commands[activeCommand];
+                    const result = await commandHandler(senderId, "IMAGE_ATTACHMENT", api, imageAttachments);
                     if (result && result.skipCommandCheck) {
                         return;
                     }
@@ -205,8 +233,9 @@ const handleMessage = async (event, api) => {
     // Si un lien de réseau social est détecté ET que le message ne commence pas par une autre commande
     // Cela permet d'éviter d'intercepter les commandes qui contiennent des liens
     const startsWithCommand = Object.keys(commands).some(cmd => userTextLower.startsWith(cmd));
+    const startsWithVIPCommand = Object.keys(vipCommands).some(cmd => userTextLower.startsWith(cmd));
     
-    if (socialMediaMatches && socialMediaMatches.length > 0 && !startsWithCommand && commands['autodown']) {
+    if (socialMediaMatches && socialMediaMatches.length > 0 && !startsWithCommand && !startsWithVIPCommand && commands['autodown']) {
         try {
             await commands['autodown'](senderId, userText, api);
             return; // Arrêter le traitement après autodown
@@ -216,74 +245,134 @@ const handleMessage = async (event, api) => {
         }
     }
 
-    // Détecter si une nouvelle commande est utilisée
+    // Fonction pour vérifier si une commande correspond exactement
+    // La commande doit être suivie d'un espace ou être le message entier
+    const isExactCommandMatch = (text, commandName) => {
+        if (text === commandName) return true;
+        if (text.startsWith(commandName + ' ')) return true;
+        return false;
+    };
+
+    // Détecter si une nouvelle commande VIP est utilisée (correspondance exacte)
+    let vipCommandDetected = false;
+    let detectedVIPCommandName = null;
+
+    // Trier par longueur décroissante pour éviter les conflits de préfixe
+    const sortedVIPCommands = Object.keys(vipCommands).sort((a, b) => b.length - a.length);
+    for (const commandName of sortedVIPCommands) {
+        if (isExactCommandMatch(userTextLower, commandName)) {
+            vipCommandDetected = true;
+            detectedVIPCommandName = commandName;
+            break;
+        }
+    }
+
+    // Détecter si une nouvelle commande normale est utilisée (correspondance exacte)
     let newCommandDetected = false;
     let detectedCommandName = null;
 
-    for (const commandName in commands) {
-        if (userTextLower.startsWith(commandName)) {
+    // Trier par longueur décroissante pour éviter les conflits de préfixe
+    const sortedCommands = Object.keys(commands).sort((a, b) => b.length - a.length);
+    for (const commandName of sortedCommands) {
+        if (isExactCommandMatch(userTextLower, commandName)) {
             newCommandDetected = true;
             detectedCommandName = commandName;
             break;
         }
     }
 
-    // Si une nouvelle commande est détectée, elle devient la commande active
-    if (newCommandDetected) {
-        activeCommands[senderId] = detectedCommandName;
-        console.log(`Nouvelle commande active pour ${senderId}: ${detectedCommandName}`);
+    // Réinitialiser la commande VIP si l'utilisateur n'est plus VIP et notifier
+    if (activeVIPCommands[senderId] && !vipStatus.isVIP) {
+        console.log(`Utilisateur ${senderId} n'est plus VIP, réinitialisation de la session VIP`);
+        await sendMessage(senderId, `
+⚠️ Votre accès VIP a expiré.
+Contactez l'administrateur pour renouveler votre abonnement VIP.
+        `.trim());
+        activeVIPCommands[senderId] = null;
     }
 
-    // Si une commande persistante est active pour cet utilisateur
-    if (activeCommands[senderId] && activeCommands[senderId] !== 'help') {
-        const activeCommand = activeCommands[senderId];
-        console.log(`Commande persistante en cours pour ${senderId}: ${activeCommand}`);
+    // ===== TRAITEMENT DES COMMANDES PAR PRIORITÉ (EXCLUSIF) =====
+    
+    // PRIORITÉ 1: Si une commande VIP est détectée, la traiter en premier
+    if (vipCommandDetected) {
+        if (!vipStatus.isVIP) {
+            await sendMessage(senderId, `
+👑 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗘 𝗩𝗜𝗣 👑
+━━━━━━━━━━━━━━━━━━━
+❌ Cette commande est réservée aux membres VIP.
 
-        // Si une nouvelle commande est détectée, exécuter cette nouvelle commande
-        const commandPrompt = newCommandDetected 
-            ? userText.replace(detectedCommandName, '').trim()
-            : userText;
+💎 Pour devenir VIP :
+• Contactez l'administrateur
+• Profitez de fonctionnalités exclusives!
 
-        try {
-            const result = await commands[activeCommand](senderId, commandPrompt, api);
-            if (result && result.skipCommandCheck) {
-                // Continuer le traitement
-            } else {
-                return; // Arrêter le traitement après l'exécution de la commande
-            }
-        } catch (error) {
-            console.error(`Erreur lors de l'exécution de la commande ${activeCommand}:`, error);
-            await sendMessage(senderId, `Une erreur s'est produite lors de l'exécution de la commande ${activeCommand}.`);
+👨‍💻 Admin: https://www.facebook.com/bruno.rakotomalala.7549
+            `.trim());
             return;
         }
+
+        // Activer la commande VIP et désactiver toute commande normale
+        activeVIPCommands[senderId] = detectedVIPCommandName;
+        activeCommands[senderId] = null;
+        console.log(`Nouvelle commande VIP active pour ${senderId}: ${detectedVIPCommandName}`);
+
+        const commandPrompt = userText.replace(detectedVIPCommandName, '').trim();
+
+        try {
+            await vipCommands[detectedVIPCommandName](senderId, commandPrompt, api);
+        } catch (error) {
+            console.error(`Erreur lors de l'exécution de la commande VIP ${detectedVIPCommandName}:`, error);
+            await sendMessage(senderId, `Une erreur s'est produite lors de l'exécution de la commande VIP ${detectedVIPCommandName}.`);
+        }
+        return; // FIN - commande VIP traitée
     }
-    // Si aucune commande active, vérifier si une commande est détectée dans le message
+    // PRIORITÉ 2: Si une commande VIP est active et l'utilisateur envoie une suite
+    else if (activeVIPCommands[senderId] && vipStatus.isVIP) {
+        const activeVIPCommand = activeVIPCommands[senderId];
+        console.log(`Commande VIP persistante en cours pour ${senderId}: ${activeVIPCommand}`);
+
+        try {
+            await vipCommands[activeVIPCommand](senderId, userText, api);
+        } catch (error) {
+            console.error(`Erreur lors de l'exécution de la commande VIP ${activeVIPCommand}:`, error);
+            await sendMessage(senderId, `Une erreur s'est produite lors de l'exécution de la commande VIP ${activeVIPCommand}.`);
+        }
+        return; // FIN - commande VIP persistante traitée
+    }
+    // PRIORITÉ 3: Si une nouvelle commande normale est détectée
     else if (newCommandDetected) {
+        // Désactiver la commande VIP et activer la commande normale
+        activeVIPCommands[senderId] = null;
+        activeCommands[senderId] = detectedCommandName;
+        console.log(`Nouvelle commande active pour ${senderId}: ${detectedCommandName}`);
+        
         const commandPrompt = userText.replace(detectedCommandName, '').trim();
         const commandFile = commands[detectedCommandName];
 
-        // Vérifier si la commande existe et l'exécuter
         if (commandFile) {
             try {
-                const result = await commandFile(senderId, commandPrompt, api);
-
-                // Vérifier si la commande a demandé de sauter la vérification des autres commandes
-                if (result && result.skipCommandCheck) {
-                    // Continuer le traitement
-                } else {
-                    return; // Arrêter le traitement après l'exécution de la commande
-                }
+                await commandFile(senderId, commandPrompt, api);
             } catch (error) {
                 console.error(`Erreur lors de l'exécution de la commande ${detectedCommandName}:`, error);
                 await sendMessage(senderId, `Une erreur s'est produite lors de l'exécution de la commande ${detectedCommandName}.`);
-                return;
             }
         }
+        return; // FIN - commande normale traitée
     }
+    // PRIORITÉ 4: Si une commande normale persistante est active
+    else if (activeCommands[senderId] && activeCommands[senderId] !== 'help') {
+        const activeCommand = activeCommands[senderId];
+        console.log(`Commande persistante en cours pour ${senderId}: ${activeCommand}`);
 
-    // Si aucune commande n'est active ou détectée, ALORS utiliser auto/gemini.js
-    // Vérifier d'abord si une commande est déjà active
-    if (!activeCommands[senderId]) {
+        try {
+            await commands[activeCommand](senderId, userText, api);
+        } catch (error) {
+            console.error(`Erreur lors de l'exécution de la commande ${activeCommand}:`, error);
+            await sendMessage(senderId, `Une erreur s'est produite lors de l'exécution de la commande ${activeCommand}.`);
+        }
+        return; // FIN - commande normale persistante traitée
+    }
+    // FALLBACK: Aucune commande, utiliser Gemini
+    else {
         await geminiModule.handleTextMessage(senderId, userText);
     }
 };

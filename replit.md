@@ -4,6 +4,24 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**November 26, 2025 - Système de Commandes VIP**
+- Nouveau répertoire `VIP/` pour les commandes réservées aux membres VIP
+- La commande `x` (recherche vidéo) est maintenant une commande VIP exclusive
+- Fichier `FacebookVip/uidvip.txt` pour gérer les abonnements VIP
+- Nouveau module `utils/vipSubscription.js` pour la gestion des statuts VIP
+- Fonctionnalités :
+  - Vérification du statut VIP avant l'exécution des commandes VIP
+  - Les administrateurs ont automatiquement accès VIP
+  - Notification automatique lors de l'expiration du statut VIP
+  - Correspondance exacte des commandes (évite les conflits de préfixe)
+  - Sessions VIP persistantes avec gestion d'état propre
+- Priorité de traitement des commandes :
+  1. Commandes VIP détectées (si utilisateur VIP)
+  2. Sessions VIP actives
+  3. Commandes normales détectées
+  4. Sessions normales actives
+  5. Fallback vers Gemini
+
 **November 26, 2025 - Amélioration Commande X avec Qualité 360p**
 - Ajout de la fonctionnalité d'envoi direct de vidéo MP4 en qualité 360p
 - Logique de taille intelligente :
