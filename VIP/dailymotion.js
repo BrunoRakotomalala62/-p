@@ -383,7 +383,7 @@ Préparation...
             
             console.log(`Taille audio MP3 (${quality}): ${sizeMB} MB`);
             
-            const sizeInfo = audioSize > 0 ? `${sizeMB} MB` : 'Téléchargement';
+            const sizeInfo = audioSize > 0 ? `${sizeMB} MB` : 'En cours...';
             
             await sendMessage(senderId, `
 📦 ${sizeInfo}
@@ -392,7 +392,7 @@ Préparation...
             
             let audioSentSuccessfully = false;
             
-            if (audioSize > 0 && audioSize < MAX_DIRECT_SEND_SIZE) {
+            if (audioSize === 0 || audioSize < MAX_DIRECT_SEND_SIZE) {
                 try {
                     await sendMessage(senderId, {
                         attachment: {
@@ -439,7 +439,7 @@ ${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 
             
             console.log(`Taille vidéo (${quality}): ${sizeMB} MB`);
             
-            const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'Téléchargement';
+            const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'En cours...';
             
             await sendMessage(senderId, `
 📦 ${sizeInfo}
@@ -448,7 +448,7 @@ ${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 
             
             let videoSentSuccessfully = false;
             
-            if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
+            if (videoSize === 0 || videoSize < MAX_DIRECT_SEND_SIZE) {
                 try {
                     await sendMessage(senderId, {
                         attachment: {
