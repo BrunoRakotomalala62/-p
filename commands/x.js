@@ -3,8 +3,38 @@ const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://scraping-video.onrender.com';
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 3000;
 
 const userSessions = new Map();
+
+async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const response = await axios.get(url, {
+                timeout: 60000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                ...options
+            });
+            return response;
+        } catch (error) {
+            console.log(`Tentative ${attempt}/${retries} échouée:`, error.message);
+            
+            if (attempt === retries) {
+                throw error;
+            }
+            
+            if (error.response && (error.response.status === 502 || error.response.status === 503 || error.response.status === 504)) {
+                console.log(`Attente ${RETRY_DELAY}ms avant nouvelle tentative...`);
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            } else {
+                throw error;
+            }
+        }
+    }
+}
 
 async function sendLongMessage(senderId, text, delay = 1000) {
     const chunks = splitMessage(text, MAX_MESSAGE_LENGTH);
@@ -129,12 +159,7 @@ async function handleVideoSearch(senderId, query, page = 1) {
         const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&uid=${senderId}&page=${page}`;
         console.log('Appel API:', searchUrl);
         
-        const response = await axios.get(searchUrl, { 
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
+        const response = await axiosWithRetry(searchUrl);
         
         console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
@@ -238,12 +263,7 @@ Préparation du téléchargement...
         
         console.log('Récupération détails vidéo:', videoDetailsUrl);
         
-        const detailsResponse = await axios.get(`${videoDetailsUrl}?slug=${encodeURIComponent(slug)}`, { 
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
+        const detailsResponse = await axiosWithRetry(`${videoDetailsUrl}?slug=${encodeURIComponent(slug)}`);
         
         if (detailsResponse.data) {
             const videoData = detailsResponse.data;
