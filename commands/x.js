@@ -1,7 +1,7 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://scraping-video.onrender.com';
+const API_BASE = 'https://scraping-video.vercel.app';
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
