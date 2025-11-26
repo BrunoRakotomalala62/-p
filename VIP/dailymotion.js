@@ -9,6 +9,7 @@ const RETRY_DELAY = 3000;
 const userSessions = new Map();
 
 const QUALITY_OPTIONS = ['1080p', '720p', '480p', '380p', '360p', '240p', 'auto'];
+const FORMAT_OPTIONS = ['MP3', 'MP4'];
 
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -62,16 +63,61 @@ function normalizeQuality(input) {
     return found || '360p';
 }
 
+function isFormatInput(input) {
+    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
+    return FORMAT_OPTIONS.includes(normalizedInput);
+}
+
+function normalizeFormat(input) {
+    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
+    return FORMAT_OPTIONS.includes(normalizedInput) ? normalizedInput : 'MP4';
+}
+
 module.exports = async (senderId, prompt, api) => {
     try {
         const userSession = userSessions.get(senderId) || {};
         const input = (typeof prompt === 'string') ? prompt.trim() : '';
         
         if (input && input.length > 0) {
-            if (userSession.pendingQuality && userSession.selectedVideo) {
+            if (userSession.pendingFormat && userSession.selectedVideo && userSession.selectedQuality) {
+                if (isFormatInput(input)) {
+                    const format = normalizeFormat(input);
+                    await handleVideoDownload(senderId, userSession.selectedVideo, userSession.selectedQuality, format);
+                } else {
+                    await sendMessage(senderId, `
+❌ 𝗙𝗼𝗿𝗺𝗮𝘁 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+Veuillez choisir un format valide :
+
+🎵 MP3 - Audio uniquement
+🎬 MP4 - Vidéo complète
+
+💡 Tapez : MP3 ou MP4
+                    `.trim());
+                }
+            } else if (userSession.pendingQuality && userSession.selectedVideo) {
                 if (isQualityInput(input)) {
                     const quality = normalizeQuality(input);
-                    await handleVideoDownload(senderId, userSession.selectedVideo, quality);
+                    
+                    userSessions.set(senderId, {
+                        ...userSession,
+                        pendingQuality: false,
+                        pendingFormat: true,
+                        selectedQuality: quality
+                    });
+                    
+                    await sendMessage(senderId, `
+📊 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ 𝘀𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲́𝗲 : ${quality}
+━━━━━━━━━━━━━━━━━━━
+
+🎵 𝗧𝘆𝗽𝗲 𝗠𝗣𝟯 𝗼𝘂 𝗠𝗣𝟰 ?
+━━━━━━━━━━━━━━━━━━━
+
+🎵 MP3 - Télécharger l'audio uniquement
+🎬 MP4 - Télécharger la vidéo complète
+
+💡 Envoyez : MP3 ou MP4
+                    `.trim());
                 } else {
                     const qualites = userSession.qualites || QUALITY_OPTIONS;
                     await sendMessage(senderId, `
@@ -93,7 +139,9 @@ ${qualites.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                     userSessions.set(senderId, {
                         ...userSession,
                         selectedVideo: selectedVideo,
-                        pendingQuality: true
+                        pendingQuality: true,
+                        pendingFormat: false,
+                        selectedQuality: null
                     });
                     
                     await sendMessage(senderId, `
@@ -164,6 +212,7 @@ dailymotion Ambondrona saino
 🔢 Après la recherche :
 1. Envoyez le numéro de la vidéo
 2. Choisissez la qualité (360p, 720p, etc.)
+3. Choisissez le format (MP3 ou MP4)
 
 📄 𝗣𝗮𝗴𝗶𝗻𝗮𝘁𝗶𝗼𝗻 :
 dailymotion page 2
@@ -211,7 +260,9 @@ async function handleVideoSearch(senderId, query, page = 1) {
                 baseUrl: response.data.base_url || API_BASE,
                 qualites: qualites,
                 pendingQuality: false,
-                selectedVideo: null
+                pendingFormat: false,
+                selectedVideo: null,
+                selectedQuality: null
             });
             
             let headerText = `
@@ -297,7 +348,7 @@ Veuillez réessayer plus tard. 🔧
     }
 }
 
-async function handleVideoDownload(senderId, video, quality = '360p') {
+async function handleVideoDownload(senderId, video, quality = '360p', format = 'MP4') {
     try {
         const userSession = userSessions.get(senderId) || {};
         const baseUrl = userSession.baseUrl || API_BASE;
@@ -305,82 +356,102 @@ async function handleVideoDownload(senderId, video, quality = '360p') {
         userSessions.set(senderId, {
             ...userSession,
             pendingQuality: false,
-            selectedVideo: null
+            pendingFormat: false,
+            selectedVideo: null,
+            selectedQuality: null
         });
+        
+        const formatLabel = format === 'MP3' ? '🎵 Audio MP3' : '🎬 Vidéo MP4';
         
         await sendMessage(senderId, `
 ⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre.substring(0, 50)}...
 📊 Qualité : ${quality}
-Préparation de la vidéo...
+📁 Format : ${formatLabel}
+Préparation...
         `.trim());
 
-        let downloadUrl = video.download_url;
-        
-        if (downloadUrl.includes('qualite=')) {
-            downloadUrl = downloadUrl.replace(/qualite=\w+/, `qualite=${quality}`);
-        } else if (downloadUrl.includes('?')) {
-            downloadUrl += `&qualite=${quality}`;
-        } else {
-            downloadUrl += `?qualite=${quality}`;
-        }
+        const videoUrl = video.url_video || video.download_url;
+        const downloadUrl = `${API_BASE}/download?url_video=${encodeURIComponent(videoUrl)}&qualite=${quality}&type=${format}`;
         
         console.log('URL de téléchargement:', downloadUrl);
         
-        const videoSize = await getVideoSize(downloadUrl);
-        const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
-        
-        console.log(`Taille vidéo (${quality}): ${sizeMB} MB`);
-        
-        const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'Téléchargement';
-        
-        await sendMessage(senderId, `
+        if (format === 'MP3') {
+            await sendMessage(senderId, `
+🎵 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗣𝗥𝗘̂𝗧 🎵
+━━━━━━━━━━━━━━━━━━━
+🎬 ${video.titre}
+📊 Qualité : ${quality}
+📁 Format : MP3 (Audio)
+
+🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
+            `.trim());
+            
+            await sendMessage(senderId, downloadUrl);
+            
+            await sendMessage(senderId, `
+💡 Cliquez sur le lien pour télécharger l'audio MP3
+
+🔄 Tapez "dailymotion" pour une nouvelle recherche
+            `.trim());
+            
+        } else {
+            const videoSize = await getVideoSize(downloadUrl);
+            const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
+            
+            console.log(`Taille vidéo (${quality}): ${sizeMB} MB`);
+            
+            const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'Téléchargement';
+            
+            await sendMessage(senderId, `
 📦 ${sizeInfo}
 📤 Envoi de la vidéo et du lien...
-        `.trim());
-        
-        let videoSentSuccessfully = false;
-        
-        if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'video',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
+            `.trim());
+            
+            let videoSentSuccessfully = false;
+            
+            if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'video',
+                            payload: {
+                                url: downloadUrl,
+                                is_reusable: true
+                            }
                         }
-                    }
-                });
-                videoSentSuccessfully = true;
-                console.log('Vidéo envoyée avec succès en pièce jointe');
-            } catch (sendError) {
-                console.log('Erreur envoi direct de la vidéo:', sendError.message);
-                videoSentSuccessfully = false;
+                    });
+                    videoSentSuccessfully = true;
+                    console.log('Vidéo envoyée avec succès en pièce jointe');
+                } catch (sendError) {
+                    console.log('Erreur envoi direct de la vidéo:', sendError.message);
+                    videoSentSuccessfully = false;
+                }
+            } else {
+                console.log(`Vidéo trop volumineuse (${sizeMB} MB), envoi en pièce jointe non possible`);
             }
-        } else {
-            console.log(`Vidéo trop volumineuse (${sizeMB} MB), envoi en pièce jointe non possible`);
-        }
-        
-        await sendMessage(senderId, `
+            
+            await sendMessage(senderId, `
 ${videoSentSuccessfully ? '✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
 📊 Qualité : ${quality}
+📁 Format : MP4 (Vidéo)
 ${videoSize > 0 ? `📦 Taille: ${sizeMB} MB` : ''}
 ${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Vidéo > 25 MB, envoi direct impossible` : ''}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
-        `.trim());
-        
-        await sendMessage(senderId, downloadUrl);
-        
-        await sendMessage(senderId, `
+            `.trim());
+            
+            await sendMessage(senderId, downloadUrl);
+            
+            await sendMessage(senderId, `
 💡 ${videoSentSuccessfully ? 'Vidéo envoyée + lien de téléchargement ci-dessus' : 'Cliquez sur le lien pour télécharger'}
 
 🔄 Tapez "dailymotion" pour une nouvelle recherche
-        `.trim());
+            `.trim());
+        }
 
     } catch (error) {
         console.error('Erreur téléchargement vidéo:', error.message);
@@ -389,8 +460,7 @@ ${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Vidéo >
 ⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
 ━━━━━━━━━━━━━━━━━━━
 ❌ Erreur: ${error.message}
-📥 Essayez ce lien direct :
-${video.download_url}
+📥 Veuillez réessayer plus tard.
         `.trim());
     }
 }
@@ -408,7 +478,9 @@ module.exports.handleNumber = async (senderId, number) => {
             userSessions.set(senderId, {
                 ...userSession,
                 selectedVideo: selectedVideo,
-                pendingQuality: true
+                pendingQuality: true,
+                pendingFormat: false,
+                selectedQuality: null
             });
             
             await sendMessage(senderId, `
@@ -437,7 +509,39 @@ module.exports.handleQuality = async (senderId, qualityInput) => {
     if (userSession && userSession.pendingQuality && userSession.selectedVideo) {
         if (isQualityInput(qualityInput)) {
             const quality = normalizeQuality(qualityInput);
-            await handleVideoDownload(senderId, userSession.selectedVideo, quality);
+            
+            userSessions.set(senderId, {
+                ...userSession,
+                pendingQuality: false,
+                pendingFormat: true,
+                selectedQuality: quality
+            });
+            
+            await sendMessage(senderId, `
+📊 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ 𝘀𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲́𝗲 : ${quality}
+━━━━━━━━━━━━━━━━━━━
+
+🎵 𝗧𝘆𝗽𝗲 𝗠𝗣𝟯 𝗼𝘂 𝗠𝗣𝟰 ?
+━━━━━━━━━━━━━━━━━━━
+
+🎵 MP3 - Télécharger l'audio uniquement
+🎬 MP4 - Télécharger la vidéo complète
+
+💡 Envoyez : MP3 ou MP4
+            `.trim());
+            return true;
+        }
+    }
+    return false;
+};
+
+module.exports.handleFormat = async (senderId, formatInput) => {
+    const userSession = userSessions.get(senderId);
+    
+    if (userSession && userSession.pendingFormat && userSession.selectedVideo && userSession.selectedQuality) {
+        if (isFormatInput(formatInput)) {
+            const format = normalizeFormat(formatInput);
+            await handleVideoDownload(senderId, userSession.selectedVideo, userSession.selectedQuality, format);
             return true;
         }
     }
@@ -447,6 +551,11 @@ module.exports.handleQuality = async (senderId, qualityInput) => {
 module.exports.isPendingQuality = (senderId) => {
     const session = userSessions.get(senderId);
     return session && session.pendingQuality && session.selectedVideo;
+};
+
+module.exports.isPendingFormat = (senderId) => {
+    const session = userSessions.get(senderId);
+    return session && session.pendingFormat && session.selectedVideo && session.selectedQuality;
 };
 
 module.exports.hasActiveSession = (senderId) => {
@@ -460,8 +569,8 @@ module.exports.clearSession = (senderId) => {
 
 module.exports.info = {
     name: "dailymotion",
-    description: "Recherche et télécharge des vidéos Dailymotion (VIP uniquement). Envoyez 'dailymotion <recherche>' pour chercher, sélectionnez un numéro, puis choisissez la qualité (360p, 720p, etc.). Supporte la pagination.",
-    usage: "dailymotion <terme de recherche> | dailymotion page <numéro> | Numéro (1-10) | Qualité (360p, 720p, etc.)",
+    description: "Recherche et télécharge des vidéos Dailymotion (VIP uniquement). Envoyez 'dailymotion <recherche>' pour chercher, sélectionnez un numéro, choisissez la qualité (360p, 720p, etc.), puis le format (MP3 ou MP4). Supporte la pagination.",
+    usage: "dailymotion <terme de recherche> | dailymotion page <numéro> | Numéro (1-10) | Qualité (360p, 720p, etc.) | Format (MP3/MP4)",
     author: "Bruno",
     isVIP: true
 };
