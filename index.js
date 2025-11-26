@@ -190,6 +190,47 @@ app.post('/gemini/reset', async (req, res) => {
     }
 });
 
+// Route pour le téléchargement dynamique de vidéos avec qualité
+app.get('/download/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { slug, quality } = req.query;
+        
+        if (!id) {
+            return res.status(400).json({ erreur: 'ID de vidéo requis' });
+        }
+        
+        const API_BASE = 'https://scraping-video.vercel.app';
+        const downloadUrl = `${API_BASE}/download/${id}?slug=${encodeURIComponent(slug || '')}&quality=${encodeURIComponent(quality || '360')}`;
+        
+        console.log('Téléchargement vidéo:', downloadUrl);
+        
+        // Faire une requête HEAD pour obtenir la taille du fichier
+        try {
+            const headResponse = await axios.head(downloadUrl, {
+                timeout: 30000,
+                maxRedirects: 5
+            });
+            
+            const contentLength = parseInt(headResponse.headers['content-length'] || '0');
+            const contentType = headResponse.headers['content-type'] || 'video/mp4';
+            
+            console.log(`Taille du fichier: ${contentLength} bytes (${(contentLength / (1024 * 1024)).toFixed(2)} MB)`);
+            
+            // Rediriger vers l'URL de téléchargement
+            res.redirect(downloadUrl);
+            
+        } catch (headError) {
+            console.log('Erreur HEAD, redirection directe:', headError.message);
+            res.redirect(downloadUrl);
+        }
+        
+    } catch (error) {
+        console.error('Erreur téléchargement:', error.message);
+        res.status(500).json({ erreur: 'Erreur lors du téléchargement', details: error.message });
+    }
+});
+
 // Route par défaut - redirection vers le chatbot
 app.get('/', (req, res) => {
     res.redirect('/chatbot');

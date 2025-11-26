@@ -5,6 +5,7 @@ const API_BASE = 'https://scraping-video.vercel.app';
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
+const MAX_DIRECT_SEND_SIZE = 24 * 1024 * 1024; // 24 Mo en bytes
 
 const userSessions = new Map();
 
@@ -245,13 +246,34 @@ Veuillez réessayer plus tard. 🔧
     }
 }
 
-async function handleVideoDownload(senderId, video) {
+async function getVideoSize(url) {
+    try {
+        const response = await axios.head(url, {
+            timeout: 30000,
+            maxRedirects: 5
+        });
+        return parseInt(response.headers['content-length'] || '0');
+    } catch (error) {
+        console.log('Impossible de récupérer la taille:', error.message);
+        return 0;
+    }
+}
+
+function getBaseUrl() {
+    if (process.env.REPLIT_DEV_DOMAIN) {
+        return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+    }
+    return `http://localhost:${process.env.PORT || 5000}`;
+}
+
+async function handleVideoDownload(senderId, video, quality = '360') {
     try {
         await sendMessage(senderId, `
 ⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre.substring(0, 50)}...
-Préparation du téléchargement...
+📊 Qualité: ${quality}p
+Vérification de la taille...
         `.trim());
 
         let slug = '';
@@ -260,19 +282,67 @@ Préparation du téléchargement...
             slug = parts[parts.length - 1] || '';
         }
         
-        const directDownloadUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}`;
+        const directApiUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=${quality}`;
+        const dynamicDownloadUrl = `${getBaseUrl()}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=${quality}`;
         
-        console.log('URL de téléchargement:', directDownloadUrl);
+        console.log('URL API:', directApiUrl);
+        console.log('URL dynamique:', dynamicDownloadUrl);
+        
+        if (quality === '360') {
+            const videoSize = await getVideoSize(directApiUrl);
+            const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
+            
+            console.log(`Taille vidéo 360p: ${sizeMB} MB`);
+            
+            if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
+                await sendMessage(senderId, `
+📦 Taille: ${sizeMB} MB (< 24 MB)
+📤 Envoi direct de la vidéo...
+                `.trim());
+                
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'video',
+                            payload: {
+                                url: directApiUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    
+                    await sendMessage(senderId, `
+✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
+━━━━━━━━━━━━━━━━━━━
+🎬 ${video.titre}
+📊 Qualité: ${quality}p
+📦 Taille: ${sizeMB} MB
+
+🔄 Tapez "x" pour une nouvelle recherche
+                    `.trim());
+                    return;
+                } catch (sendError) {
+                    console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
+                }
+            } else {
+                const sizeInfo = videoSize > 0 ? `${sizeMB} MB (> 24 MB)` : 'inconnue';
+                await sendMessage(senderId, `
+📦 Taille: ${sizeInfo}
+📤 Envoi du lien de téléchargement...
+                `.trim());
+            }
+        }
         
         await sendMessage(senderId, `
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
+📊 Qualité: ${quality}p
 
 📥 Cliquez sur le lien ci-dessous pour télécharger :
         `.trim());
         
-        await sendMessage(senderId, directDownloadUrl);
+        await sendMessage(senderId, dynamicDownloadUrl);
         
         await sendMessage(senderId, `
 💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
@@ -292,13 +362,13 @@ Préparation du téléchargement...
             slug = parts[parts.length - 1] || '';
         }
         
-        const directDownloadUrl = `${API_BASE}/download/${video.id}?slug=${encodeURIComponent(slug)}`;
+        const dynamicDownloadUrl = `${getBaseUrl()}/download/${video.id}?slug=${encodeURIComponent(slug)}&quality=360`;
         
         await sendMessage(senderId, `
 ⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
 ━━━━━━━━━━━━━━━━━━━
 📥 Téléchargez via ce lien :
-${directDownloadUrl}
+${dynamicDownloadUrl}
         `.trim());
     }
 }
