@@ -238,7 +238,7 @@ async function getRandomVerse() {
 
 module.exports = async (senderId, userText) => {
     try {
-        const args = userText ? userText.trim().toLowerCase().split(/\s+/).slice(1) : [];
+        const args = userText ? userText.trim().toLowerCase().split(/\s+/) : [];
         
         if (args.length === 0 || args[0] === 'help' || args[0] === 'aide') {
             await sendChunkedMessages(senderId, formatHelp());
