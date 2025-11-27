@@ -1,16 +1,42 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// Regex pour détecter les URLs de réseaux sociaux de manière robuste
-// Supporte http/https, www/m/vt/vm, majuscules/minuscules
-// Supporte aussi les liens de partage Facebook (/share/r/...)
-const SOCIAL_MEDIA_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?(?:tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com)(?:\/[^\s]*)?/gi;
+const FACEBOOK_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.watch|fb\.com)(?:\/[^\s]*)?/gi;
+const TIKTOK_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?tiktok\.com(?:\/[^\s]*)?/gi;
+const INSTAGRAM_REGEX = /(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com(?:\/[^\s]*)?/gi;
+const TWITTER_REGEX = /(?:https?:\/\/)?(?:www\.|m\.)?(?:x\.com|twitter\.com)(?:\/[^\s]*)?/gi;
+
+const userStates = {};
+
+const QUALITY_OPTIONS = ['360p', '480p', '720p', '1080p'];
 
 module.exports = async (senderId, userText, api) => {
     try {
         const text = userText.trim();
         
-        // Si la commande est appelée sans argument, afficher l'aide
+        if (userStates[senderId] && userStates[senderId].awaitingQuality) {
+            const selectedQuality = text.toLowerCase();
+            
+            if (QUALITY_OPTIONS.includes(selectedQuality)) {
+                const fbUrl = userStates[senderId].fbUrl;
+                delete userStates[senderId];
+                
+                await processVideoDownload(senderId, fbUrl, selectedQuality);
+                return;
+            } else {
+                await sendMessage(senderId, 
+                    "❌ Qualité invalide.\n\n" +
+                    "📺 Veuillez choisir une qualité parmi:\n" +
+                    "• 360p (basse qualité, petit fichier)\n" +
+                    "• 480p (qualité moyenne)\n" +
+                    "• 720p (HD)\n" +
+                    "• 1080p (Full HD, gros fichier)\n\n" +
+                    "💡 Tapez simplement: 360p, 480p, 720p ou 1080p"
+                );
+                return;
+            }
+        }
+        
         if (!text || text === '') {
             await sendMessage(senderId, 
                 "📥 *AUTODOWN - Téléchargeur automatique*\n\n" +
@@ -25,41 +51,186 @@ module.exports = async (senderId, userText, api) => {
             return;
         }
 
-        // Vérifier si le texte contient un lien de réseau social supporté
-        const socialMediaMatches = text.match(SOCIAL_MEDIA_REGEX);
+        const facebookMatches = text.match(FACEBOOK_REGEX);
         
-        if (!socialMediaMatches || socialMediaMatches.length === 0) {
-            // Si pas de lien détecté, afficher un message d'aide
+        if (facebookMatches && facebookMatches.length > 0) {
+            let fbUrl = facebookMatches[0];
+            if (!fbUrl.match(/^https?:\/\//i)) {
+                fbUrl = 'https://' + fbUrl;
+            }
+            
+            userStates[senderId] = {
+                awaitingQuality: true,
+                fbUrl: fbUrl,
+                timestamp: Date.now()
+            };
+            
             await sendMessage(senderId, 
-                "❌ Aucun lien de réseau social détecté.\n\n" +
-                "Veuillez envoyer un lien valide de TikTok, Facebook, Instagram ou X (Twitter).\n\n" +
-                "✅ *Formats acceptés:*\n" +
-                "• http:// ou https://\n" +
-                "• Avec ou sans www/m/vt/vm\n" +
-                "• Majuscules ou minuscules"
+                "🎬 *Lien Facebook détecté!*\n\n" +
+                "📺 Choisissez la qualité de la vidéo:\n\n" +
+                "• *360p* - Basse qualité (petit fichier)\n" +
+                "• *480p* - Qualité moyenne\n" +
+                "• *720p* - HD (recommandé)\n" +
+                "• *1080p* - Full HD (gros fichier)\n\n" +
+                "💡 Tapez simplement: 360p, 480p, 720p ou 1080p"
             );
             return;
         }
         
-        // Utiliser le premier lien détecté
-        const detectedUrl = socialMediaMatches[0];
+        const tiktokMatches = text.match(TIKTOK_REGEX);
+        const instagramMatches = text.match(INSTAGRAM_REGEX);
+        const twitterMatches = text.match(TWITTER_REGEX);
         
-        // Normaliser l'URL (ajouter https:// si manquant)
-        let normalizedUrl = detectedUrl;
-        if (!normalizedUrl.match(/^https?:\/\//i)) {
-            normalizedUrl = 'https://' + normalizedUrl;
+        const socialMediaUrl = tiktokMatches?.[0] || instagramMatches?.[0] || twitterMatches?.[0];
+        
+        if (socialMediaUrl) {
+            let normalizedUrl = socialMediaUrl;
+            if (!normalizedUrl.match(/^https?:\/\//i)) {
+                normalizedUrl = 'https://' + normalizedUrl;
+            }
+            
+            await processOtherPlatforms(senderId, normalizedUrl);
+            return;
+        }
+        
+        await sendMessage(senderId, 
+            "❌ Aucun lien de réseau social détecté.\n\n" +
+            "Veuillez envoyer un lien valide de TikTok, Facebook, Instagram ou X (Twitter).\n\n" +
+            "✅ *Formats acceptés:*\n" +
+            "• http:// ou https://\n" +
+            "• Avec ou sans www/m/vt/vm\n" +
+            "• Majuscules ou minuscules"
+        );
+
+    } catch (error) {
+        console.error('Erreur dans autodown:', error.message || error);
+        await sendMessage(senderId, "⚠️ Une erreur s'est produite. Veuillez réessayer.");
+    }
+};
+
+async function processVideoDownload(senderId, fbUrl, quality) {
+    try {
+        await sendMessage(senderId, `⏳ Téléchargement en cours en qualité ${quality}... Veuillez patienter.`);
+
+        const apiUrl = `https://download-facebook-video.vercel.app/download?fb_url=${encodeURIComponent(fbUrl)}&qualite=${quality}`;
+        
+        const response = await axios.get(apiUrl, { 
+            timeout: 180000,
+            validateStatus: function (status) {
+                return status >= 200 && status < 500;
+            }
+        });
+        
+        const apiData = response.data;
+
+        if (!apiData || apiData.error) {
+            await sendMessage(senderId, 
+                "❌ Impossible de télécharger la vidéo.\n\n" +
+                "Raisons possibles:\n" +
+                "• Le lien est invalide ou privé\n" +
+                "• La qualité demandée n'est pas disponible\n" +
+                "• Le serveur est temporairement indisponible\n\n" +
+                "Veuillez vérifier le lien et réessayer."
+            );
+            return;
         }
 
-        // Envoyer un message de traitement
+        const videoUrl = apiData.url || apiData.download_url || apiData.video_url || apiData.link;
+        const videoSize = apiData.size || apiData.file_size || null;
+        
+        if (!videoUrl) {
+            await sendMessage(senderId, "❌ Aucune URL de téléchargement trouvée. Essayez une autre qualité.");
+            return;
+        }
+
+        let fileSizeInMB = null;
+        
+        if (videoSize) {
+            if (typeof videoSize === 'string') {
+                const sizeMatch = videoSize.match(/(\d+(?:\.\d+)?)\s*(MB|Mo|KB|Ko|GB|Go)/i);
+                if (sizeMatch) {
+                    const value = parseFloat(sizeMatch[1]);
+                    const unit = sizeMatch[2].toUpperCase();
+                    if (unit === 'MB' || unit === 'MO') {
+                        fileSizeInMB = value;
+                    } else if (unit === 'KB' || unit === 'KO') {
+                        fileSizeInMB = value / 1024;
+                    } else if (unit === 'GB' || unit === 'GO') {
+                        fileSizeInMB = value * 1024;
+                    }
+                }
+            } else if (typeof videoSize === 'number') {
+                fileSizeInMB = videoSize / (1024 * 1024);
+            }
+        }
+        
+        if (fileSizeInMB === null) {
+            try {
+                const headResponse = await axios.head(videoUrl, { timeout: 10000 });
+                const contentLength = headResponse.headers['content-length'];
+                if (contentLength) {
+                    fileSizeInMB = parseInt(contentLength) / (1024 * 1024);
+                }
+            } catch (headError) {
+                console.log('Impossible de récupérer la taille du fichier via HEAD:', headError.message);
+            }
+        }
+
+        const MAX_SIZE_MB = 25;
+        
+        if (fileSizeInMB !== null && fileSizeInMB > MAX_SIZE_MB) {
+            const sizeDisplay = fileSizeInMB.toFixed(2);
+            await sendMessage(senderId, 
+                `📹 *Vidéo Facebook - ${quality}*\n\n` +
+                `📦 Taille: ${sizeDisplay} Mo (supérieur à 25Mo)\n\n` +
+                `📥 La vidéo est trop volumineuse pour être envoyée directement.\n` +
+                `Cliquez sur le lien ci-dessous pour télécharger:\n\n` +
+                `🔗 ${videoUrl}`
+            );
+        } else {
+            const sizeInfo = fileSizeInMB !== null ? ` (${fileSizeInMB.toFixed(2)} Mo)` : '';
+            await sendMessage(senderId, `📹 *Vidéo Facebook - ${quality}*${sizeInfo}\n\n⬇️ Envoi de la vidéo...`);
+            
+            await sendMessage(senderId, {
+                attachment: {
+                    type: "video",
+                    payload: {
+                        url: videoUrl,
+                        is_reusable: true
+                    }
+                }
+            });
+            
+            await sendMessage(senderId, "✅ Vidéo envoyée avec succès!");
+        }
+
+    } catch (error) {
+        console.error('Erreur lors du téléchargement Facebook:', error.message || error);
+        
+        let errorMessage = "⚠️ Une erreur s'est produite lors du téléchargement.\n\n";
+        
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            errorMessage += "⏱️ Le serveur met trop de temps à répondre.\n\n" +
+                "💡 Suggestions:\n" +
+                "• Réessayez dans quelques instants\n" +
+                "• Essayez une qualité inférieure (360p ou 480p)";
+        } else {
+            errorMessage += "Veuillez vérifier le lien et réessayer.";
+        }
+        
+        await sendMessage(senderId, errorMessage);
+    }
+}
+
+async function processOtherPlatforms(senderId, url) {
+    try {
         await sendMessage(senderId, "⏳ Téléchargement en cours... Veuillez patienter.\n💡 Les vidéos longues peuvent prendre 1-3 minutes.");
 
-        // Message de rappel après 60 secondes pour les vidéos longues
         const reminderTimeout = setTimeout(async () => {
             await sendMessage(senderId, "⏳ Téléchargement toujours en cours... La vidéo sera bientôt prête!");
         }, 60000);
 
-        // Appeler l'API de téléchargement avec l'URL normalisée
-        const apiUrl = `https://buda-juoe.onrender.com/downr?url=${encodeURIComponent(normalizedUrl)}`;
+        const apiUrl = `https://buda-juoe.onrender.com/downr?url=${encodeURIComponent(url)}`;
         const response = await axios.get(apiUrl, { 
             timeout: 180000,
             maxContentLength: 200 * 1024 * 1024,
@@ -72,7 +243,6 @@ module.exports = async (senderId, userText, api) => {
         
         const apiData = response.data;
 
-        // Vérifier si l'API a retourné une erreur
         if (!apiData || apiData.error || !apiData.medias) {
             await sendMessage(senderId, 
                 "❌ Impossible de télécharger le contenu.\n\n" +
@@ -87,36 +257,28 @@ module.exports = async (senderId, userText, api) => {
 
         const { title = 'Sans titre', author = 'Inconnu', medias = [] } = apiData;
 
-        // Filtrer les images et vidéos
         const images = medias.filter(m => m.type === "image" || m.type === "photo");
         const video = 
             medias.find(m => m.type === "video" && m.quality === "hd_no_watermark") ||
             medias.find(m => m.type === "video" && m.quality === "hd") ||
             medias.find(m => m.type === "video");
 
-        // Créer un message de caption
         const caption = `📜 *${title}*\n👤 Auteur: ${author}`;
 
-        // Validation basique des URLs de médias avant envoi
         const validateMediaUrl = (url) => {
             try {
                 const parsedUrl = new URL(url);
-                // Vérifier que c'est bien http ou https
                 return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
             } catch {
                 return false;
             }
         };
 
-        // Envoyer le contenu
         if (images.length > 0) {
-            // Envoyer d'abord le caption
             await sendMessage(senderId, caption);
             
-            // Limiter à 10 images maximum pour éviter le spam
             const imagesToSend = images.slice(0, 10);
             
-            // Envoyer chaque image séparément après validation
             for (const img of imagesToSend) {
                 if (validateMediaUrl(img.url)) {
                     await sendMessage(senderId, {
@@ -128,7 +290,6 @@ module.exports = async (senderId, userText, api) => {
                             }
                         }
                     });
-                    // Petit délai pour éviter le rate limiting
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
             }
@@ -137,16 +298,13 @@ module.exports = async (senderId, userText, api) => {
                 await sendMessage(senderId, `ℹ️ ${images.length - 10} image(s) supplémentaire(s) non affichée(s) (limite: 10).`);
             }
         } else if (video) {
-            // Valider l'URL de la vidéo
             if (!validateMediaUrl(video.url)) {
                 await sendMessage(senderId, "❌ URL de vidéo invalide. Impossible de télécharger.");
                 return;
             }
             
-            // Envoyer d'abord le caption
             await sendMessage(senderId, caption);
             
-            // Envoyer la vidéo
             await sendMessage(senderId, {
                 attachment: {
                     type: "video",
@@ -164,7 +322,7 @@ module.exports = async (senderId, userText, api) => {
         }
 
     } catch (error) {
-        console.error('Erreur dans autodown:', error.message || error);
+        console.error('Erreur dans processOtherPlatforms:', error.message || error);
         
         let errorMessage = "⚠️ Une erreur s'est produite lors du téléchargement.\n\n";
         
@@ -174,21 +332,27 @@ module.exports = async (senderId, userText, api) => {
                 "• Réessayez dans quelques instants\n" +
                 "• Essayez avec une vidéo plus courte\n" +
                 "• Vérifiez votre connexion internet";
-        } else if (error.response && error.response.status === 404) {
-            errorMessage += "Le contenu demandé n'a pas été trouvé. Vérifiez que le lien est correct.";
-        } else if (error.response && error.response.status >= 500) {
-            errorMessage += "Le serveur de téléchargement rencontre des problèmes. Veuillez réessayer plus tard.";
         } else {
             errorMessage += "Veuillez vérifier le lien et réessayer.";
         }
         
         await sendMessage(senderId, errorMessage);
     }
-};
+}
 
-// Informations de la commande
+setInterval(() => {
+    const now = Date.now();
+    const TIMEOUT = 5 * 60 * 1000;
+    
+    for (const senderId in userStates) {
+        if (now - userStates[senderId].timestamp > TIMEOUT) {
+            delete userStates[senderId];
+        }
+    }
+}, 60000);
+
 module.exports.info = {
     name: "autodown",
-    description: "Télécharge automatiquement des vidéos et images depuis TikTok, Facebook, Instagram et X (Twitter).",
-    usage: "Envoyez 'autodown <lien>' ou simplement le lien directement."
+    description: "Télécharge automatiquement des vidéos et images depuis TikTok, Facebook, Instagram et X (Twitter). Pour Facebook, demande la qualité avant téléchargement.",
+    usage: "Envoyez 'autodown <lien>' ou simplement le lien directement. Pour Facebook, choisissez ensuite la qualité (360p, 480p, 720p, 1080p)."
 };
