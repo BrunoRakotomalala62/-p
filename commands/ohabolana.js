@@ -1,79 +1,195 @@
 const axios = require('axios');
-const sendMessage = require('../handles/sendMessage'); // Importer la fonction sendMessage
+const sendMessage = require('../handles/sendMessage');
 
-// Objet pour stocker les mots-clés et pages pour chaque utilisateur
 let userSessions = {};
 
 module.exports = async (senderId, prompt) => {
     try {
-        // Vérifier si le prompt est un mot ou un numéro de page
+        if (!prompt || prompt.trim() === '') {
+            const helpMessage = `
+╔══════════════════════════════╗
+║    🌿 𝗢𝗛𝗔𝗕𝗢𝗟𝗔𝗡𝗔 𝗠𝗔𝗟𝗔𝗚𝗔𝗦𝗬 🌿    ║
+╚══════════════════════════════╝
+
+📖 𝗙𝗮𝗻𝗼𝗿𝗼𝗮𝗻𝗮:
+Mitady ohabolana malagasy ianao?
+Ity commande ity dia hanampy anao hahita ireo ohabolana tsara indrindra!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔎 𝗙𝗮𝗺𝗽𝗶𝗮𝘀𝗮𝗻𝗮:
+
+   📌 ohabolana <teny>
+      ➜ Hitady ohabolana misy io teny io
+
+   📌 ohabolana <laharana>
+      ➜ Hijery pejy hafa (ohatra: 2, 3...)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 𝗢𝗵𝗮𝘁𝗿𝗮:
+   • ohabolana fitiavana
+   • ohabolana fanantenana
+   • ohabolana fihavanana
+   • ohabolana fahendrena
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌺 "Ny fianarana no lova tsara indrindra"
+
+╚══════════════════════════════╝`;
+            await sendMessage(senderId, helpMessage);
+            return;
+        }
+
         if (isNaN(prompt)) {
-            // Si c'est un mot (nouvelle recherche)
             userSessions[senderId] = {
-                keyword: prompt, // Mot recherché
-                page: 1 // Page par défaut
+                keyword: prompt.trim(),
+                page: 1
             };
         } else {
-            // Si c'est un numéro de page, vérifier si une recherche est en cours
             if (userSessions[senderId] && userSessions[senderId].keyword) {
-                // Mettre à jour la page
                 userSessions[senderId].page = parseInt(prompt);
             } else {
-                // Si aucun mot n'est défini, renvoyer un message d'erreur
-                await sendMessage(senderId, "Veuillez d'abord faire une recherche en envoyant 'ohabolana <mot>'.");
+                const errorMsg = `
+╔══════════════════════════════╗
+║      ⚠️ 𝗙𝗮𝗻𝗮𝗺𝗽𝗶𝗮𝗻𝗮 ⚠️       ║
+╚══════════════════════════════╝
+
+❌ Tsy mbola nanao fikarohana ianao!
+
+📝 Mila manoratra aloha hoe:
+   ➜ ohabolana <teny>
+
+💡 Ohatra: ohabolana fitiavana
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+                await sendMessage(senderId, errorMsg);
                 return;
             }
         }
 
-        // Extraire le mot-clé et la page actuelle de la session utilisateur
         const keyword = userSessions[senderId].keyword;
         const page = userSessions[senderId].page;
 
-        // Envoyer un message de confirmation
-        await sendMessage(senderId, `Recherche d'ohabolana pour '${keyword}', page ${page}...`);
+        const searchingMsg = `
+🔍 𝗠𝗶𝘁𝗮𝗱𝘆 𝗼𝗵𝗮𝗯𝗼𝗹𝗮𝗻𝗮...
 
-        // Appeler l'API avec le mot-clé et la page
+📚 Teny: "${keyword}"
+📄 Pejy: ${page}
+
+⏳ Andraso kely azafady...`;
+        await sendMessage(senderId, searchingMsg);
+
         const apiUrl = `https://ohabolana-lac.vercel.app/ohabolana?fanontaniana=${encodeURIComponent(keyword)}&page=${page}`;
         const response = await axios.get(apiUrl);
-
-        // Récupérer les données JSON des ohabolana
         const ohabolanaList = response.data;
 
-        // Vérifier si la liste est vide
-        if (ohabolanaList.length === 0) {
-            await sendMessage(senderId, `Aucun résultat trouvé pour '${keyword}' à la page ${page}.`);
+        if (!ohabolanaList || ohabolanaList.length === 0) {
+            const noResultMsg = `
+╔══════════════════════════════╗
+║     📭 𝗧𝗦𝗬 𝗠𝗜𝗦𝗬 𝗩𝗔𝗟𝗜𝗡𝗬 📭     ║
+╚══════════════════════════════╝
+
+😔 Tsy nahitana ohabolana ho an'ny:
+   "${keyword}" (pejy ${page})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 𝗧𝗼𝗿𝗼-𝗵𝗲𝘃𝗶𝘁𝗿𝗮:
+   • Andramo teny hafa
+   • Jereo raha marina ny tsipelina
+   • Andramo pejy hafa (1, 2, 3...)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+            await sendMessage(senderId, noResultMsg);
             return;
         }
 
-        // Définir le nombre d'ohabolana à envoyer par message
         const chunkSize = 5;
 
-        // Diviser les ohabolana en morceaux
         for (let i = 0; i < ohabolanaList.length; i += chunkSize) {
             const chunk = ohabolanaList.slice(i, i + chunkSize);
-            // Construire la réponse à envoyer à l'utilisateur
-            let reply = `Ohabolana - Page ${page} (partie ${Math.floor(i / chunkSize) + 1}):\n\n`;
-            chunk.forEach(ohabolana => {
-                reply += `${ohabolana.number} ${ohabolana.text} - ${ohabolana.author}\n\n`;
+            const partNumber = Math.floor(i / chunkSize) + 1;
+            const totalParts = Math.ceil(ohabolanaList.length / chunkSize);
+
+            let reply = `
+╔══════════════════════════════╗
+║    🌿 𝗢𝗛𝗔𝗕𝗢𝗟𝗔𝗡𝗔 𝗠𝗔𝗟𝗔𝗚𝗔𝗦𝗬 🌿    ║
+╚══════════════════════════════╝
+
+🔎 𝗧𝗲𝗻𝘆: "${keyword}"
+📄 𝗣𝗲𝗷𝘆 ${page} • 𝗙𝗶𝘇𝗮𝗿𝗮𝗻𝗮 ${partNumber}/${totalParts}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+            chunk.forEach((ohabolana, index) => {
+                const num = ohabolana.number || (i + index + 1);
+                const decorations = ['🌸', '🌺', '🌻', '🌼', '🌷'];
+                const decoration = decorations[index % decorations.length];
+                
+                reply += `
+${decoration} 𝗢𝗵𝗮𝗯𝗼𝗹𝗮𝗻𝗮 #${num}
+┃
+┃ 📜 "${ohabolana.text}"
+┃
+┗━➤ ✍️ ${ohabolana.author || 'Tsy fantatra'}
+`;
             });
 
-            // Envoyer la réponse à l'utilisateur
+            reply += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+            if (i + chunkSize >= ohabolanaList.length) {
+                reply += `
+
+📚 𝗙𝗶𝘁𝗮𝗿𝗶𝗵𝗮𝗻𝗮:
+   ⬅️ Pejy aloha: ohabolana ${page > 1 ? page - 1 : 1}
+   ➡️ Pejy manaraka: ohabolana ${page + 1}
+   🔄 Fikarohana vaovao: ohabolana <teny>
+
+🌺 Misaotra nahavita nijery! 🌺`;
+            }
+
             await sendMessage(senderId, reply);
 
-            // Optionnel : attendre un peu entre les envois pour éviter une surcharge
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 seconde d'attente
+            if (i + chunkSize < ohabolanaList.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
+
     } catch (error) {
         console.error('Erreur lors de l\'appel à l\'API Ohabolana:', error);
 
-        // Envoyer un message d'erreur à l'utilisateur en cas de problème
-        await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre message.");
+        const errorMessage = `
+╔══════════════════════════════╗
+║       ❌ 𝗧𝗦𝗬 𝗠𝗔𝗧𝗬 ❌        ║
+╚══════════════════════════════╝
+
+😔 Nisy olana teo am-pikarohana.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 𝗔𝘇𝗮𝗳𝗮𝗱𝘆 𝗮𝗻𝗱𝗿𝗮𝗺𝗼 𝗶𝗻𝗱𝗿𝗮𝘆:
+   • Avereno ny fikarohana
+   • Raha mbola tsy mandeha, andraso kely
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        await sendMessage(senderId, errorMessage);
     }
 };
 
-// Ajouter les informations de la commande
 module.exports.info = {
-    name: "ohabolana",  // Nom de la commande
-    description: "Permet de rechercher des ohabolana malagasy avec pagination.",  // Description
-    usage: "Envoyez 'ohabolana <mot>' pour chercher des ohabolana par mot-clé, puis envoyez un numéro pour naviguer dans les pages."  // Comment utiliser la commande
+    name: "ohabolana",
+    description: "Mitady sy mampiseho ohabolana malagasy tsara tarehy miaraka amin'ny pagination.",
+    usage: `🌿 𝗙𝗮𝗺𝗽𝗶𝗮𝘀𝗮𝗻𝗮 𝗢𝗵𝗮𝗯𝗼𝗹𝗮𝗻𝗮:
+
+📌 ohabolana
+   ➜ Hahita torolalana
+
+📌 ohabolana <teny>
+   ➜ Hitady ohabolana (ohatra: ohabolana fitiavana)
+
+📌 ohabolana <laharana>
+   ➜ Hijery pejy hafa (ohatra: 2, 3...)`
 };
