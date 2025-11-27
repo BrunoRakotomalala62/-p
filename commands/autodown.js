@@ -12,6 +12,8 @@ const FACEBOOK_SHARE_REGEX = /(?:share\s*\/\s*r\s*\/\s*)([a-zA-Z0-9]+)/gi;
 const userStates = {};
 
 const QUALITY_OPTIONS = ['360p', '480p', '720p', '1080p'];
+const YES_RESPONSES = ['oui', 'yes', 'o', 'y', '1', 'ok', 'ouais', 'yep', 'yeah'];
+const NO_RESPONSES = ['non', 'no', 'n', '0', 'nope', 'nan'];
 
 function reconstructFacebookUrl(brokenUrl) {
     let url = brokenUrl.replace(/\s+/g, '');
@@ -37,6 +39,34 @@ function extractShareId(text) {
 module.exports = async (senderId, userText, api) => {
     try {
         const text = userText.trim();
+        
+        if (userStates[senderId] && userStates[senderId].awaitingLinkResponse) {
+            const response = text.toLowerCase().trim();
+            
+            if (YES_RESPONSES.includes(response)) {
+                const { downloadUrl } = userStates[senderId];
+                delete userStates[senderId];
+                
+                const formattedUrl = downloadUrl.replace('https://', 'https: //').replace('.vercel.app', '. vercel. app');
+                
+                await sendMessage(senderId, 
+                    `📥 *Lien de téléchargement:*\n\n` +
+                    `Copiez ce lien et collez-le dans votre navigateur:\n\n` +
+                    `🔗 ${formattedUrl}`
+                );
+                return;
+            } else if (NO_RESPONSES.includes(response)) {
+                delete userStates[senderId];
+                await sendMessage(senderId, "👍 D'accord! Si vous avez besoin du lien plus tard, renvoyez simplement le lien Facebook.");
+                return;
+            } else {
+                await sendMessage(senderId, 
+                    "❓ Veuillez répondre par *oui* ou *non*.\n\n" +
+                    "Voulez-vous recevoir le lien de téléchargement?"
+                );
+                return;
+            }
+        }
         
         if (userStates[senderId] && userStates[senderId].awaitingQuality) {
             const selectedQuality = text.toLowerCase();
@@ -223,6 +253,17 @@ async function processVideoDownload(senderId, fbUrl, quality) {
             
             if (result && result.success) {
                 await sendMessage(senderId, "✅ Vidéo envoyée avec succès!");
+                
+                userStates[senderId] = {
+                    awaitingLinkResponse: true,
+                    downloadUrl: videoUrl,
+                    timestamp: Date.now()
+                };
+                
+                await sendMessage(senderId, 
+                    "📥 Voulez-vous recevoir le lien de téléchargement?\n\n" +
+                    "Répondez *oui* ou *non*"
+                );
             } else {
                 console.error('Erreur envoi pièce jointe:', result ? result.error : 'Unknown error');
                 
