@@ -6,9 +6,33 @@ const TIKTOK_REGEX = /(?:https?:\/\/)?(?:www\.|m\.|vt\.|vm\.)?tiktok\.com(?:\/[^
 const INSTAGRAM_REGEX = /(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com(?:\/[^\s]*)?/gi;
 const TWITTER_REGEX = /(?:https?:\/\/)?(?:www\.|m\.)?(?:x\.com|twitter\.com)(?:\/[^\s]*)?/gi;
 
+const FACEBOOK_BROKEN_REGEX = /(?:https?\s*:\s*\/\s*\/\s*)?(?:www\s*\.\s*|m\s*\.\s*|web\s*\.\s*)?(?:facebook\s*\.\s*com|fb\s*\.\s*watch|fb\s*\.\s*com)(?:\s*\/\s*[^\s]*)?/gi;
+const FACEBOOK_SHARE_REGEX = /(?:share\s*\/\s*r\s*\/\s*)([a-zA-Z0-9]+)/gi;
+
 const userStates = {};
 
 const QUALITY_OPTIONS = ['360p', '480p', '720p', '1080p'];
+
+function reconstructFacebookUrl(brokenUrl) {
+    let url = brokenUrl.replace(/\s+/g, '');
+    
+    if (!url.match(/^https?:\/\//i)) {
+        url = 'https://' + url;
+    }
+    
+    url = url.replace(/https?:\/\//i, 'https://');
+    
+    return url;
+}
+
+function extractShareId(text) {
+    const cleanText = text.replace(/\s+/g, '');
+    const shareMatch = cleanText.match(/share\/r\/([a-zA-Z0-9]+)/i);
+    if (shareMatch) {
+        return `https://www.facebook.com/share/r/${shareMatch[1]}/`;
+    }
+    return null;
+}
 
 module.exports = async (senderId, userText, api) => {
     try {
@@ -46,19 +70,47 @@ module.exports = async (senderId, userText, api) => {
                 "• Facebook (www.facebook.com, fb.watch)\n" +
                 "• Instagram (www.instagram.com)\n" +
                 "• X/Twitter (x.com, twitter.com)\n\n" +
+                "⚠️ *Si Messenger bloque votre lien Facebook:*\n" +
+                "Ajoutez des espaces dans le lien, exemple:\n" +
+                "facebook .com/share/r/ABC123\n" +
+                "Ou envoyez juste: share/r/ABC123\n\n" +
                 "💡 *Astuce:* Copiez simplement le lien et envoyez-le!"
             );
             return;
         }
 
-        const facebookMatches = text.match(FACEBOOK_REGEX);
+        let fbUrl = null;
         
+        const facebookMatches = text.match(FACEBOOK_REGEX);
         if (facebookMatches && facebookMatches.length > 0) {
-            let fbUrl = facebookMatches[0];
+            fbUrl = facebookMatches[0];
             if (!fbUrl.match(/^https?:\/\//i)) {
                 fbUrl = 'https://' + fbUrl;
             }
-            
+        }
+        
+        if (!fbUrl) {
+            const shareUrl = extractShareId(text);
+            if (shareUrl) {
+                fbUrl = shareUrl;
+            }
+        }
+        
+        if (!fbUrl) {
+            const brokenMatches = text.match(FACEBOOK_BROKEN_REGEX);
+            if (brokenMatches && brokenMatches.length > 0) {
+                fbUrl = reconstructFacebookUrl(brokenMatches[0]);
+            }
+        }
+        
+        if (!fbUrl && (text.toLowerCase().includes('facebook') || text.toLowerCase().includes('fb.') || text.includes('share/r/'))) {
+            fbUrl = reconstructFacebookUrl(text);
+            if (!fbUrl.includes('facebook.com') && !fbUrl.includes('fb.')) {
+                fbUrl = null;
+            }
+        }
+        
+        if (fbUrl) {
             userStates[senderId] = {
                 awaitingQuality: true,
                 fbUrl: fbUrl,
