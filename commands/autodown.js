@@ -164,86 +164,54 @@ async function processVideoDownload(senderId, fbUrl, quality) {
     try {
         await sendMessage(senderId, `⏳ Téléchargement en cours en qualité ${quality}... Veuillez patienter.`);
 
-        const apiUrl = `https://download-facebook-video.vercel.app/download?fb_url=${encodeURIComponent(fbUrl)}&qualite=${quality}`;
+        const videoUrl = `https://download-facebook-video.vercel.app/download?fb_url=${encodeURIComponent(fbUrl)}&qualite=${quality}`;
         
-        const response = await axios.get(apiUrl, { 
-            timeout: 180000,
-            validateStatus: function (status) {
-                return status >= 200 && status < 500;
-            }
-        });
-        
-        const apiData = response.data;
-
-        if (!apiData || apiData.error) {
-            await sendMessage(senderId, 
-                "❌ Impossible de télécharger la vidéo.\n\n" +
-                "Raisons possibles:\n" +
-                "• Le lien est invalide ou privé\n" +
-                "• La qualité demandée n'est pas disponible\n" +
-                "• Le serveur est temporairement indisponible\n\n" +
-                "Veuillez vérifier le lien et réessayer."
-            );
-            return;
-        }
-
-        const videoUrl = apiData.url || apiData.download_url || apiData.video_url || apiData.link;
-        const videoSize = apiData.size || apiData.file_size || null;
-        
-        if (!videoUrl) {
-            await sendMessage(senderId, "❌ Aucune URL de téléchargement trouvée. Essayez une autre qualité.");
-            return;
-        }
-
         let fileSizeInMB = null;
+        let contentType = null;
         
-        if (videoSize) {
-            if (typeof videoSize === 'string') {
-                const sizeMatch = videoSize.match(/(\d+(?:\.\d+)?)\s*(MB|Mo|KB|Ko|GB|Go)/i);
-                if (sizeMatch) {
-                    const value = parseFloat(sizeMatch[1]);
-                    const unit = sizeMatch[2].toUpperCase();
-                    if (unit === 'MB' || unit === 'MO') {
-                        fileSizeInMB = value;
-                    } else if (unit === 'KB' || unit === 'KO') {
-                        fileSizeInMB = value / 1024;
-                    } else if (unit === 'GB' || unit === 'GO') {
-                        fileSizeInMB = value * 1024;
-                    }
-                }
-            } else if (typeof videoSize === 'number') {
-                fileSizeInMB = videoSize / (1024 * 1024);
+        try {
+            const headResponse = await axios.head(videoUrl, { timeout: 15000 });
+            const contentLength = headResponse.headers['content-length'];
+            contentType = headResponse.headers['content-type'];
+            
+            if (contentLength) {
+                fileSizeInMB = parseInt(contentLength) / (1024 * 1024);
             }
-        }
-        
-        if (fileSizeInMB === null) {
-            try {
-                const headResponse = await axios.head(videoUrl, { timeout: 10000 });
-                const contentLength = headResponse.headers['content-length'];
-                if (contentLength) {
-                    fileSizeInMB = parseInt(contentLength) / (1024 * 1024);
-                }
-            } catch (headError) {
-                console.log('Impossible de récupérer la taille du fichier via HEAD:', headError.message);
+            
+            if (contentType && !contentType.includes('video')) {
+                await sendMessage(senderId, 
+                    "❌ Impossible de télécharger la vidéo.\n\n" +
+                    "Raisons possibles:\n" +
+                    "• Le lien est invalide ou privé\n" +
+                    "• La qualité demandée n'est pas disponible\n" +
+                    "• Le serveur est temporairement indisponible\n\n" +
+                    "Veuillez vérifier le lien et réessayer."
+                );
+                return;
             }
+        } catch (headError) {
+            console.log('Impossible de récupérer les infos du fichier via HEAD:', headError.message);
         }
 
         const MAX_SIZE_MB = 25;
         
         if (fileSizeInMB !== null && fileSizeInMB > MAX_SIZE_MB) {
             const sizeDisplay = fileSizeInMB.toFixed(2);
+            
+            const formattedUrl = videoUrl.replace('https://', 'https: //').replace('.vercel.app', '. vercel. app');
+            
             await sendMessage(senderId, 
                 `📹 *Vidéo Facebook - ${quality}*\n\n` +
                 `📦 Taille: ${sizeDisplay} Mo (supérieur à 25Mo)\n\n` +
                 `📥 La vidéo est trop volumineuse pour être envoyée directement.\n` +
-                `Cliquez sur le lien ci-dessous pour télécharger:\n\n` +
-                `🔗 ${videoUrl}`
+                `Copiez ce lien et collez-le dans votre navigateur pour télécharger:\n\n` +
+                `🔗 ${formattedUrl}`
             );
         } else {
             const sizeInfo = fileSizeInMB !== null ? ` (${fileSizeInMB.toFixed(2)} Mo)` : '';
             await sendMessage(senderId, `📹 *Vidéo Facebook - ${quality}*${sizeInfo}\n\n⬇️ Envoi de la vidéo...`);
             
-            await sendMessage(senderId, {
+            const result = await sendMessage(senderId, {
                 attachment: {
                     type: "video",
                     payload: {
@@ -253,7 +221,19 @@ async function processVideoDownload(senderId, fbUrl, quality) {
                 }
             });
             
-            await sendMessage(senderId, "✅ Vidéo envoyée avec succès!");
+            if (result && result.success) {
+                await sendMessage(senderId, "✅ Vidéo envoyée avec succès!");
+            } else {
+                console.error('Erreur envoi pièce jointe:', result ? result.error : 'Unknown error');
+                
+                const formattedUrl = videoUrl.replace('https://', 'https: //').replace('.vercel.app', '. vercel. app');
+                
+                await sendMessage(senderId, 
+                    `⚠️ Impossible d'envoyer la vidéo en pièce jointe.\n\n` +
+                    `📥 Copiez ce lien et collez-le dans votre navigateur pour télécharger:\n\n` +
+                    `🔗 ${formattedUrl}`
+                );
+            }
         }
 
     } catch (error) {
