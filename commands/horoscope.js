@@ -2,6 +2,8 @@ const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE_URL = 'https://horoscope-20minute-a-jour.vercel.app';
+const MAX_MESSAGE_LENGTH = 1900;
+const MESSAGE_DELAY = 600;
 
 const signDetails = {
     'bélier': { emoji: '♈', dates: '21 mars - 19 avril', element: '🔥 Feu' },
@@ -48,7 +50,74 @@ const findSign = (input) => {
     return null;
 };
 
-const formatHoroscopeResponse = (data, signKey) => {
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const splitTextSmart = (text, maxLength) => {
+    if (text.length <= maxLength) {
+        return [text];
+    }
+
+    const chunks = [];
+    let remainingText = text;
+
+    while (remainingText.length > 0) {
+        if (remainingText.length <= maxLength) {
+            chunks.push(remainingText);
+            break;
+        }
+
+        let splitIndex = remainingText.lastIndexOf('. ', maxLength);
+        
+        if (splitIndex === -1 || splitIndex < maxLength * 0.3) {
+            splitIndex = remainingText.lastIndexOf('\n', maxLength);
+        }
+        
+        if (splitIndex === -1 || splitIndex < maxLength * 0.3) {
+            splitIndex = remainingText.lastIndexOf(' ', maxLength);
+        }
+
+        if (splitIndex === -1 || splitIndex < maxLength * 0.3) {
+            splitIndex = maxLength;
+        }
+
+        const chunk = remainingText.substring(0, splitIndex + 1).trim();
+        chunks.push(chunk);
+        remainingText = remainingText.substring(splitIndex + 1).trim();
+    }
+
+    return chunks;
+};
+
+const chunkMessages = (sections, maxLength = MAX_MESSAGE_LENGTH) => {
+    const chunks = [];
+    let currentChunk = '';
+
+    for (const section of sections) {
+        if (section.length > maxLength) {
+            if (currentChunk.trim()) {
+                chunks.push(currentChunk.trim());
+                currentChunk = '';
+            }
+            const splitParts = splitTextSmart(section, maxLength);
+            chunks.push(...splitParts);
+        } else if ((currentChunk + section).length > maxLength) {
+            if (currentChunk.trim()) {
+                chunks.push(currentChunk.trim());
+            }
+            currentChunk = section;
+        } else {
+            currentChunk += section;
+        }
+    }
+
+    if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+    }
+
+    return chunks;
+};
+
+const buildHoroscopeSections = (data, signKey) => {
     const signInfo = signDetails[signKey.toLowerCase()];
     const today = new Date();
     const dateStr = today.toLocaleDateString('fr-FR', { 
@@ -58,89 +127,119 @@ const formatHoroscopeResponse = (data, signKey) => {
         day: 'numeric' 
     });
 
-    let response = '';
+    const sections = [];
     
-    response += `✨🔮 𝗛𝗢𝗥𝗢𝗦𝗖𝗢𝗣𝗘 𝗗𝗨 𝗝𝗢𝗨𝗥 🔮✨\n`;
-    response += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    
-    response += `${signInfo.emoji} 𝗦𝗶𝗴𝗻𝗲: ${data.signe.toUpperCase()} ${signInfo.emoji}\n`;
-    response += `📅 ${dateStr}\n`;
-    response += `📆 Période: ${signInfo.dates}\n`;
-    response += `${signInfo.element}\n\n`;
-    
-    response += `🇫🇷 ═══ 𝗙𝗥𝗔𝗡𝗖̧𝗔𝗜𝗦 ═══ 🇫🇷\n\n`;
-    
+    let header = '';
+    header += `✨🔮 𝗛𝗢𝗥𝗢𝗦𝗖𝗢𝗣𝗘 𝗗𝗨 𝗝𝗢𝗨𝗥 🔮✨\n`;
+    header += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    header += `${signInfo.emoji} 𝗦𝗶𝗴𝗻𝗲: ${data.signe.toUpperCase()} ${signInfo.emoji}\n`;
+    header += `📅 ${dateStr}\n`;
+    header += `📆 Période: ${signInfo.dates}\n`;
+    header += `${signInfo.element}\n`;
+    sections.push(header);
+
+    let frenchHeader = `\n🇫🇷 ═══ 𝗙𝗥𝗔𝗡𝗖̧𝗔𝗜𝗦 ═══ 🇫🇷\n`;
+    sections.push(frenchHeader);
+
     if (data.francais && data.francais.sections) {
-        const sections = data.francais.sections;
+        const frSections = data.francais.sections;
         
-        if (sections.Amour) {
-            response += `${sectionEmojis['Amour']} 𝗔𝗺𝗼𝘂𝗿:\n${sections.Amour}\n\n`;
+        if (frSections.Amour) {
+            sections.push(`\n${sectionEmojis['Amour']} 𝗔𝗺𝗼𝘂𝗿:\n${frSections.Amour}\n`);
         }
-        if (sections['Argent et travail']) {
-            response += `${sectionEmojis['Argent et travail']} 𝗔𝗿𝗴𝗲𝗻𝘁 𝗲𝘁 𝘁𝗿𝗮𝘃𝗮𝗶𝗹:\n${sections['Argent et travail']}\n\n`;
+        if (frSections['Argent et travail']) {
+            sections.push(`\n${sectionEmojis['Argent et travail']} 𝗔𝗿𝗴𝗲𝗻𝘁 𝗲𝘁 𝘁𝗿𝗮𝘃𝗮𝗶𝗹:\n${frSections['Argent et travail']}\n`);
         }
-        if (sections.Santé) {
-            response += `${sectionEmojis['Santé']} 𝗦𝗮𝗻𝘁𝗲́:\n${sections.Santé}\n\n`;
+        if (frSections.Santé) {
+            sections.push(`\n${sectionEmojis['Santé']} 𝗦𝗮𝗻𝘁𝗲́:\n${frSections.Santé}\n`);
         }
-        if (sections.Humeur) {
-            response += `${sectionEmojis['Humeur']} 𝗛𝘂𝗺𝗲𝘂𝗿:\n${sections.Humeur}\n\n`;
+        if (frSections.Humeur) {
+            sections.push(`\n${sectionEmojis['Humeur']} 𝗛𝘂𝗺𝗲𝘂𝗿:\n${frSections.Humeur}\n`);
         }
-        if (sections.Conseil) {
-            response += `${sectionEmojis['Conseil']} 𝗖𝗼𝗻𝘀𝗲𝗶𝗹:\n${sections.Conseil}\n\n`;
+        if (frSections.Conseil) {
+            sections.push(`\n${sectionEmojis['Conseil']} 𝗖𝗼𝗻𝘀𝗲𝗶𝗹:\n${frSections.Conseil}\n`);
         }
     }
-    
-    response += `━━━━━━━━━━━━━━━━━━━━\n`;
-    response += `🇲🇬 ═══ 𝗠𝗔𝗟𝗔𝗚𝗔𝗦𝗬 ═══ 🇲🇬\n\n`;
-    
+
+    let separator = `\n━━━━━━━━━━━━━━━━━━━━\n`;
+    separator += `🇲🇬 ═══ 𝗠𝗔𝗟𝗔𝗚𝗔𝗦𝗬 ═══ 🇲🇬\n`;
+    sections.push(separator);
+
     if (data.malagasy && data.malagasy.sections) {
-        const sections = data.malagasy.sections;
+        const mgSections = data.malagasy.sections;
         
-        if (sections.Fitiavana) {
-            response += `${sectionEmojisMalagasy['Fitiavana']} 𝗙𝗶𝘁𝗶𝗮𝘃𝗮𝗻𝗮:\n${sections.Fitiavana}\n\n`;
+        if (mgSections.Fitiavana) {
+            sections.push(`\n${sectionEmojisMalagasy['Fitiavana']} 𝗙𝗶𝘁𝗶𝗮𝘃𝗮𝗻𝗮:\n${mgSections.Fitiavana}\n`);
         }
-        if (sections['Vola sy asa']) {
-            response += `${sectionEmojisMalagasy['Vola sy asa']} 𝗩𝗼𝗹𝗮 𝘀𝘆 𝗮𝘀𝗮:\n${sections['Vola sy asa']}\n\n`;
+        if (mgSections['Vola sy asa']) {
+            sections.push(`\n${sectionEmojisMalagasy['Vola sy asa']} 𝗩𝗼𝗹𝗮 𝘀𝘆 𝗮𝘀𝗮:\n${mgSections['Vola sy asa']}\n`);
         }
-        if (sections.Fahasalamana) {
-            response += `${sectionEmojisMalagasy['Fahasalamana']} 𝗙𝗮𝗵𝗮𝘀𝗮𝗹𝗮𝗺𝗮𝗻𝗮:\n${sections.Fahasalamana}\n\n`;
+        if (mgSections.Fahasalamana) {
+            sections.push(`\n${sectionEmojisMalagasy['Fahasalamana']} 𝗙𝗮𝗵𝗮𝘀𝗮𝗹𝗮𝗺𝗮𝗻𝗮:\n${mgSections.Fahasalamana}\n`);
         }
-        if (sections['Toe-tsaina']) {
-            response += `${sectionEmojisMalagasy['Toe-tsaina']} 𝗧𝗼𝗲-𝘁𝘀𝗮𝗶𝗻𝗮:\n${sections['Toe-tsaina']}\n\n`;
+        if (mgSections['Toe-tsaina']) {
+            sections.push(`\n${sectionEmojisMalagasy['Toe-tsaina']} 𝗧𝗼𝗲-𝘁𝘀𝗮𝗶𝗻𝗮:\n${mgSections['Toe-tsaina']}\n`);
         }
-        if (sections.Torohevitra) {
-            response += `${sectionEmojisMalagasy['Torohevitra']} 𝗧𝗼𝗿𝗼𝗵𝗲𝘃𝗶𝘁𝗿𝗮:\n${sections.Torohevitra}\n\n`;
+        if (mgSections.Torohevitra) {
+            sections.push(`\n${sectionEmojisMalagasy['Torohevitra']} 𝗧𝗼𝗿𝗼𝗵𝗲𝘃𝗶𝘁𝗿𝗮:\n${mgSections.Torohevitra}\n`);
         }
     }
-    
-    response += `━━━━━━━━━━━━━━━━━━━━\n`;
-    response += `🌟 Bonne journée ! 🌟\n`;
-    response += `✨ Source: 20 Minutes ✨`;
-    
-    return response;
+
+    let footer = `\n━━━━━━━━━━━━━━━━━━━━\n`;
+    footer += `🌟 Bonne journée ! 🌟\n`;
+    footer += `✨ Source: 20 Minutes ✨`;
+    sections.push(footer);
+
+    return sections;
 };
 
 const formatSignList = () => {
-    let response = '';
+    const sections = [];
     
-    response += `✨🔮 𝗟𝗜𝗦𝗧𝗘 𝗗𝗘𝗦 𝗦𝗜𝗚𝗡𝗘𝗦 🔮✨\n`;
-    response += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-    response += `📜 Choisissez votre signe:\n\n`;
+    let header = '';
+    header += `✨🔮 𝗟𝗜𝗦𝗧𝗘 𝗗𝗘𝗦 𝗦𝗜𝗚𝗡𝗘𝗦 🔮✨\n`;
+    header += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+    header += `📜 Choisissez votre signe:\n\n`;
+    sections.push(header);
     
+    let signList = '';
     for (const sign in signDetails) {
         const info = signDetails[sign];
         const capitalizedSign = sign.charAt(0).toUpperCase() + sign.slice(1);
-        response += `${info.emoji} ${capitalizedSign}\n`;
-        response += `   📅 ${info.dates}\n`;
-        response += `   ${info.element}\n\n`;
+        signList += `${info.emoji} ${capitalizedSign}\n`;
+        signList += `   📅 ${info.dates}\n`;
+        signList += `   ${info.element}\n\n`;
     }
+    sections.push(signList);
     
-    response += `━━━━━━━━━━━━━━━━━━━━\n`;
-    response += `💡 𝗨𝘁𝗶𝗹𝗶𝘀𝗮𝘁𝗶𝗼𝗻:\n`;
-    response += `Tapez: horoscope <signe>\n`;
-    response += `Exemple: horoscope lion`;
+    let footer = `━━━━━━━━━━━━━━━━━━━━\n`;
+    footer += `💡 𝗨𝘁𝗶𝗹𝗶𝘀𝗮𝘁𝗶𝗼𝗻:\n`;
+    footer += `Tapez: horoscope <signe>\n`;
+    footer += `Exemple: horoscope lion`;
+    sections.push(footer);
     
-    return response;
+    return sections;
+};
+
+const sendChunkedMessages = async (senderId, sections) => {
+    const chunks = chunkMessages(sections);
+    const totalChunks = chunks.length;
+    
+    for (let i = 0; i < chunks.length; i++) {
+        let messageToSend = chunks[i];
+        
+        if (totalChunks > 1 && i < totalChunks - 1) {
+            messageToSend += `\n\n⏳ (${i + 1}/${totalChunks})`;
+        } else if (totalChunks > 1) {
+            messageToSend += `\n\n✅ (${i + 1}/${totalChunks})`;
+        }
+        
+        await sendMessage(senderId, messageToSend);
+        
+        if (i < chunks.length - 1) {
+            await delay(MESSAGE_DELAY);
+        }
+    }
 };
 
 module.exports = async (senderId, message) => {
@@ -148,8 +247,8 @@ module.exports = async (senderId, message) => {
         const userMessage = message.trim().toLowerCase();
 
         if (userMessage === 'horoscope') {
-            const signList = formatSignList();
-            await sendMessage(senderId, signList);
+            const signSections = formatSignList();
+            await sendChunkedMessages(senderId, signSections);
             return;
         }
 
@@ -176,11 +275,11 @@ module.exports = async (senderId, message) => {
         const response = await axios.get(apiUrl, { timeout: 30000 });
 
         if (response.data && response.data.success) {
-            const formattedResponse = formatHoroscopeResponse(response.data, signKey);
+            const horoscopeSections = buildHoroscopeSections(response.data, signKey);
             
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await delay(800);
             
-            await sendMessage(senderId, formattedResponse);
+            await sendChunkedMessages(senderId, horoscopeSections);
         } else {
             await sendMessage(senderId, `❌ Erreur: ${response.data.error || "Impossible de récupérer l'horoscope."}`);
         }
