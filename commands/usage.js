@@ -66,6 +66,26 @@ module.exports = async (senderId, args) => {
                 }
             }
             
+            // Charger dynamiquement les commandes VIP
+            const vipDir = path.join(__dirname, '../VIP');
+            if (fs.existsSync(vipDir)) {
+                const vipFiles = fs.readdirSync(vipDir).filter(file => file.endsWith('.js'));
+                if (vipFiles.length > 0) {
+                    message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                    message += "✨🌟 ESPACE VIP EXCLUSIF 🌟✨\n";
+                    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                    message += "🔐 Ces commandes premium sont\n";
+                    message += "   réservées aux membres VIP\n\n";
+                    message += `👑 ${vipFiles.length} commande${vipFiles.length > 1 ? 's' : ''} exclusive${vipFiles.length > 1 ? 's' : ''} :\n`;
+                    vipFiles.forEach(file => {
+                        const vipCommandName = file.replace('.js', '');
+                        message += `  💎 ${vipCommandName}\n`;
+                    });
+                    message += "\n💡 Devenez VIP pour débloquer\n";
+                    message += "   ces fonctionnalités premium !\n";
+                }
+            }
+            
             message += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
             message += "💬 Tapez 'usage <commande>' pour plus de détails";
             
@@ -75,9 +95,29 @@ module.exports = async (senderId, args) => {
         
         // Rechercher la commande demandée
         const requestedCommand = userInput.toLowerCase();
-        const commandFile = commandFiles.find(file => 
+        let commandFile = commandFiles.find(file => 
             file.toLowerCase().replace('.js', '') === requestedCommand
         );
+        
+        let isVipCommand = false;
+        let commandPath = '';
+        
+        // Si non trouvée dans commands/, chercher dans VIP/
+        if (!commandFile) {
+            const vipDir = path.join(__dirname, '../VIP');
+            if (fs.existsSync(vipDir)) {
+                const vipFiles = fs.readdirSync(vipDir).filter(file => file.endsWith('.js'));
+                commandFile = vipFiles.find(file => 
+                    file.toLowerCase().replace('.js', '') === requestedCommand
+                );
+                if (commandFile) {
+                    isVipCommand = true;
+                    commandPath = path.join(vipDir, commandFile);
+                }
+            }
+        } else {
+            commandPath = path.join(__dirname, commandFile);
+        }
         
         if (!commandFile) {
             await sendMessage(senderId, 
@@ -89,7 +129,7 @@ module.exports = async (senderId, args) => {
         
         // Charger la commande
         const commandName = commandFile.replace('.js', '');
-        const command = require(`./${commandFile}`);
+        const command = isVipCommand ? require(commandPath) : require(`./${commandFile}`);
         
         // Récupérer les informations de la commande
         let name = commandName;
@@ -109,7 +149,13 @@ module.exports = async (senderId, args) => {
         
         // Formater le message d'utilisation
         let usageMessage = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-        usageMessage += `📖 COMMANDE : ${name.toUpperCase()}\n`;
+        if (isVipCommand) {
+            usageMessage += `👑 COMMANDE VIP : ${name.toUpperCase()}\n`;
+            usageMessage += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+            usageMessage += "💎 Réservée aux membres premium\n";
+        } else {
+            usageMessage += `📖 COMMANDE : ${name.toUpperCase()}\n`;
+        }
         usageMessage += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
         
         usageMessage += `📝 Description :\n${description}\n\n`;
