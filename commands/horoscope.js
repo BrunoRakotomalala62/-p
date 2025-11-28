@@ -246,19 +246,13 @@ module.exports = async (senderId, message) => {
     try {
         const userMessage = message.trim().toLowerCase();
 
-        if (userMessage === 'horoscope') {
+        if (!userMessage || userMessage === '' || userMessage === 'liste') {
             const signSections = formatSignList();
             await sendChunkedMessages(senderId, signSections);
             return;
         }
 
-        const parts = userMessage.split(' ');
-        if (parts.length < 2) {
-            await sendMessage(senderId, "⚠️ Veuillez spécifier un signe.\n\n💡 Exemple: horoscope lion\n\nTapez 'horoscope' pour voir la liste des signes.");
-            return;
-        }
-
-        const signInput = parts.slice(1).join(' ');
+        const signInput = userMessage;
         const signKey = findSign(signInput);
 
         if (!signKey) {
