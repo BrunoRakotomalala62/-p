@@ -206,10 +206,16 @@ module.exports = async (senderId, prompt) => {
                 return;
             }
             
-            const selectedSong = session.songs.find(s => s.numero === songNumber);
+            console.log(`Session songs:`, JSON.stringify(session.songs.map(s => ({ numero: s.numero, titre: s.titre }))));
+            console.log(`Looking for song numero: ${songNumber}`);
+            
+            const selectedSong = session.songs.find(s => parseInt(s.numero, 10) === songNumber);
             
             if (!selectedSong) {
-                await sendMessage(senderId, `${DECORATIONS.fire} Tsy misy hira laharana ${songNumber} ${DECORATIONS.fire}\n\n${DECORATIONS.arrow} Safidio anatin'ny lisitra: 1 - ${session.songs.length}`);
+                const availableNumbers = session.songs.map(s => parseInt(s.numero, 10));
+                const minNum = Math.min(...availableNumbers);
+                const maxNum = Math.max(...availableNumbers);
+                await sendMessage(senderId, `${DECORATIONS.fire} Tsy misy hira laharana ${songNumber} amin'ity pejy ity ${DECORATIONS.fire}\n\n${DECORATIONS.arrow} Safidio anatin'ny lisitra: ${minNum} - ${maxNum}\n${DECORATIONS.bullet} Pejy ankehitriny: ${session.currentPage}/${session.totalPages}`);
                 return;
             }
             
