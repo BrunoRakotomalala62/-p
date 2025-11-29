@@ -180,7 +180,7 @@ module.exports = async (senderId, prompt) => {
             }
             
             userSessions.set(senderId, {
-                lastArtist: session.lastArtist,
+                lastArtist: data.mpanakanto || session.lastArtist,
                 songs: data.chansons,
                 currentPage: pageNum,
                 totalPages: data.pagination.totalPages
@@ -259,7 +259,7 @@ module.exports = async (senderId, prompt) => {
             }
             
             userSessions.set(senderId, {
-                lastArtist: artistName,
+                lastArtist: data.mpanakanto || artistName,
                 songs: data.chansons,
                 currentPage: 1,
                 totalPages: data.pagination.totalPages
@@ -287,7 +287,7 @@ module.exports = async (senderId, prompt) => {
                 }
                 
                 userSessions.set(senderId, {
-                    lastArtist: artistName,
+                    lastArtist: data.mpanakanto || artistName,
                     songs: data.chansons,
                     currentPage: pageNum,
                     totalPages: data.pagination.totalPages
