@@ -499,6 +499,7 @@ ${formatEmoji} Format : ${formatLabel}
 📊 Qualité : ${quality}
 
 ✨ ${downloadMessage}
+⏳ Vérification de la taille...
         `.trim());
 
         const videoUrl = video.lien || video.url || video.video_url || video.link;
@@ -507,11 +508,48 @@ ${formatEmoji} Format : ${formatLabel}
         console.log('URL de téléchargement YouTube:', downloadUrl);
         
         if (format === 'MP3') {
+            const audioSize = await getVideoSize(downloadUrl);
+            const sizeMB = (audioSize / (1024 * 1024)).toFixed(2);
+            
+            console.log(`Taille audio MP3 (${quality}): ${sizeMB} MB`);
+            
+            const sizeInfo = audioSize > 0 ? `${sizeMB} MB` : 'En cours...';
+            
             await sendMessage(senderId, `
-🎵 𝗧𝗢𝗡 𝗔𝗨𝗗𝗜𝗢 𝗘𝗦𝗧 𝗣𝗥𝗘̂𝗧 !
+📦 Taille : ${sizeInfo}
+📤 Préparation de l'envoi...
+            `.trim());
+            
+            let audioSentSuccessfully = false;
+            
+            if (audioSize === 0 || audioSize < MAX_DIRECT_SEND_SIZE) {
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'audio',
+                            payload: {
+                                url: downloadUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    audioSentSuccessfully = true;
+                    console.log('Audio MP3 envoyé avec succès en pièce jointe');
+                } catch (sendError) {
+                    console.log('Erreur envoi direct de l\'audio:', sendError.message);
+                    audioSentSuccessfully = false;
+                }
+            } else {
+                console.log(`Audio trop volumineux (${sizeMB} MB > 25 MB), envoi en pièce jointe non possible`);
+            }
+            
+            await sendMessage(senderId, `
+${audioSentSuccessfully ? '✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
 ━━━━━━━━━━━━━━━━━━━
 🎵 ${video.titre || video.title}
 📊 Format : MP3 (Audio)
+${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
+${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 25 MB, envoi direct impossible sur Messenger` : ''}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
             `.trim());
@@ -519,46 +557,55 @@ ${formatEmoji} Format : ${formatLabel}
             await sendMessage(senderId, downloadUrl);
             
             await sendMessage(senderId, `
-📤 𝗘𝗻𝘃𝗼𝗶 𝗱𝘂 𝗳𝗶𝗰𝗵𝗶𝗲𝗿 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...
-⏳ L'audio arrive, patiente quelques instants !
+💡 ${audioSentSuccessfully ? 'Audio envoyé + lien de téléchargement ci-dessus' : 'Clique sur le lien pour télécharger'}
+
+🔄 Tape "youtube" pour une nouvelle recherche
             `.trim());
             
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'audio',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
+        } else {
+            const videoSize = await getVideoSize(downloadUrl);
+            const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
+            
+            console.log(`Taille vidéo MP4 (${quality}): ${sizeMB} MB`);
+            
+            const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'En cours...';
+            
+            await sendMessage(senderId, `
+📦 Taille : ${sizeInfo}
+📤 Préparation de l'envoi...
+            `.trim());
+            
+            let videoSentSuccessfully = false;
+            
+            if (videoSize === 0 || videoSize < MAX_DIRECT_SEND_SIZE) {
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'video',
+                            payload: {
+                                url: downloadUrl,
+                                is_reusable: true
+                            }
                         }
-                    }
-                });
-                console.log('Audio MP3 envoyé avec succès');
-                
-                await sendMessage(senderId, `
-✅ 𝗔𝗨𝗗𝗜𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́ !
-━━━━━━━━━━━━━━━━━━━
-Tu as reçu l'audio ci-dessus.
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
-            } catch (sendError) {
-                console.log('Erreur envoi audio:', sendError.message);
-                await sendMessage(senderId, `
-⚠️ L'envoi direct a échoué.
-💡 Utilise le lien ci-dessus pour télécharger !
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
+                    });
+                    videoSentSuccessfully = true;
+                    console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
+                } catch (sendError) {
+                    console.log('Erreur envoi direct de la vidéo:', sendError.message);
+                    videoSentSuccessfully = false;
+                }
+            } else {
+                console.log(`Vidéo trop volumineuse (${sizeMB} MB > 25 MB), envoi en pièce jointe non possible`);
             }
             
-        } else {
             await sendMessage(senderId, `
-🎬 𝗧𝗔 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗦𝗧 𝗣𝗥𝗘̂𝗧𝗘 !
+${videoSentSuccessfully ? '✅ 𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre || video.title}
 📊 Qualité : ${quality}
 📁 Format : MP4 (Vidéo)
+${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
+${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Vidéo > 25 MB, envoi direct impossible sur Messenger` : ''}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
             `.trim());
@@ -566,38 +613,10 @@ Tu as reçu l'audio ci-dessus.
             await sendMessage(senderId, downloadUrl);
             
             await sendMessage(senderId, `
-📤 𝗘𝗻𝘃𝗼𝗶 𝗱𝘂 𝗳𝗶𝗰𝗵𝗶𝗲𝗿 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...
-⏳ La vidéo arrive, patiente quelques instants !
+💡 ${videoSentSuccessfully ? 'Vidéo envoyée + lien de téléchargement ci-dessus' : 'Clique sur le lien pour télécharger'}
+
+🔄 Tape "youtube" pour une nouvelle recherche
             `.trim());
-            
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'video',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
-                        }
-                    }
-                });
-                console.log('Vidéo MP4 envoyée avec succès');
-                
-                await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 !
-━━━━━━━━━━━━━━━━━━━
-Tu as reçu la vidéo ci-dessus.
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
-            } catch (sendError) {
-                console.log('Erreur envoi vidéo:', sendError.message);
-                await sendMessage(senderId, `
-⚠️ L'envoi direct a échoué.
-💡 Utilise le lien ci-dessus pour télécharger !
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
-            }
         }
 
     } catch (error) {
