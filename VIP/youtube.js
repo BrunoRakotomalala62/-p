@@ -5,6 +5,8 @@ const API_BASE = 'https://download-video-youtube-crib.onrender.com';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
+const VIDEOS_PER_PAGE = 10;
+const MAX_API_RESULTS = 50;
 
 const userSessions = new Map();
 
@@ -59,12 +61,14 @@ function formatDuration(duration) {
 function formatViews(views) {
     if (!views) return 'N/A';
     if (typeof views === 'string') return views;
-    if (views >= 1000000) {
-        return (views / 1000000).toFixed(1) + 'M vues';
-    } else if (views >= 1000) {
-        return (views / 1000).toFixed(1) + 'K vues';
+    const numViews = parseInt(views.toString().replace(/[^0-9]/g, ''));
+    if (isNaN(numViews)) return views;
+    if (numViews >= 1000000) {
+        return (numViews / 1000000).toFixed(1) + 'M vues';
+    } else if (numViews >= 1000) {
+        return (numViews / 1000).toFixed(1) + 'K vues';
     }
-    return views + ' vues';
+    return numViews + ' vues';
 }
 
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
@@ -129,6 +133,16 @@ function normalizeFormat(input) {
     return FORMAT_OPTIONS.includes(normalizedInput) ? normalizedInput : 'MP4';
 }
 
+function getVideosForPage(allVideos, page) {
+    const startIndex = (page - 1) * VIDEOS_PER_PAGE;
+    const endIndex = startIndex + VIDEOS_PER_PAGE;
+    return allVideos.slice(startIndex, endIndex);
+}
+
+function getTotalPages(totalVideos) {
+    return Math.ceil(totalVideos / VIDEOS_PER_PAGE);
+}
+
 module.exports = async (senderId, prompt, api) => {
     try {
         const userSession = userSessions.get(senderId) || {};
@@ -188,11 +202,14 @@ Les qualités disponibles sont :
 💡 Tape simplement : MP3 ou MP4
                     `.trim());
                 }
-            } else if (/^\d+$/.test(input) && userSession.videos && userSession.videos.length > 0) {
-                const videoIndex = parseInt(input) - 1;
+            } else if (/^\d+$/.test(input) && userSession.allVideos && userSession.allVideos.length > 0) {
+                const globalIndex = parseInt(input) - 1;
+                const currentPage = userSession.currentPage || 1;
+                const pageVideos = getVideosForPage(userSession.allVideos, currentPage);
+                const localIndex = globalIndex;
                 
-                if (videoIndex >= 0 && videoIndex < userSession.videos.length) {
-                    const selectedVideo = userSession.videos[videoIndex];
+                if (localIndex >= 0 && localIndex < pageVideos.length) {
+                    const selectedVideo = pageVideos[localIndex];
                     
                     userSessions.set(senderId, {
                         ...userSession,
@@ -217,11 +234,50 @@ Les qualités disponibles sont :
 💡 Envoie : MP3 ou MP4
                     `.trim());
                 } else {
+                    const pageVideosCount = pageVideos.length;
                     await sendMessage(senderId, `
 ❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗵𝗼𝗿𝘀 𝗹𝗶𝗺𝗶𝘁𝗲 ❌
 ━━━━━━━━━━━━━━━━━━━
-Tu as ${userSession.videos.length} résultats disponibles.
-Choisis un numéro entre 1 et ${userSession.videos.length} 🔢
+📄 Page actuelle : ${currentPage}
+📊 Vidéos sur cette page : ${pageVideosCount}
+
+Choisis un numéro entre 1 et ${pageVideosCount} 🔢
+                    `.trim());
+                }
+            } else if (input.toLowerCase().startsWith('page ') || input.toLowerCase() === 'suivant' || input.toLowerCase() === 'precedent') {
+                if (userSession.allVideos && userSession.allVideos.length > 0) {
+                    let newPage;
+                    const totalPages = getTotalPages(userSession.allVideos.length);
+                    const currentPage = userSession.currentPage || 1;
+                    
+                    if (input.toLowerCase() === 'suivant') {
+                        newPage = Math.min(currentPage + 1, totalPages);
+                    } else if (input.toLowerCase() === 'precedent') {
+                        newPage = Math.max(currentPage - 1, 1);
+                    } else {
+                        newPage = parseInt(input.replace(/^page\s+/i, ''));
+                    }
+                    
+                    if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
+                        await displayPage(senderId, userSession.allVideos, newPage, userSession.query);
+                    } else {
+                        await sendMessage(senderId, `
+❌ 𝗣𝗮𝗴𝗲 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+📄 Pages disponibles : 1 à ${totalPages}
+📍 Page actuelle : ${currentPage}
+
+💡 Utilise : youtube page <numéro>
+Exemple : youtube page 2
+                        `.trim());
+                    }
+                } else {
+                    await sendMessage(senderId, `
+❌ 𝗔𝘂𝗰𝘂𝗻𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 𝗮𝗰𝘁𝗶𝘃𝗲 ❌
+━━━━━━━━━━━━━━━━━━━
+Fais d'abord une recherche !
+
+💡 Exemple : youtube Melky
                     `.trim());
                 }
             } else {
@@ -247,6 +303,10 @@ youtube <artiste ou titre>
 3️⃣ Sélectionne MP3 ou MP4
 4️⃣ Choisis la qualité
 5️⃣ Reçois ton fichier !
+
+📄 𝗡𝗮𝘃𝗶𝗴𝗮𝘁𝗶𝗼𝗻 :
+• youtube page 2 - Aller à la page 2
+• suivant / precedent - Changer de page
             `.trim());
         }
 
@@ -270,7 +330,7 @@ async function handleVideoSearch(senderId, query) {
 ⏳ Patiente quelques secondes...
         `.trim());
         
-        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&max_results=10`;
+        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&max_results=${MAX_API_RESULTS}`;
         console.log('Appel API YouTube:', searchUrl);
         
         const response = await axiosWithRetry(searchUrl);
@@ -278,80 +338,20 @@ async function handleVideoSearch(senderId, query) {
         console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
         if (response.data && response.data.videos && response.data.videos.length > 0) {
-            const videos = response.data.videos;
+            const allVideos = response.data.videos;
             
             userSessions.set(senderId, {
-                videos: videos,
+                allVideos: allVideos,
                 query: query,
+                currentPage: 1,
+                totalPages: getTotalPages(allVideos.length),
                 pendingFormat: false,
                 pendingQuality: false,
                 selectedVideo: null,
                 selectedFormat: null
             });
             
-            const searchMessage = getRandomMessage(SEARCH_MESSAGES);
-            
-            let headerText = `
-🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 🎬
-━━━━━━━━━━━━━━━━━━━
-🔎 Recherche : "${query}"
-✨ ${searchMessage} !
-📊 ${videos.length} vidéo(s) trouvée(s)
-━━━━━━━━━━━━━━━━━━━
-            `.trim();
-            
-            await sendMessage(senderId, headerText);
-            
-            const maxVideos = Math.min(videos.length, 10);
-            
-            for (let i = 0; i < maxVideos; i++) {
-                const video = videos[i];
-                const title = (video.titre || video.title || 'Sans titre').length > 60 
-                    ? (video.titre || video.title || 'Sans titre').substring(0, 57) + '...' 
-                    : (video.titre || video.title || 'Sans titre');
-                const duration = formatDuration(video.duree || video.duration);
-                const views = formatViews(video.vues || video.views);
-                
-                const videoInfo = `
-━━━━━━━━━━━━━━━━━━━
-${i + 1}️⃣ ${title}
-
-⏱️ Durée : ${duration}
-👁️ Vues : ${views}
-                `.trim();
-                
-                await sendMessage(senderId, videoInfo);
-                
-                const imageUrl = video.miniature || video.thumbnail || video.image_url;
-                if (imageUrl) {
-                    try {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'image',
-                                payload: {
-                                    url: imageUrl,
-                                    is_reusable: true
-                                }
-                            }
-                        });
-                    } catch (imgError) {
-                        console.log(`Image ${i + 1} non disponible:`, imgError.message);
-                    }
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 400));
-            }
-            
-            let footerText = `
-━━━━━━━━━━━━━━━━━━━
-📥 𝗖𝗼𝗺𝗺𝗲𝗻𝘁 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 :
-Envoie le numéro de la vidéo (1-${maxVideos})
-
-🔄 𝗡𝗼𝘂𝘃𝗲𝗹𝗹𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 :
-youtube <nouveau terme>
-            `.trim();
-            
-            await sendMessage(senderId, footerText);
+            await displayPage(senderId, allVideos, 1, query);
 
         } else {
             await sendMessage(senderId, `
@@ -379,6 +379,100 @@ Erreur: ${error.message}
 🔄 Réessaie dans quelques instants !
         `.trim());
     }
+}
+
+async function displayPage(senderId, allVideos, page, query) {
+    const totalPages = getTotalPages(allVideos.length);
+    const pageVideos = getVideosForPage(allVideos, page);
+    const startIndex = (page - 1) * VIDEOS_PER_PAGE;
+    
+    userSessions.set(senderId, {
+        ...userSessions.get(senderId),
+        currentPage: page
+    });
+    
+    const searchMessage = getRandomMessage(SEARCH_MESSAGES);
+    
+    let headerText = `
+🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 🎬
+━━━━━━━━━━━━━━━━━━━
+🔎 Recherche : "${query}"
+✨ ${searchMessage} !
+
+📄 𝗣𝗮𝗴𝗲 ${page}/${totalPages} 
+📊 Total : ${allVideos.length} vidéo(s)
+🎯 Affichage : ${startIndex + 1}-${startIndex + pageVideos.length}
+━━━━━━━━━━━━━━━━━━━
+    `.trim();
+    
+    await sendMessage(senderId, headerText);
+    
+    for (let i = 0; i < pageVideos.length; i++) {
+        const video = pageVideos[i];
+        const displayNum = i + 1;
+        const title = (video.titre || video.title || 'Sans titre').length > 55 
+            ? (video.titre || video.title || 'Sans titre').substring(0, 52) + '...' 
+            : (video.titre || video.title || 'Sans titre');
+        const duration = formatDuration(video.duree || video.duration);
+        const views = formatViews(video.vues || video.views);
+        const author = video.auteur || video.author || 'Inconnu';
+        
+        const videoInfo = `
+┏━━━━━━━━━━━━━━━━━━━
+┃ ${displayNum}️⃣ ${title}
+┣━━━━━━━━━━━━━━━━━━━
+┃ 👤 ${author}
+┃ ⏱️ ${duration} │ 👁️ ${views}
+┗━━━━━━━━━━━━━━━━━━━
+        `.trim();
+        
+        await sendMessage(senderId, videoInfo);
+        
+        const imageUrl = video.miniature || video.thumbnail || video.image_url;
+        if (imageUrl) {
+            try {
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: 'image',
+                        payload: {
+                            url: imageUrl,
+                            is_reusable: true
+                        }
+                    }
+                });
+            } catch (imgError) {
+                console.log(`Image ${i + 1} non disponible:`, imgError.message);
+            }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    
+    let paginationText = '';
+    if (totalPages > 1) {
+        paginationText = `
+━━━━━━━━━━━━━━━━━━━
+📄 𝗡𝗮𝘃𝗶𝗴𝗮𝘁𝗶𝗼𝗻 :`;
+        
+        if (page > 1) {
+            paginationText += `\n◀️ youtube page ${page - 1} (précédent)`;
+        }
+        if (page < totalPages) {
+            paginationText += `\n▶️ youtube page ${page + 1} (suivant)`;
+        }
+        paginationText += `\n📍 Pages : 1 à ${totalPages}`;
+    }
+    
+    let footerText = `
+━━━━━━━━━━━━━━━━━━━
+📥 𝗧𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 :
+Envoie le numéro (1-${pageVideos.length})
+
+🔄 𝗡𝗼𝘂𝘃𝗲𝗹𝗹𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 :
+youtube <nouveau terme>${paginationText}
+    `.trim();
+    
+    await sendMessage(senderId, footerText);
 }
 
 async function handleVideoDownload(senderId, video, quality = '360p', format = 'MP4') {
@@ -525,11 +619,13 @@ ${sizeInfo}
 module.exports.handleNumber = async (senderId, number) => {
     const userSession = userSessions.get(senderId);
     
-    if (userSession && userSession.videos && userSession.videos.length > 0) {
-        const videoIndex = number - 1;
+    if (userSession && userSession.allVideos && userSession.allVideos.length > 0) {
+        const currentPage = userSession.currentPage || 1;
+        const pageVideos = getVideosForPage(userSession.allVideos, currentPage);
+        const localIndex = number - 1;
         
-        if (videoIndex >= 0 && videoIndex < userSession.videos.length) {
-            const selectedVideo = userSession.videos[videoIndex];
+        if (localIndex >= 0 && localIndex < pageVideos.length) {
+            const selectedVideo = pageVideos[localIndex];
             
             userSessions.set(senderId, {
                 ...userSession,
@@ -608,7 +704,7 @@ module.exports.handleQuality = async (senderId, qualityInput) => {
 
 module.exports.hasActiveSession = (senderId) => {
     const session = userSessions.get(senderId);
-    return session && (session.videos?.length > 0 || session.pendingFormat || session.pendingQuality);
+    return session && (session.allVideos?.length > 0 || session.pendingFormat || session.pendingQuality);
 };
 
 module.exports.clearSession = (senderId) => {
@@ -617,8 +713,8 @@ module.exports.clearSession = (senderId) => {
 
 module.exports.info = {
     name: "youtube",
-    description: "Recherche et télécharge des vidéos YouTube en MP3 ou MP4. Utilise 'youtube <recherche>' pour chercher, puis suis les étapes pour télécharger.",
-    usage: "youtube <artiste ou titre> | Puis choisis le numéro, le format (MP3/MP4) et la qualité (360p/720p/1080p)",
+    description: "Recherche et télécharge des vidéos YouTube en MP3 ou MP4 avec pagination. Utilise 'youtube <recherche>' pour chercher, 'youtube page X' pour naviguer.",
+    usage: "youtube <artiste ou titre> | youtube page <numéro> | Puis choisis le numéro, le format (MP3/MP4) et la qualité (360p/720p/1080p)",
     author: "Bruno",
     isVIP: true
 };
