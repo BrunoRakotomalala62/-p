@@ -277,8 +277,8 @@ async function handleVideoSearch(senderId, query) {
         
         console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
-        if (response.data && response.data.resultats && response.data.resultats.length > 0) {
-            const videos = response.data.resultats;
+        if (response.data && response.data.videos && response.data.videos.length > 0) {
+            const videos = response.data.videos;
             
             userSessions.set(senderId, {
                 videos: videos,
@@ -407,7 +407,7 @@ ${formatEmoji} Format : ${formatLabel}
 ✨ ${downloadMessage}
         `.trim());
 
-        const videoUrl = video.url || video.video_url || video.link;
+        const videoUrl = video.lien || video.url || video.video_url || video.link;
         const downloadUrl = `${API_BASE}/download?video_url=${encodeURIComponent(videoUrl)}&qualite=${quality}&type=${format}`;
         
         console.log('URL de téléchargement YouTube:', downloadUrl);
