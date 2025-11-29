@@ -20,8 +20,11 @@ const DECORATIONS = {
     page: "📄",
     arrow: "➤",
     bullet: "•",
-    check: "✓"
+    check: "✓",
+    numbers: "🔢"
 };
+
+const userSessions = new Map();
 
 const splitMessage = (text, maxLength = 1900) => {
     const messages = [];
@@ -48,7 +51,7 @@ const splitMessage = (text, maxLength = 1900) => {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const formatSongList = (data, artistName) => {
+const formatSongList = (data, artistName, pageNum) => {
     const { pagination, chansons } = data;
     let message = "";
     
@@ -62,7 +65,7 @@ const formatSongList = (data, artistName) => {
     message += `${DECORATIONS.divider}\n\n`;
     
     chansons.forEach((chanson, index) => {
-        const num = String(index + 1).padStart(2, '0');
+        const num = String(chanson.numero || (index + 1)).padStart(2, '0');
         message += `${DECORATIONS.note} ${num}. ${chanson.titre}\n`;
     });
     
@@ -72,8 +75,12 @@ const formatSongList = (data, artistName) => {
     message += `${DECORATIONS.divider}\n\n`;
     
     message += `${DECORATIONS.fire} HAMPIASA ${DECORATIONS.fire}\n`;
-    message += `${DECORATIONS.arrow} tononkira <artista> <lohateny>\n`;
-    message += `${DECORATIONS.bullet} Ohatra: tononkira mopcaan anao tompony\n`;
+    message += `${DECORATIONS.numbers} Soraty ny laharan'ny hira (ohatra: 1)\n`;
+    
+    if (pagination.totalPages > 1) {
+        message += `${DECORATIONS.page} Soraty "page X" hanova pejy\n`;
+        message += `   (ohatra: page 2)\n`;
+    }
     
     return message;
 };
@@ -128,6 +135,20 @@ const sendImageAttachment = async (senderId, imageUrl) => {
     }
 };
 
+const fetchSongList = async (artistName, senderId, page = 1) => {
+    const apiUrl = `https://tononkira-malagasy.vercel.app/tononkira?mpanakanto=${encodeURIComponent(artistName)}&uid=${senderId}&page=${page}`;
+    console.log(`Appel API liste chansons: ${apiUrl}`);
+    const response = await axios.get(apiUrl, { timeout: 30000 });
+    return response.data;
+};
+
+const fetchLyrics = async (artistName, songTitle) => {
+    const apiUrl = `https://tononkira-malagasy.vercel.app/hira?artiste=${encodeURIComponent(artistName)}&titre=${encodeURIComponent(songTitle)}`;
+    console.log(`Appel API paroles: ${apiUrl}`);
+    const response = await axios.get(apiUrl, { timeout: 30000 });
+    return response.data;
+};
+
 module.exports = async (senderId, prompt) => {
     try {
         const loadingMessages = [
@@ -140,70 +161,169 @@ module.exports = async (senderId, prompt) => {
         await sendMessage(senderId, randomLoading);
 
         const trimmedPrompt = prompt.trim().toLowerCase();
+        
+        const pageMatch = trimmedPrompt.match(/^page\s*(\d+)$/i);
+        if (pageMatch) {
+            const pageNum = parseInt(pageMatch[1], 10);
+            const session = userSessions.get(senderId);
+            
+            if (!session || !session.lastArtist) {
+                await sendMessage(senderId, `${DECORATIONS.fire} Tsy misy mpanakanto voatahiry ${DECORATIONS.fire}\n\n${DECORATIONS.arrow} Tadiavo aloha ny mpanakanto:\n${DECORATIONS.bullet} tononkira <mpanakanto>\n${DECORATIONS.bullet} Ohatra: tononkira ambondrona`);
+                return;
+            }
+            
+            const data = await fetchSongList(session.lastArtist, senderId, pageNum);
+            
+            if (!data.success) {
+                await sendMessage(senderId, `${DECORATIONS.fire} Tsy nahita pejy ${pageNum} ${DECORATIONS.fire}`);
+                return;
+            }
+            
+            userSessions.set(senderId, {
+                lastArtist: session.lastArtist,
+                songs: data.chansons,
+                currentPage: pageNum,
+                totalPages: data.pagination.totalPages
+            });
+            
+            const formattedMessage = formatSongList(data, data.mpanakanto || session.lastArtist, pageNum);
+            const messageParts = splitMessage(formattedMessage);
+            
+            for (let i = 0; i < messageParts.length; i++) {
+                await sendMessage(senderId, messageParts[i]);
+                if (i < messageParts.length - 1) await delay(500);
+            }
+            return;
+        }
+        
+        const numberMatch = trimmedPrompt.match(/^(\d+)$/);
+        if (numberMatch) {
+            const songNumber = parseInt(numberMatch[1], 10);
+            const session = userSessions.get(senderId);
+            
+            if (!session || !session.songs || !session.lastArtist) {
+                await sendMessage(senderId, `${DECORATIONS.fire} Tsy misy lisitry ny hira voatahiry ${DECORATIONS.fire}\n\n${DECORATIONS.arrow} Tadiavo aloha ny mpanakanto:\n${DECORATIONS.bullet} tononkira <mpanakanto>\n${DECORATIONS.bullet} Ohatra: tononkira ambondrona`);
+                return;
+            }
+            
+            const selectedSong = session.songs.find(s => s.numero === songNumber);
+            
+            if (!selectedSong) {
+                await sendMessage(senderId, `${DECORATIONS.fire} Tsy misy hira laharana ${songNumber} ${DECORATIONS.fire}\n\n${DECORATIONS.arrow} Safidio anatin'ny lisitra: 1 - ${session.songs.length}`);
+                return;
+            }
+            
+            const lyricsData = await fetchLyrics(session.lastArtist, selectedSong.titre);
+            
+            if (!lyricsData.success) {
+                await sendMessage(senderId, `${DECORATIONS.fire} Tsy nahita tononkira ho an'ny "${selectedSong.titre}" ${DECORATIONS.fire}`);
+                return;
+            }
+            
+            if (lyricsData.image) {
+                await sendMessage(senderId, `${DECORATIONS.artist} ${lyricsData.artiste} ${DECORATIONS.artist}`);
+                await delay(300);
+                await sendImageAttachment(senderId, lyricsData.image);
+                await delay(500);
+            }
+            
+            const formattedLyrics = formatLyrics(lyricsData);
+            const messageParts = splitMessage(formattedLyrics);
+            
+            for (let i = 0; i < messageParts.length; i++) {
+                let partMessage = messageParts[i];
+                if (messageParts.length > 1) {
+                    partMessage = `${DECORATIONS.page} (${i + 1}/${messageParts.length})\n${DECORATIONS.divider}\n\n${partMessage}`;
+                }
+                await sendMessage(senderId, partMessage);
+                if (i < messageParts.length - 1) await delay(800);
+            }
+            return;
+        }
+        
         const parts = trimmedPrompt.split(/\s+/);
         
         if (parts.length === 1) {
             const artistName = parts[0];
-            const apiUrl = `https://tononkira-malagasy.vercel.app/tononkira?mpanakanto=${encodeURIComponent(artistName)}&uid=${senderId}`;
-            
-            console.log(`Appel API liste chansons: ${apiUrl}`);
-            
-            const response = await axios.get(apiUrl, { timeout: 30000 });
-            const data = response.data;
+            const data = await fetchSongList(artistName, senderId, 1);
             
             if (!data.success) {
                 await sendMessage(senderId, `${DECORATIONS.fire} Tsy nahita hira ho an'ny "${artistName}" ${DECORATIONS.fire}\n\nMba jereo tsara ny anaran'ny mpanakanto.`);
                 return;
             }
             
-            const formattedMessage = formatSongList(data, data.mpanakanto || artistName);
+            userSessions.set(senderId, {
+                lastArtist: artistName,
+                songs: data.chansons,
+                currentPage: 1,
+                totalPages: data.pagination.totalPages
+            });
+            
+            const formattedMessage = formatSongList(data, data.mpanakanto || artistName, 1);
             const messageParts = splitMessage(formattedMessage);
             
             for (let i = 0; i < messageParts.length; i++) {
                 await sendMessage(senderId, messageParts[i]);
-                if (i < messageParts.length - 1) {
-                    await delay(500);
-                }
+                if (i < messageParts.length - 1) await delay(500);
             }
             
         } else {
+            const artistPageMatch = trimmedPrompt.match(/^(\S+)\s+page\s*(\d+)$/i);
+            if (artistPageMatch) {
+                const artistName = artistPageMatch[1];
+                const pageNum = parseInt(artistPageMatch[2], 10);
+                
+                const data = await fetchSongList(artistName, senderId, pageNum);
+                
+                if (!data.success) {
+                    await sendMessage(senderId, `${DECORATIONS.fire} Tsy nahita hira ho an'ny "${artistName}" pejy ${pageNum} ${DECORATIONS.fire}`);
+                    return;
+                }
+                
+                userSessions.set(senderId, {
+                    lastArtist: artistName,
+                    songs: data.chansons,
+                    currentPage: pageNum,
+                    totalPages: data.pagination.totalPages
+                });
+                
+                const formattedMessage = formatSongList(data, data.mpanakanto || artistName, pageNum);
+                const messageParts = splitMessage(formattedMessage);
+                
+                for (let i = 0; i < messageParts.length; i++) {
+                    await sendMessage(senderId, messageParts[i]);
+                    if (i < messageParts.length - 1) await delay(500);
+                }
+                return;
+            }
+            
             const artistName = parts[0];
             const songTitle = parts.slice(1).join(' ');
             
-            const apiUrl = `https://tononkira-malagasy.vercel.app/hira?artiste=${encodeURIComponent(artistName)}&titre=${encodeURIComponent(songTitle)}`;
+            const lyricsData = await fetchLyrics(artistName, songTitle);
             
-            console.log(`Appel API paroles: ${apiUrl}`);
-            
-            const response = await axios.get(apiUrl, { timeout: 30000 });
-            const data = response.data;
-            
-            if (!data.success) {
+            if (!lyricsData.success) {
                 await sendMessage(senderId, `${DECORATIONS.fire} Tsy nahita tononkira ho an'ny "${songTitle}" avy amin'i "${artistName}" ${DECORATIONS.fire}\n\n${DECORATIONS.arrow} Mba jereo tsara ny lohateny sy ny anaran'ny mpanakanto.`);
                 return;
             }
             
-            if (data.image) {
-                await sendMessage(senderId, `${DECORATIONS.artist} ${data.artiste} ${DECORATIONS.artist}`);
+            if (lyricsData.image) {
+                await sendMessage(senderId, `${DECORATIONS.artist} ${lyricsData.artiste} ${DECORATIONS.artist}`);
                 await delay(300);
-                await sendImageAttachment(senderId, data.image);
+                await sendImageAttachment(senderId, lyricsData.image);
                 await delay(500);
             }
             
-            const formattedLyrics = formatLyrics(data);
+            const formattedLyrics = formatLyrics(lyricsData);
             const messageParts = splitMessage(formattedLyrics);
             
             for (let i = 0; i < messageParts.length; i++) {
                 let partMessage = messageParts[i];
-                
                 if (messageParts.length > 1) {
                     partMessage = `${DECORATIONS.page} (${i + 1}/${messageParts.length})\n${DECORATIONS.divider}\n\n${partMessage}`;
                 }
-                
                 await sendMessage(senderId, partMessage);
-                
-                if (i < messageParts.length - 1) {
-                    await delay(800);
-                }
+                if (i < messageParts.length - 1) await delay(800);
             }
         }
         
@@ -222,7 +342,9 @@ module.exports = async (senderId, prompt) => {
         
         errorMessage += `\n\n${DECORATIONS.arrow} Fampiasana:\n`;
         errorMessage += `${DECORATIONS.bullet} tononkira <mpanakanto> - Hitady lisitry ny hira\n`;
-        errorMessage += `${DECORATIONS.bullet} tononkira <mpanakanto> <lohateny> - Hitady tononkira`;
+        errorMessage += `${DECORATIONS.bullet} tononkira <mpanakanto> <lohateny> - Hitady tononkira\n`;
+        errorMessage += `${DECORATIONS.bullet} page <laharana> - Hanova pejy\n`;
+        errorMessage += `${DECORATIONS.bullet} <laharana> - Hisafidy hira`;
         
         await sendMessage(senderId, errorMessage);
     }
@@ -236,5 +358,11 @@ ${DECORATIONS.arrow} tononkira <mpanakanto> - Hitady lisitry ny hira
    Ohatra: tononkira mopcaan
    
 ${DECORATIONS.arrow} tononkira <mpanakanto> <lohateny> - Hitady tononkira
-   Ohatra: tononkira ambondrona ajanony`
+   Ohatra: tononkira ambondrona ajanony
+   
+${DECORATIONS.arrow} page <laharana> - Hanova pejy
+   Ohatra: page 2
+   
+${DECORATIONS.arrow} <laharana> - Hisafidy hira amin'ny lisitra
+   Ohatra: 3`
 };
