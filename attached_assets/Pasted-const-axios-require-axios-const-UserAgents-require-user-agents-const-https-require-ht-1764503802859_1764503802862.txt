@@ -1,0 +1,233 @@
+const axios = require("axios");
+const UserAgents = require("user-agents");
+const https = require("https");
+
+const BASE_URL = "https://boostgrams.com";
+const API_URL = `${BASE_URL}/action/`;
+
+const randomIP = () => 
+  Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join(".");
+
+const randomUA = () => 
+  new UserAgents({ deviceCategory: "mobile", platform: /(Android|iPhone)/ }).toString();
+
+let cookieJar = {};
+
+const cookiesToHeader = () => 
+  Object.entries(cookieJar).map(([k, v]) => `${k}=${v}`).join("; ");
+
+const mergeCookies = (res) => {
+  const cookies = res.headers["set-cookie"];
+  if (!cookies) return;
+  cookies.forEach((raw) => {
+    const [pair] = raw.split(";");
+    const [key, val] = pair.split("=");
+    if (key) cookieJar[key.trim()] = val || "";
+  });
+};
+
+const getHeaders = (isPage, ip, ua) => ({
+  "User-Agent": ua,
+  "Accept-Language": "en-US,en;q=0.9",
+  "X-Forwarded-For": ip,
+  "X-Real-IP": ip,
+  Cookie: cookiesToHeader(),
+  Accept: isPage 
+    ? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    : "application/json, */*;q=0.1",
+  ...(isPage ? {} : {
+    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "X-Requested-With": "XMLHttpRequest"
+  })
+});
+
+const buildBody = (url, token = "") => {
+  const p = new URLSearchParams();
+  p.append("ns_action", "freetool_start");
+  p.append("freetool[id]", "22");
+  p.append("freetool[token]", token);
+  p.append("freetool[process_item]", url);
+  p.append("freetool[quantity]", "100");
+  return p.toString();
+};
+
+const initSession = async (ip, ua) => {
+  cookieJar = {};
+  await axios.get(BASE_URL, { headers: getHeaders(true, ip, ua), timeout: 15000 });
+  await axios.get(`${BASE_URL}/free-tiktok-views/`, { 
+    headers: getHeaders(true, ip, ua), 
+    timeout: 15000 
+  });
+};
+
+const generateBypassUrl = (url) => {
+  const rand = Math.random().toString(36).substring(2);
+  const time = Date.now();
+  return `${url}?ref=boost${rand}${time}&t=${time}`;
+};
+
+const cleanUrl = (url) => {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return url;
+  }
+};
+
+const resolveShortUrl = (shortUrl) => 
+  new Promise((resolve, reject) => {
+    https.request(shortUrl, {
+      method: "HEAD",
+      headers: { "User-Agent": randomUA(), Accept: "*/*" }
+    }, (res) => {
+      const loc = res.headers.location;
+      if (!loc) return reject(new Error("No redirect"));
+      
+      if (loc.includes("tiktok.com/@") && loc.includes("/video/")) {
+        resolve(loc);
+      } else {
+        resolveShortUrl(loc).then(resolve).catch(reject);
+      }
+    }).on("error", reject).end();
+  });
+
+const prepareUrl = async (input) => {
+  if (input.includes("vt.tiktok.com") || input.includes("vm.tiktok.com")) {
+    try {
+      return cleanUrl(await resolveShortUrl(input));
+    } catch {
+      return cleanUrl(input);
+    }
+  }
+  return cleanUrl(input);
+};
+
+const boost = async (url) => {
+  const ip = randomIP();
+  const ua = randomUA();
+
+  try {
+    const bypassUrl = generateBypassUrl(url);
+    await initSession(ip, ua);
+
+    const step1 = await axios.post(API_URL, buildBody(bypassUrl), {
+      headers: getHeaders(false, ip, ua),
+      validateStatus: () => true,
+      timeout: 20000
+    });
+
+    mergeCookies(step1);
+
+    const token = step1.data?.freetool_process_token;
+    if (!token) return { success: false, stage: "token" };
+
+    const step2 = await axios.post(API_URL, buildBody(bypassUrl, token), {
+      headers: getHeaders(false, ip, ua),
+      validateStatus: () => true,
+      timeout: 20000
+    });
+
+    return (step2.data?.statu || step2.data?.success)
+      ? { success: true, views: 100, likes: 100 }
+      : { success: false, stage: "execute" };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+};
+
+const c = {
+  reset: "\x1b[0m",
+  bright: "\x1b[1m",
+  dim: "\x1b[2m",
+  cyan: "\x1b[36m",
+  green: "\x1b[32m",
+  red: "\x1b[31m",
+  yellow: "\x1b[33m",
+  magenta: "\x1b[35m",
+  blue: "\x1b[34m",
+  gray: "\x1b[90m"
+};
+
+const runTool = async (url) => {
+  console.clear();
+  
+  console.log(`\n${c.cyan}${c.bright}TikTok Booster${c.reset} ${c.dim}— Views + Likes Tool${c.reset}`);
+  console.log(`${c.gray}Created by JrDev06 (Jr Busaco)${c.reset}\n`);
+  
+  console.log(`${c.yellow}→${c.reset} Preparing URL...`);
+  const targetUrl = await prepareUrl(url);
+  console.log(`${c.green}✓${c.reset} Target ready\n`);
+  
+  console.log(`${c.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}`);
+  console.log(`${c.cyan}${targetUrl}${c.reset}`);
+  console.log(`${c.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}\n`);
+  
+  console.log(`${c.blue}Starting boost loop...${c.reset} ${c.dim}(100 views + 100 likes per boost)${c.reset}\n`);
+
+  let success = 0;
+  let failed = 0;
+  let totalViews = 0;
+  let totalLikes = 0;
+  let consecutiveFails = 0;
+
+  while (true) {
+    const result = await boost(targetUrl);
+
+    if (result.success) {
+      success++;
+      totalViews += 100;
+      totalLikes += 100;
+      consecutiveFails = 0;
+      
+      process.stdout.write(
+        `\r${c.green}✓${c.reset} Boost ${c.bright}#${success}${c.reset} ` +
+        `${c.dim}|${c.reset} ${c.cyan}${totalViews.toLocaleString()}${c.reset} views ` +
+        `${c.dim}|${c.reset} ${c.magenta}${totalLikes.toLocaleString()}${c.reset} likes ` +
+        `${c.dim}|${c.reset} ${c.red}${failed}${c.reset} fails     `
+      );
+      
+      if (success % 50 === 0) {
+        console.log(`\n\n${c.dim}─── Summary ───${c.reset}`);
+        console.log(`${c.green}${success}${c.reset} successful boosts`);
+        console.log(`${c.cyan}${totalViews.toLocaleString()}${c.reset} total views`);
+        console.log(`${c.magenta}${totalLikes.toLocaleString()}${c.reset} total likes`);
+        console.log(`${c.red}${failed}${c.reset} failed attempts\n`);
+      }
+    } else {
+      failed++;
+      consecutiveFails++;
+      const reason = result.stage || result.error || "unknown";
+      process.stdout.write(
+        `\r${c.red}✗${c.reset} Failed: ${reason} ${c.dim}(${consecutiveFails} consecutive)${c.reset}     `
+      );
+      
+      if (consecutiveFails >= 5) {
+        console.log(`\n\n${c.yellow}!${c.reset} Too many failures, cooling down for 5s...\n`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        consecutiveFails = 0;
+      }
+    }
+  }
+};
+
+if (require.main === module) {
+  const url = process.argv[2];
+  
+  if (!url) {
+    console.clear();
+    console.log(`\n${c.cyan}${c.bright}TikTok Booster${c.reset} ${c.dim}— Views + Likes Tool${c.reset}`);
+    console.log(`${c.gray}Created by JrDev06 (Jr Busaco)${c.reset}\n`);
+    console.log(`${c.red}✗${c.reset} No URL provided\n`);
+    console.log(`${c.dim}Usage:${c.reset}`);
+    console.log(`  node tool.js ${c.yellow}<tiktok_url>${c.reset}\n`);
+    console.log(`${c.dim}Example:${c.reset}`);
+    console.log(`  node tool.js ${c.cyan}https://vt.tiktok.com/ZSfPPXu3C/${c.reset}\n`);
+    process.exit(1);
+  }
+
+  runTool(url).catch((err) => {
+    console.error(`\n${c.red}✗${c.reset} Fatal error: ${err.message}\n`);
+    process.exit(1);
+  });
+}
