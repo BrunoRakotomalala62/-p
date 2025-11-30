@@ -276,73 +276,27 @@ Préparation du téléchargement...
         console.log('URL de téléchargement Master:', downloadUrl);
         
         try {
-            const downloadResponse = await axiosWithRetry(downloadUrl);
+            await sendMessage(senderId, {
+                attachment: {
+                    type: 'video',
+                    payload: {
+                        url: downloadUrl,
+                        is_reusable: true
+                    }
+                }
+            });
             
-            if (downloadResponse.data && downloadResponse.data.download_url) {
-                const directUrl = downloadResponse.data.download_url;
-                const videoSize = await getVideoSize(directUrl);
-                const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
-                
-                console.log(`Taille vidéo: ${sizeMB} MB`);
-                
-                if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
-                    await sendMessage(senderId, `
-📦 Taille: ${sizeMB} MB (< 25 MB)
-📤 Envoi direct de la vidéo...
-                    `.trim());
-                    
-                    try {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'video',
-                                payload: {
-                                    url: directUrl,
-                                    is_reusable: true
-                                }
-                            }
-                        });
-                        
-                        await sendMessage(senderId, `
+            await sendMessage(senderId, `
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
 📊 Qualité: ${quality}
-📦 Taille: ${sizeMB} MB
 
 🔄 Tapez "master" pour une nouvelle recherche
-                        `.trim());
-                        return;
-                    } catch (sendError) {
-                        console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
-                    }
-                }
-                
-                await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
-━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Qualité: ${quality}
-
-📥 Cliquez sur le lien ci-dessous pour télécharger :
-                `.trim());
-                
-                await sendMessage(senderId, directUrl);
-                
-            } else {
-                await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
-━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Qualité: ${quality}
-
-📥 Cliquez sur le lien ci-dessous pour télécharger :
-                `.trim());
-                
-                await sendMessage(senderId, downloadUrl);
-            }
-            
-        } catch (dlError) {
-            console.log('Erreur API download:', dlError.message);
+            `.trim());
+            return;
+        } catch (sendError) {
+            console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
             
             await sendMessage(senderId, `
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
@@ -354,16 +308,16 @@ Préparation du téléchargement...
             `.trim());
             
             await sendMessage(senderId, downloadUrl);
-        }
-        
-        await sendMessage(senderId, `
+            
+            await sendMessage(senderId, `
 💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
 1. Cliquez sur le lien
 2. Attendez le chargement
 3. La vidéo sera téléchargée automatiquement
 
 🔄 Tapez "master" pour une nouvelle recherche
-        `.trim());
+            `.trim());
+        }
 
     } catch (error) {
         console.error('Erreur téléchargement vidéo master:', error.message);
