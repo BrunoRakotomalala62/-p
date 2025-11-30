@@ -37,14 +37,16 @@ async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     }
 }
 
-async function sendLongMessage(senderId, text, delay = 1000) {
-    const chunks = splitMessage(text, MAX_MESSAGE_LENGTH);
-    
-    for (let i = 0; i < chunks.length; i++) {
-        await sendMessage(senderId, chunks[i]);
-        if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
+async function getVideoSize(url) {
+    try {
+        const response = await axios.head(url, {
+            timeout: 30000,
+            maxRedirects: 5
+        });
+        return parseInt(response.headers['content-length'] || '0');
+    } catch (error) {
+        console.log('Impossible de récupérer la taille:', error.message);
+        return 0;
     }
 }
 
@@ -247,36 +249,14 @@ Veuillez réessayer plus tard. 🔧
     }
 }
 
-async function getVideoSize(url) {
-    try {
-        const response = await axios({
-            method: 'GET',
-            url: url,
-            timeout: 30000,
-            maxRedirects: 5,
-            responseType: 'stream',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-        
-        const contentLength = parseInt(response.headers['content-length'] || '0');
-        response.data.destroy();
-        return contentLength;
-    } catch (error) {
-        console.log('Impossible de récupérer la taille:', error.message);
-        return 0;
-    }
-}
-
 async function handleVideoDownload(senderId, video, quality = '360p') {
     try {
         await sendMessage(senderId, `
 ⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre.substring(0, 50)}...
-📊 Qualité: ${quality}
-Vérification de la taille...
+📊 Qualité : ${quality}
+Préparation...
         `.trim());
 
         const videoUrl = video.video_url;
@@ -287,14 +267,18 @@ Vérification de la taille...
         const videoSize = await getVideoSize(downloadUrl);
         const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
         
-        console.log(`Taille vidéo Master: ${sizeMB} MB (${videoSize} bytes)`);
+        console.log(`Taille vidéo (${quality}): ${sizeMB} MB`);
         
-        if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
-            await sendMessage(senderId, `
-📦 Taille: ${sizeMB} MB (< 25 MB)
-📤 Envoi de la vidéo en pièce jointe...
-            `.trim());
-            
+        const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'En cours...';
+        
+        await sendMessage(senderId, `
+📦 ${sizeInfo}
+📤 Envoi de la vidéo et du lien...
+        `.trim());
+        
+        let videoSentSuccessfully = false;
+        
+        if (videoSize === 0 || videoSize < MAX_DIRECT_SEND_SIZE) {
             try {
                 await sendMessage(senderId, {
                     attachment: {
@@ -305,51 +289,32 @@ Vérification de la taille...
                         }
                     }
                 });
-                
-                await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
-━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Qualité: ${quality}
-📦 Taille: ${sizeMB} MB
-
-🔄 Tapez "master" pour une nouvelle recherche
-                `.trim());
-                return;
+                videoSentSuccessfully = true;
+                console.log('Vidéo envoyée avec succès en pièce jointe');
             } catch (sendError) {
-                console.log('Erreur envoi pièce jointe, envoi du lien:', sendError.message);
-                
-                await sendMessage(senderId, `
-⚠️ Impossible d'envoyer en pièce jointe.
-📥 Voici le lien de téléchargement :
-                `.trim());
-                
-                await sendMessage(senderId, downloadUrl);
+                console.log('Erreur envoi direct de la vidéo:', sendError.message);
+                videoSentSuccessfully = false;
             }
         } else {
-            const sizeInfo = videoSize > 0 ? `${sizeMB} MB (> 25 MB)` : 'inconnue';
-            await sendMessage(senderId, `
-📦 Taille: ${sizeInfo}
-📥 Envoi du lien de téléchargement...
-            `.trim());
-            
-            await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
-━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Qualité: ${quality}
-
-📥 Cliquez sur le lien ci-dessous pour télécharger :
-            `.trim());
-            
-            await sendMessage(senderId, downloadUrl);
+            console.log(`Vidéo trop volumineuse (${sizeMB} MB), envoi en pièce jointe non possible`);
         }
         
         await sendMessage(senderId, `
-💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
-1. Cliquez sur le lien
-2. Attendez le chargement
-3. La vidéo sera téléchargée automatiquement
+${videoSentSuccessfully ? '✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
+━━━━━━━━━━━━━━━━━━━
+🎬 ${video.titre}
+📊 Qualité : ${quality}
+📁 Format : MP4 (Vidéo)
+${videoSize > 0 ? `📦 Taille: ${sizeMB} MB` : ''}
+${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Vidéo > 25 MB, envoi direct impossible` : ''}
+
+🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
+        `.trim());
+        
+        await sendMessage(senderId, downloadUrl);
+        
+        await sendMessage(senderId, `
+💡 ${videoSentSuccessfully ? 'Vidéo envoyée + lien de téléchargement ci-dessus' : 'Cliquez sur le lien pour télécharger'}
 
 🔄 Tapez "master" pour une nouvelle recherche
         `.trim());
@@ -363,6 +328,7 @@ Vérification de la taille...
         await sendMessage(senderId, `
 ⚠️ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
 ━━━━━━━━━━━━━━━━━━━
+❌ Erreur: ${error.message}
 📥 Téléchargez via ce lien :
 ${downloadUrl}
         `.trim());
