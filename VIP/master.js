@@ -249,11 +249,20 @@ Veuillez réessayer plus tard. 🔧
 
 async function getVideoSize(url) {
     try {
-        const response = await axios.head(url, {
+        const response = await axios({
+            method: 'GET',
+            url: url,
             timeout: 30000,
-            maxRedirects: 5
+            maxRedirects: 5,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
         });
-        return parseInt(response.headers['content-length'] || '0');
+        
+        const contentLength = parseInt(response.headers['content-length'] || '0');
+        response.data.destroy();
+        return contentLength;
     } catch (error) {
         console.log('Impossible de récupérer la taille:', error.message);
         return 0;
@@ -267,7 +276,7 @@ async function handleVideoDownload(senderId, video, quality = '360p') {
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre.substring(0, 50)}...
 📊 Qualité: ${quality}
-Préparation du téléchargement...
+Vérification de la taille...
         `.trim());
 
         const videoUrl = video.video_url;
@@ -275,28 +284,54 @@ Préparation du téléchargement...
         
         console.log('URL de téléchargement Master:', downloadUrl);
         
-        try {
-            await sendMessage(senderId, {
-                attachment: {
-                    type: 'video',
-                    payload: {
-                        url: downloadUrl,
-                        is_reusable: true
-                    }
-                }
-            });
-            
+        const videoSize = await getVideoSize(downloadUrl);
+        const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
+        
+        console.log(`Taille vidéo Master: ${sizeMB} MB (${videoSize} bytes)`);
+        
+        if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
             await sendMessage(senderId, `
+📦 Taille: ${sizeMB} MB (< 25 MB)
+📤 Envoi de la vidéo en pièce jointe...
+            `.trim());
+            
+            try {
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: 'video',
+                        payload: {
+                            url: downloadUrl,
+                            is_reusable: true
+                        }
+                    }
+                });
+                
+                await sendMessage(senderId, `
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 ✅
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${video.titre}
 📊 Qualité: ${quality}
+📦 Taille: ${sizeMB} MB
 
 🔄 Tapez "master" pour une nouvelle recherche
+                `.trim());
+                return;
+            } catch (sendError) {
+                console.log('Erreur envoi pièce jointe, envoi du lien:', sendError.message);
+                
+                await sendMessage(senderId, `
+⚠️ Impossible d'envoyer en pièce jointe.
+📥 Voici le lien de téléchargement :
+                `.trim());
+                
+                await sendMessage(senderId, downloadUrl);
+            }
+        } else {
+            const sizeInfo = videoSize > 0 ? `${sizeMB} MB (> 25 MB)` : 'inconnue';
+            await sendMessage(senderId, `
+📦 Taille: ${sizeInfo}
+📥 Envoi du lien de téléchargement...
             `.trim());
-            return;
-        } catch (sendError) {
-            console.log('Erreur envoi direct, utilisation du lien:', sendError.message);
             
             await sendMessage(senderId, `
 ✅ 𝗩𝗜𝗗𝗘́𝗢 𝗣𝗥𝗘̂𝗧𝗘 ✅
@@ -308,16 +343,16 @@ Préparation du téléchargement...
             `.trim());
             
             await sendMessage(senderId, downloadUrl);
-            
-            await sendMessage(senderId, `
+        }
+        
+        await sendMessage(senderId, `
 💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
 1. Cliquez sur le lien
 2. Attendez le chargement
 3. La vidéo sera téléchargée automatiquement
 
 🔄 Tapez "master" pour une nouvelle recherche
-            `.trim());
-        }
+        `.trim());
 
     } catch (error) {
         console.error('Erreur téléchargement vidéo master:', error.message);
