@@ -7,8 +7,89 @@ const userSessionIds = {};
 // Stockage des images en attente
 const pendingImages = {};
 
+// Fonction pour convertir du texte en unicode gras
+function toBoldUnicode(text) {
+    const boldMap = {
+        'A': '𝐀', 'B': '𝐁', 'C': '𝐂', 'D': '𝐃', 'E': '𝐄', 'F': '𝐅', 'G': '𝐆', 'H': '𝐇', 'I': '𝐈', 'J': '𝐉',
+        'K': '𝐊', 'L': '𝐋', 'M': '𝐌', 'N': '𝐍', 'O': '𝐎', 'P': '𝐏', 'Q': '𝐐', 'R': '𝐑', 'S': '𝐒', 'T': '𝐓',
+        'U': '𝐔', 'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙',
+        'a': '𝐚', 'b': '𝐛', 'c': '𝐜', 'd': '𝐝', 'e': '𝐞', 'f': '𝐟', 'g': '𝐠', 'h': '𝐡', 'i': '𝐢', 'j': '𝐣',
+        'k': '𝐤', 'l': '𝐥', 'm': '𝐦', 'n': '𝐧', 'o': '𝐨', 'p': '𝐩', 'q': '𝐪', 'r': '𝐫', 's': '𝐬', 't': '𝐭',
+        'u': '𝐮', 'v': '𝐯', 'w': '𝐰', 'x': '𝐱', 'y': '𝐲', 'z': '𝐳',
+        '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'
+    };
+    return text.split('').map(char => boldMap[char] || char).join('');
+}
+
+// Fonction pour nettoyer les symboles LaTeX
+function cleanLatex(text) {
+    let cleaned = text;
+    
+    // Supprimer \( et \) pour les formules inline
+    cleaned = cleaned.replace(/\\\(/g, '');
+    cleaned = cleaned.replace(/\\\)/g, '');
+    
+    // Supprimer \[ et \] pour les formules display
+    cleaned = cleaned.replace(/\\\[/g, '');
+    cleaned = cleaned.replace(/\\\]/g, '');
+    
+    // Convertir \frac{a}{b} en a/b
+    cleaned = cleaned.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+    
+    // Supprimer les commandes LaTeX courantes
+    cleaned = cleaned.replace(/\\cdot/g, '×');
+    cleaned = cleaned.replace(/\\times/g, '×');
+    cleaned = cleaned.replace(/\\div/g, '÷');
+    cleaned = cleaned.replace(/\\pm/g, '±');
+    cleaned = cleaned.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
+    cleaned = cleaned.replace(/\\sqrt/g, '√');
+    cleaned = cleaned.replace(/\\pi/g, 'π');
+    cleaned = cleaned.replace(/\\infty/g, '∞');
+    cleaned = cleaned.replace(/\\alpha/g, 'α');
+    cleaned = cleaned.replace(/\\beta/g, 'β');
+    cleaned = cleaned.replace(/\\gamma/g, 'γ');
+    cleaned = cleaned.replace(/\\delta/g, 'δ');
+    cleaned = cleaned.replace(/\\theta/g, 'θ');
+    cleaned = cleaned.replace(/\\lambda/g, 'λ');
+    cleaned = cleaned.replace(/\\mu/g, 'μ');
+    cleaned = cleaned.replace(/\\sigma/g, 'σ');
+    cleaned = cleaned.replace(/\\omega/g, 'ω');
+    cleaned = cleaned.replace(/\\sum/g, '∑');
+    cleaned = cleaned.replace(/\\int/g, '∫');
+    cleaned = cleaned.replace(/\\leq/g, '≤');
+    cleaned = cleaned.replace(/\\geq/g, '≥');
+    cleaned = cleaned.replace(/\\neq/g, '≠');
+    cleaned = cleaned.replace(/\\approx/g, '≈');
+    cleaned = cleaned.replace(/\\rightarrow/g, '→');
+    cleaned = cleaned.replace(/\\leftarrow/g, '←');
+    cleaned = cleaned.replace(/\\Rightarrow/g, '⇒');
+    cleaned = cleaned.replace(/\\Leftarrow/g, '⇐');
+    
+    // Supprimer les exposants LaTeX ^{...} et les convertir
+    cleaned = cleaned.replace(/\^{([^}]+)}/g, '^$1');
+    cleaned = cleaned.replace(/\^(\d)/g, '^$1');
+    
+    // Supprimer les indices LaTeX _{...}
+    cleaned = cleaned.replace(/_{([^}]+)}/g, '_$1');
+    
+    // Nettoyer les commandes LaTeX restantes comme \text{...}
+    cleaned = cleaned.replace(/\\text\{([^}]+)\}/g, '$1');
+    cleaned = cleaned.replace(/\\textbf\{([^}]+)\}/g, '$1');
+    cleaned = cleaned.replace(/\\textit\{([^}]+)\}/g, '$1');
+    cleaned = cleaned.replace(/\\mathrm\{([^}]+)\}/g, '$1');
+    cleaned = cleaned.replace(/\\mathbf\{([^}]+)\}/g, '$1');
+    
+    // Supprimer les backslash restants devant les caractères
+    cleaned = cleaned.replace(/\\([a-zA-Z]+)/g, '$1');
+    
+    return cleaned;
+}
+
 // Fonction pour formater la réponse avec des caractères unicode et emojis
 function formatResponse(text) {
+    // D'abord nettoyer les symboles LaTeX
+    let formattedText = cleanLatex(text);
+    
     // Emojis contextuels selon les mots-clés
     const emojiMap = {
         'bonjour': '👋',
@@ -76,17 +157,18 @@ function formatResponse(text) {
         'pays': '🗺️'
     };
 
-    // Remplacer les titres commençant par # par des caractères unicode stylés
-    let formattedText = text;
+    // Remplacer les titres commençant par # par des titres en gras unicode
+    // Remplacer ### par sous-sous-titre en gras
+    formattedText = formattedText.replace(/^### (.+)$/gm, (match, title) => `▸▸▸ ${toBoldUnicode(title)}`);
     
-    // Remplacer ### par ▸▸▸ (sous-sous-titre)
-    formattedText = formattedText.replace(/^### (.+)$/gm, '▸▸▸ $1');
+    // Remplacer ## par sous-titre en gras
+    formattedText = formattedText.replace(/^## (.+)$/gm, (match, title) => `▸▸ ${toBoldUnicode(title)}`);
     
-    // Remplacer ## par ▸▸ (sous-titre)
-    formattedText = formattedText.replace(/^## (.+)$/gm, '▸▸ $1');
+    // Remplacer # par titre principal en gras
+    formattedText = formattedText.replace(/^# (.+)$/gm, (match, title) => `▸ ${toBoldUnicode(title)}`);
     
-    // Remplacer # par ▸ (titre principal)
-    formattedText = formattedText.replace(/^# (.+)$/gm, '▸ $1');
+    // Convertir **texte** en gras unicode
+    formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, (match, content) => toBoldUnicode(content));
     
     // Remplacer les listes à puces - par •
     formattedText = formattedText.replace(/^- /gm, '• ');
@@ -104,7 +186,7 @@ function formatResponse(text) {
         }
     }
     
-    // Embellir les sections avec des séparateurs
+    // Embellir les sections avec des séparateurs (les titres sont déjà en gras unicode)
     formattedText = formattedText.replace(/^▸ (.+)$/gm, '\n╔═══════════════════════\n║ ✨ $1\n╚═══════════════════════');
     formattedText = formattedText.replace(/^▸▸ (.+)$/gm, '\n┌───────────────\n│ 💫 $1\n└───────────────');
     formattedText = formattedText.replace(/^▸▸▸ (.+)$/gm, '\n├─ ⭐ $1');
