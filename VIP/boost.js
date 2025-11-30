@@ -78,6 +78,11 @@ const cleanUrl = (url) => {
   }
 };
 
+const formatTikTokUrl = (url) => {
+  if (!url) return url;
+  return url.replace(/tiktok\.com/g, 'tiktok. com');
+};
+
 const resolveShortUrl = (shortUrl) => 
   new Promise((resolve, reject) => {
     https.request(shortUrl, {
@@ -175,7 +180,7 @@ Aucun boost actif à arrêter.
 👁️ Vues totales : ${(userSession.totalViews || 0).toLocaleString()}
 ❤️ Likes totaux : ${(userSession.totalLikes || 0).toLocaleString()}
 
-🔗 URL : ${userSession.targetUrl || 'N/A'}
+🔗 URL : ${formatTikTokUrl(userSession.targetUrl) || 'N/A'}
 
 💡 Envoie "boost stop" pour arrêter
         `.trim());
@@ -266,7 +271,7 @@ Un boost est déjà actif pour ton compte.
     await sendMessage(senderId, `
 🚀 𝗕𝗢𝗢𝗦𝗧 𝗟𝗔𝗡𝗖𝗘́ ! 🚀
 ━━━━━━━━━━━━━━━━━━━
-🔗 URL : ${targetUrl}
+🔗 URL : ${formatTikTokUrl(targetUrl)}
 
 ⚡ +100 vues et +100 likes par cycle
 📊 Je t'enverrai des mises à jour régulières
@@ -346,7 +351,7 @@ Un boost est déjà actif pour ton compte.
 👁️ Vues ajoutées : ${(finalSession?.totalViews || 0).toLocaleString()}
 ❤️ Likes ajoutés : ${(finalSession?.totalLikes || 0).toLocaleString()}
 
-🔗 URL boostée : ${targetUrl}
+🔗 URL boostée : ${formatTikTokUrl(targetUrl)}
 
 💡 Utilise "boost <lien>" pour un nouveau boost
     `.trim());
