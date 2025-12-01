@@ -1,9 +1,21 @@
-const axios = require('axios');
+const puppeteer = require('puppeteer');
 const sendMessage = require('../handles/sendMessage');
 
 const userSessionIds = {};
 
 const pendingImages = {};
+
+let browserInstance = null;
+
+async function getBrowser() {
+    if (!browserInstance) {
+        browserInstance = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+    }
+    return browserInstance;
+}
 
 function toBoldUnicode(text) {
     const boldMap = {
@@ -23,12 +35,9 @@ function cleanLatex(text) {
     
     cleaned = cleaned.replace(/\\\(/g, '');
     cleaned = cleaned.replace(/\\\)/g, '');
-    
     cleaned = cleaned.replace(/\\\[/g, '');
     cleaned = cleaned.replace(/\\\]/g, '');
-    
     cleaned = cleaned.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
-    
     cleaned = cleaned.replace(/\\cdot/g, '×');
     cleaned = cleaned.replace(/\\times/g, '×');
     cleaned = cleaned.replace(/\\div/g, '÷');
@@ -56,18 +65,14 @@ function cleanLatex(text) {
     cleaned = cleaned.replace(/\\leftarrow/g, '←');
     cleaned = cleaned.replace(/\\Rightarrow/g, '⇒');
     cleaned = cleaned.replace(/\\Leftarrow/g, '⇐');
-    
     cleaned = cleaned.replace(/\^{([^}]+)}/g, '^$1');
     cleaned = cleaned.replace(/\^(\d)/g, '^$1');
-    
     cleaned = cleaned.replace(/_{([^}]+)}/g, '_$1');
-    
     cleaned = cleaned.replace(/\\text\{([^}]+)\}/g, '$1');
     cleaned = cleaned.replace(/\\textbf\{([^}]+)\}/g, '$1');
     cleaned = cleaned.replace(/\\textit\{([^}]+)\}/g, '$1');
     cleaned = cleaned.replace(/\\mathrm\{([^}]+)\}/g, '$1');
     cleaned = cleaned.replace(/\\mathbf\{([^}]+)\}/g, '$1');
-    
     cleaned = cleaned.replace(/\\([a-zA-Z]+)/g, '$1');
     
     return cleaned;
@@ -77,89 +82,32 @@ function formatResponse(text) {
     let formattedText = cleanLatex(text);
     
     const emojiMap = {
-        'bonjour': '👋',
-        'merci': '🙏',
-        'question': '❓',
-        'réponse': '💡',
-        'aide': '🆘',
-        'important': '⚠️',
-        'attention': '⚡',
-        'exemple': '📋',
-        'conseil': '💡',
-        'astuce': '✨',
-        'information': 'ℹ️',
-        'note': '📝',
-        'image': '🖼️',
-        'photo': '📸',
-        'analyse': '🔍',
-        'résultat': '✅',
-        'erreur': '❌',
-        'succès': '🎉',
-        'problème': '⚠️',
-        'solution': '💡',
-        'créer': '🎨',
-        'art': '🎨',
-        'design': '✨',
-        'couleur': '🎨',
-        'composition': '🖼️',
-        'chat': '🐱',
-        'chien': '🐕',
-        'animal': '🐾',
-        'nature': '🌿',
-        'fleur': '🌸',
-        'arbre': '🌳',
-        'ciel': '☁️',
-        'soleil': '☀️',
-        'lune': '🌙',
-        'étoile': '⭐',
-        'eau': '💧',
-        'feu': '🔥',
-        'terre': '🌍',
-        'musique': '🎵',
-        'livre': '📚',
-        'étude': '📖',
-        'science': '🔬',
-        'technologie': '💻',
-        'code': '💻',
-        'programmation': '⌨️',
-        'temps': '⏰',
-        'calendrier': '📅',
-        'histoire': '📜',
-        'futur': '🔮',
-        'idée': '💭',
-        'pensée': '🧠',
-        'cœur': '❤️',
-        'amour': '💕',
-        'joie': '😊',
-        'tristesse': '😢',
-        'bonheur': '😄',
-        'force': '💪',
-        'santé': '🏥',
-        'nourriture': '🍽️',
-        'voyage': '✈️',
-        'maison': '🏠',
-        'ville': '🏙️',
-        'pays': '🗺️'
+        'bonjour': '👋', 'merci': '🙏', 'question': '❓', 'réponse': '💡',
+        'aide': '🆘', 'important': '⚠️', 'attention': '⚡', 'exemple': '📋',
+        'conseil': '💡', 'astuce': '✨', 'information': 'ℹ️', 'note': '📝',
+        'image': '🖼️', 'photo': '📸', 'analyse': '🔍', 'résultat': '✅',
+        'erreur': '❌', 'succès': '🎉', 'problème': '⚠️', 'solution': '💡',
+        'créer': '🎨', 'art': '🎨', 'design': '✨', 'couleur': '🎨',
+        'chat': '🐱', 'chien': '🐕', 'animal': '🐾', 'nature': '🌿',
+        'fleur': '🌸', 'arbre': '🌳', 'ciel': '☁️', 'soleil': '☀️',
+        'lune': '🌙', 'étoile': '⭐', 'eau': '💧', 'feu': '🔥',
+        'musique': '🎵', 'livre': '📚', 'science': '🔬', 'code': '💻',
+        'temps': '⏰', 'histoire': '📜', 'idée': '💭', 'cœur': '❤️',
+        'amour': '💕', 'joie': '😊', 'bonheur': '😄', 'force': '💪',
+        'voyage': '✈️', 'maison': '🏠'
     };
 
     formattedText = formattedText.replace(/^### (.+)$/gm, (match, title) => `▸▸▸ ${toBoldUnicode(title)}`);
-    
     formattedText = formattedText.replace(/^## (.+)$/gm, (match, title) => `▸▸ ${toBoldUnicode(title)}`);
-    
     formattedText = formattedText.replace(/^# (.+)$/gm, (match, title) => `▸ ${toBoldUnicode(title)}`);
-    
     formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, (match, content) => toBoldUnicode(content));
-    
     formattedText = formattedText.replace(/^- /gm, '• ');
     
     for (const [keyword, emoji] of Object.entries(emojiMap)) {
         const regex = new RegExp(`\\b${keyword}s?\\b`, 'gi');
         if (regex.test(formattedText) && !formattedText.includes(emoji)) {
-            const match = formattedText.match(regex);
-            if (match) {
-                formattedText = formattedText.replace(regex, (matched) => `${matched} ${emoji}`);
-                break;
-            }
+            formattedText = formattedText.replace(regex, (matched) => `${matched} ${emoji}`);
+            break;
         }
     }
     
@@ -197,7 +145,7 @@ async function sendLongMessage(senderId, message) {
         let endIndex = startIndex + MAX_MESSAGE_LENGTH;
 
         if (endIndex < message.length) {
-            const separators = ['\n\n', '\n', '. ', ', ', ' • ', '• ', ' : ', ' - ', ' ', '! ', '? ', '.\n', ',\n', '!\n', '?\n'];
+            const separators = ['\n\n', '\n', '. ', ', ', ' • ', '• ', ' : ', ' - ', ' '];
             let bestBreakPoint = -1;
 
             for (const separator of separators) {
@@ -232,6 +180,47 @@ async function sendLongMessage(senderId, message) {
     }
 }
 
+async function callPuterAPI(prompt, imageUrl = null, uid = null) {
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    
+    try {
+        let url = `https://puter-gold-phi.vercel.app/puter?prompt=${encodeURIComponent(prompt)}`;
+        if (imageUrl) {
+            url += `&image_url=${encodeURIComponent(imageUrl)}`;
+        }
+        if (uid) {
+            url += `&uid=${encodeURIComponent(uid)}`;
+        }
+        
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+        
+        await page.waitForFunction(
+            () => {
+                const pre = document.getElementById('result');
+                if (!pre) return false;
+                const text = pre.textContent;
+                try {
+                    const data = JSON.parse(text);
+                    return data.response !== undefined || data.error !== undefined;
+                } catch {
+                    return false;
+                }
+            },
+            { timeout: 60000 }
+        );
+        
+        const result = await page.evaluate(() => {
+            const pre = document.getElementById('result');
+            return JSON.parse(pre.textContent);
+        });
+        
+        return result;
+    } finally {
+        await page.close();
+    }
+}
+
 module.exports = async (senderId, prompt, api, imageAttachments) => { 
     try {
         if (prompt === "RESET_CONVERSATION") {
@@ -246,7 +235,6 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
         if (imageAttachments && imageAttachments.length > 0) {
             pendingImages[senderId] = imageAttachments[0].payload.url;
-
             await sendMessage(senderId, "✨📸 J'ai bien reçu votre image! Que voulez-vous savoir à propos de cette photo? Posez-moi votre question! 🔍🖼️");
             return { skipCommandCheck: true };
         }
@@ -258,48 +246,35 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
         await sendMessage(senderId, "✨🧠 Analyse en cours... ⏳💫");
 
-        let apiUrl;
+        let imageUrl = null;
         if (pendingImages[senderId]) {
-            apiUrl = `https://puter-gold-phi.vercel.app/puter?prompt=${encodeURIComponent(prompt)}&image_url=${encodeURIComponent(pendingImages[senderId])}&uid=${senderId}`;
+            imageUrl = pendingImages[senderId];
             delete pendingImages[senderId];
-        } else {
-            apiUrl = `https://puter-gold-phi.vercel.app/puter?prompt=${encodeURIComponent(prompt)}`;
         }
 
-        const response = await axios.get(apiUrl, {
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0'
-            }
-        });
+        const result = await callPuterAPI(prompt, imageUrl, senderId);
 
         let reply = '';
-        if (response.data && response.data.response && response.data.response.message && response.data.response.message.content) {
-            reply = response.data.response.message.content;
-        } else if (response.data && response.data.result) {
-            reply = response.data.result;
-        } else if (response.data && response.data.response) {
-            reply = typeof response.data.response === 'string' ? response.data.response : JSON.stringify(response.data.response);
+        if (result.error) {
+            reply = `Erreur: ${result.message || result.error}`;
+        } else if (result.response && result.response.message && result.response.message.content) {
+            reply = result.response.message.content;
+        } else if (result.response && typeof result.response === 'string') {
+            reply = result.response;
         } else {
-            console.error('Structure de réponse inattendue:', JSON.stringify(response.data));
+            console.error('Structure de réponse inattendue:', JSON.stringify(result));
             reply = "Désolé, j'ai reçu une réponse inattendue de l'API.";
         }
 
         const formattedReply = formatResponse(reply);
-
         await sendLongMessage(senderId, formattedReply);
 
     } catch (error) {
         console.error("Erreur lors de l'appel à l'API Chat:", error.message);
-        console.error("Détails de l'erreur:", error.response?.data || error);
 
         let errorMessage = '';
-        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-            errorMessage = `⏱️ L'API met trop de temps à répondre. L'analyse peut prendre jusqu'à 30 secondes pour les images complexes. Veuillez réessayer.`;
-        } else if (error.response) {
-            errorMessage = `❌ L'API a retourné une erreur (Code: ${error.response.status}).\nDétails: ${JSON.stringify(error.response.data)}`;
-        } else if (error.request) {
-            errorMessage = `🌐 Impossible de contacter l'API. Vérifiez votre connexion internet.`;
+        if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+            errorMessage = `⏱️ L'API met trop de temps à répondre. Veuillez réessayer.`;
         } else {
             errorMessage = `⚠️ Erreur: ${error.message}`;
         }
@@ -310,9 +285,8 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 ${errorMessage}
 
 🔄 Suggestions:
-• Vérifiez votre connexion internet
 • Réessayez dans quelques instants
-• Pour les images, assurez-vous qu'elles sont accessibles publiquement
+• Pour les images, assurez-vous qu'elles sont accessibles
 
 💡 Si le problème persiste, contactez l'administrateur.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
