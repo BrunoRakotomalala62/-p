@@ -186,9 +186,9 @@ async function handleVideoSearch(senderId, query, page = 1) {
             
             await sendMessage(senderId, headerText);
             
-            const maxVideos = Math.min(videos.length, 15);
+            const totalVideos = videos.length;
             
-            for (let i = 0; i < maxVideos; i++) {
+            for (let i = 0; i < totalVideos; i++) {
                 const video = videos[i];
                 const title = video.titre.length > 80 ? video.titre.substring(0, 77) + '...' : video.titre;
                 const duration = video.duration || '';
@@ -222,7 +222,7 @@ async function handleVideoSearch(senderId, query, page = 1) {
             
             let footerText = `
 ━━━━━━━━━━━━━━━━━━━
-📥 Envoyez le numéro (1-${maxVideos}) pour télécharger
+📥 Envoyez le numéro (1-${totalVideos}) pour télécharger
 
 🔄 Commandes :
 • xn page <numéro> - Changer de page
