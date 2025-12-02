@@ -1,21 +1,9 @@
-const puppeteer = require('puppeteer');
+const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
 const userSessionIds = {};
 
 const pendingImages = {};
-
-let browserInstance = null;
-
-async function getBrowser() {
-    if (!browserInstance) {
-        browserInstance = await puppeteer.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        });
-    }
-    return browserInstance;
-}
 
 function toBoldUnicode(text) {
     const boldMap = {
@@ -32,7 +20,6 @@ function toBoldUnicode(text) {
 
 function cleanLatex(text) {
     let cleaned = text;
-    
     cleaned = cleaned.replace(/\\\(/g, '');
     cleaned = cleaned.replace(/\\\)/g, '');
     cleaned = cleaned.replace(/\\\[/g, '');
@@ -74,7 +61,6 @@ function cleanLatex(text) {
     cleaned = cleaned.replace(/\\mathrm\{([^}]+)\}/g, '$1');
     cleaned = cleaned.replace(/\\mathbf\{([^}]+)\}/g, '$1');
     cleaned = cleaned.replace(/\\([a-zA-Z]+)/g, '$1');
-    
     return cleaned;
 }
 
@@ -123,7 +109,7 @@ function formatResponse(text) {
     
     const footer = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 Propulsé par GPT-5-nano | ⚡ Rapide & Précis
+💡 Propulsé par GPT-4.1 Nano | ⚡ Rapide & Précis
 `;
     
     return header + formattedText + footer;
@@ -180,47 +166,6 @@ async function sendLongMessage(senderId, message) {
     }
 }
 
-async function callPuterAPI(prompt, imageUrl = null, uid = null) {
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-    
-    try {
-        let url = `https://puter-gold-phi.vercel.app/puter?prompt=${encodeURIComponent(prompt)}`;
-        if (imageUrl) {
-            url += `&image_url=${encodeURIComponent(imageUrl)}`;
-        }
-        if (uid) {
-            url += `&uid=${encodeURIComponent(uid)}`;
-        }
-        
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
-        
-        await page.waitForFunction(
-            () => {
-                const pre = document.getElementById('result');
-                if (!pre) return false;
-                const text = pre.textContent;
-                try {
-                    const data = JSON.parse(text);
-                    return data.response !== undefined || data.error !== undefined;
-                } catch {
-                    return false;
-                }
-            },
-            { timeout: 60000 }
-        );
-        
-        const result = await page.evaluate(() => {
-            const pre = document.getElementById('result');
-            return JSON.parse(pre.textContent);
-        });
-        
-        return result;
-    } finally {
-        await page.close();
-    }
-}
-
 module.exports = async (senderId, prompt, api, imageAttachments) => { 
     try {
         if (prompt === "RESET_CONVERSATION") {
@@ -240,29 +185,34 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
         }
 
         if (!prompt || prompt.trim() === '') {
-            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Chat, votre assistant IA propulsé par GPT-5-nano. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question!");
+            await sendMessage(senderId, "🤖✨ Bonjour! Je suis Chat, votre assistant IA propulsé par GPT-4.1 Nano. Comment puis-je vous aider aujourd'hui? Posez-moi n'importe quelle question!");
             return;
         }
 
         await sendMessage(senderId, "✨🧠 Analyse en cours... ⏳💫");
 
-        let imageUrl = null;
+        let apiUrl;
         if (pendingImages[senderId]) {
-            imageUrl = pendingImages[senderId];
+            apiUrl = `https://norch-project.gleeze.com/api/Gpt4.1nano?text=${encodeURIComponent(prompt)}&imageUrl=${encodeURIComponent(pendingImages[senderId])}&uid=${senderId}`;
             delete pendingImages[senderId];
+        } else {
+            apiUrl = `https://norch-project.gleeze.com/api/Gpt4.1nano?text=${encodeURIComponent(prompt)}&uid=${senderId}`;
         }
 
-        const result = await callPuterAPI(prompt, imageUrl, senderId);
+        const response = await axios.get(apiUrl, {
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
 
         let reply = '';
-        if (result.error) {
-            reply = `Erreur: ${result.message || result.error}`;
-        } else if (result.response && result.response.message && result.response.message.content) {
-            reply = result.response.message.content;
-        } else if (result.response && typeof result.response === 'string') {
-            reply = result.response;
+        if (response.data && response.data.success && response.data.result) {
+            reply = response.data.result;
+        } else if (response.data && response.data.result) {
+            reply = response.data.result;
         } else {
-            console.error('Structure de réponse inattendue:', JSON.stringify(result));
+            console.error('Structure de réponse inattendue:', JSON.stringify(response.data));
             reply = "Désolé, j'ai reçu une réponse inattendue de l'API.";
         }
 
@@ -271,10 +221,15 @@ module.exports = async (senderId, prompt, api, imageAttachments) => {
 
     } catch (error) {
         console.error("Erreur lors de l'appel à l'API Chat:", error.message);
+        console.error("Détails de l'erreur:", error.response?.data || error);
 
         let errorMessage = '';
-        if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
             errorMessage = `⏱️ L'API met trop de temps à répondre. Veuillez réessayer.`;
+        } else if (error.response) {
+            errorMessage = `❌ L'API a retourné une erreur (Code: ${error.response.status}).`;
+        } else if (error.request) {
+            errorMessage = `🌐 Impossible de contacter l'API. Vérifiez votre connexion internet.`;
         } else {
             errorMessage = `⚠️ Erreur: ${error.message}`;
         }
@@ -298,6 +253,6 @@ ${errorMessage}
 
 module.exports.info = {
     name: "chat",
-    description: "Discutez avec Chat, une IA avancée propulsée par GPT-5-nano via Puter.",
+    description: "Discutez avec Chat, une IA avancée propulsée par GPT-4.1 Nano.",
     usage: "Envoyez 'chat <question>' pour discuter avec Chat, ou envoyez une image puis posez une question."
 };
