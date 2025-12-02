@@ -186,7 +186,7 @@ async function handleVideoSearch(senderId, query, page = 1) {
             
             await sendMessage(senderId, headerText);
             
-            const maxVideos = Math.min(videos.length, 10);
+            const maxVideos = Math.min(videos.length, 15);
             
             for (let i = 0; i < maxVideos; i++) {
                 const video = videos[i];
