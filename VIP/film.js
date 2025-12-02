@@ -7,11 +7,11 @@ const userSessions = new Map();
 
 const QUALITY_OPTIONS = ['360p', '720p'];
 
-async function axiosWithRetry(url, options = {}, retries = 3) {
+async function axiosWithRetry(url, options = {}, retries = 5) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             const response = await axios.get(url, {
-                timeout: 60000,
+                timeout: 120000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 },
@@ -25,9 +25,11 @@ async function axiosWithRetry(url, options = {}, retries = 3) {
                 throw error;
             }
             
-            if (error.response && (error.response.status === 502 || error.response.status === 503 || error.response.status === 504)) {
-                console.log(`Attente 3000ms avant nouvelle tentative...`);
-                await new Promise(resolve => setTimeout(resolve, 3000));
+            const status = error.response?.status;
+            if (status === 404 || status === 502 || status === 503 || status === 504 || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+                const waitTime = attempt * 5000;
+                console.log(`Attente ${waitTime}ms avant nouvelle tentative (serveur en réveil)...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
             } else {
                 throw error;
             }
