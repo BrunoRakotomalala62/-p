@@ -1,9 +1,60 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://clip-dai.onrender.com';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
+const TEMP_DIR = '/tmp/clips';
+
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+async function downloadFileLocally(url, filename) {
+    try {
+        const filePath = path.join(TEMP_DIR, filename);
+        const response = await axios({
+            method: 'GET',
+            url: url,
+            responseType: 'stream',
+            timeout: 120000,
+            maxRedirects: 5,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        const writer = fs.createWriteStream(filePath);
+        response.data.pipe(writer);
+        
+        return new Promise((resolve, reject) => {
+            writer.on('finish', () => {
+                const stats = fs.statSync(filePath);
+                console.log(`Fichier téléchargé: ${filePath} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
+                resolve({ filePath, size: stats.size });
+            });
+            writer.on('error', reject);
+        });
+    } catch (error) {
+        console.error('Erreur téléchargement local:', error.message);
+        throw error;
+    }
+}
+
+function cleanupFile(filePath) {
+    setTimeout(() => {
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                console.log(`Fichier temporaire supprimé: ${filePath}`);
+            }
+        } catch (error) {
+            console.error('Erreur suppression fichier:', error.message);
+        }
+    }, 120000);
+}
 
 const userSessions = new Map();
 
@@ -304,49 +355,31 @@ Veuillez patienter... 🕐
         
         console.log('URL de téléchargement:', downloadUrl);
         
-        if (format === 'MP3') {
-            let audioSentSuccessfully = false;
+        const MAX_FB_SIZE = 25 * 1024 * 1024;
+        const fileExt = format === 'MP3' ? 'mp3' : 'mp4';
+        const safeTitle = clipTitle.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
+        const filename = `${safeTitle}_${Date.now()}.${fileExt}`;
+        
+        let localFile = null;
+        let fileSentSuccessfully = false;
+        
+        try {
+            console.log('Téléchargement local du fichier...');
+            localFile = await downloadFileLocally(downloadUrl, filename);
+            console.log(`Fichier téléchargé: ${localFile.filePath} (${(localFile.size / (1024 * 1024)).toFixed(2)} MB)`);
             
-            try {
-                const sendResult = await sendMessage(senderId, {
-                    attachment: {
-                        type: 'audio',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
-                        }
-                    }
-                });
+            if (localFile.size > MAX_FB_SIZE) {
+                console.log(`Fichier trop volumineux (${(localFile.size / (1024 * 1024)).toFixed(2)} MB > 25 MB)`);
+                cleanupFile(localFile.filePath);
                 
-                if (sendResult && sendResult.success) {
-                    audioSentSuccessfully = true;
-                    console.log('Audio MP3 envoyé avec succès en pièce jointe');
-                } else {
-                    console.log('Échec envoi audio:', sendResult?.error || 'Erreur inconnue');
-                }
-            } catch (sendError) {
-                console.log('Erreur envoi direct de l\'audio:', sendError.message);
-            }
-            
-            if (audioSentSuccessfully) {
                 await sendMessage(senderId, `
-✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́ !
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
-📁 Format : MP3 (Audio)
+📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
 
-🎵 Votre audio a été envoyé ci-dessus !
-
-🔄 Tapez "clip" pour une nouvelle recherche
-                `.trim());
-            } else {
-                await sendMessage(senderId, `
-📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗠𝗣𝟯
-━━━━━━━━━━━━━━━━━━━
-🎬 ${clipTitle}
-📁 Format : MP3 (Audio)
-
-⚠️ L'envoi direct a échoué.
+⚠️ Fichier trop volumineux (${(localFile.size / (1024 * 1024)).toFixed(1)} MB).
+📱 Facebook limite à 25 MB maximum.
 🔗 Utilisez le lien ci-dessous :
                 `.trim());
                 
@@ -357,62 +390,72 @@ Veuillez patienter... 🕐
 
 🔄 Tapez "clip" pour une nouvelle recherche
                 `.trim());
+                return;
             }
             
+            const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+                ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+                : `http://localhost:${process.env.PORT || 5000}`;
+            const localUrl = `${baseUrl}/temp/clips/${filename}`;
+            
+            console.log('URL locale générée:', localUrl);
+            
+            const attachmentType = format === 'MP3' ? 'audio' : 'video';
+            
+            const sendResult = await sendMessage(senderId, {
+                attachment: {
+                    type: attachmentType,
+                    payload: {
+                        url: localUrl,
+                        is_reusable: false
+                    }
+                }
+            });
+            
+            if (sendResult && sendResult.success) {
+                fileSentSuccessfully = true;
+                console.log(`${format} envoyé avec succès via URL locale`);
+            } else {
+                console.log(`Échec envoi ${format} via URL locale:`, sendResult?.error || 'Erreur inconnue');
+            }
+            
+        } catch (downloadError) {
+            console.error('Erreur lors du téléchargement local:', downloadError.message);
+        }
+        
+        if (fileSentSuccessfully) {
+            if (localFile) cleanupFile(localFile.filePath);
+            
+            await sendMessage(senderId, `
+✅ ${format === 'MP3' ? '𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯' : '𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰'} 𝗘𝗡𝗩𝗢𝗬𝗘́${format === 'MP4' ? 'E' : ''} !
+━━━━━━━━━━━━━━━━━━━
+🎬 ${clipTitle}
+📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
+
+${format === 'MP3' ? '🎵' : '🎬'} Votre fichier a été envoyé ci-dessus !
+
+🔄 Tapez "clip" pour une nouvelle recherche
+            `.trim());
         } else {
-            let videoSentSuccessfully = false;
+            if (localFile) cleanupFile(localFile.filePath);
             
-            try {
-                const sendResult = await sendMessage(senderId, {
-                    attachment: {
-                        type: 'video',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
-                        }
-                    }
-                });
-                
-                if (sendResult && sendResult.success) {
-                    videoSentSuccessfully = true;
-                    console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
-                } else {
-                    console.log('Échec envoi vidéo:', sendResult?.error || 'Erreur inconnue');
-                }
-            } catch (sendError) {
-                console.log('Erreur envoi direct de la vidéo:', sendError.message);
-            }
-            
-            if (videoSentSuccessfully) {
-                await sendMessage(senderId, `
-✅ 𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 !
+            await sendMessage(senderId, `
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
-📁 Format : MP4 (Vidéo)
-
-🎬 Votre vidéo a été envoyée ci-dessus !
-
-🔄 Tapez "clip" pour une nouvelle recherche
-                `.trim());
-            } else {
-                await sendMessage(senderId, `
-📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗠𝗣𝟰
-━━━━━━━━━━━━━━━━━━━
-🎬 ${clipTitle}
-📁 Format : MP4 (Vidéo)
+📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
 
 ⚠️ L'envoi direct a échoué.
 🔗 Utilisez le lien ci-dessous :
-                `.trim());
-                
-                await sendMessage(senderId, downloadUrl);
-                
-                await sendMessage(senderId, `
+            `.trim());
+            
+            await sendMessage(senderId, downloadUrl);
+            
+            await sendMessage(senderId, `
 💡 Cliquez sur le lien pour télécharger.
 
 🔄 Tapez "clip" pour une nouvelle recherche
-                `.trim());
-            }
+            `.trim());
         }
 
     } catch (error) {
