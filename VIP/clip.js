@@ -7,6 +7,43 @@ const API_BASE = 'https://clip-dai.onrender.com';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 
+const EMOJIS = {
+    music: ['🎵', '🎶', '🎼', '🎧', '🎤', '🎸', '🎹', '🎺', '🎻'],
+    video: ['🎬', '🎥', '📽️', '🎞️', '📀', '🎦', '📹', '🎭'],
+    success: ['✨', '🌟', '💫', '⭐', '🔥', '💎', '🏆', '👑'],
+    loading: ['⏳', '🕐', '🕑', '🕒', '🕓', '🔄', '⚡', '💨'],
+    download: ['📥', '💾', '📲', '🔽', '⬇️', '📁', '💿']
+};
+
+function getRandomEmoji(category) {
+    const emojis = EMOJIS[category] || EMOJIS.success;
+    return emojis[Math.floor(Math.random() * emojis.length)];
+}
+
+function generateProgressBar(percent) {
+    const filled = Math.floor(percent / 10);
+    const empty = 10 - filled;
+    return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function generateDynamicBorder() {
+    const borders = [
+        '━━━━━━━━━━━━━━━━━━━━━━━',
+        '═══════════════════════',
+        '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬',
+        '◆━━━━━━━━━━━━━━━━━━━━━◆',
+        '✦═══════════════════════✦',
+        '◈━━━━━━━━━━━━━━━━━━━━━◈'
+    ];
+    return borders[Math.floor(Math.random() * borders.length)];
+}
+
 async function downloadToBuffer(url) {
     try {
         console.log('Téléchargement en mémoire:', url);
@@ -134,6 +171,18 @@ function normalizeFormat(input) {
     return FORMAT_OPTIONS.includes(normalizedInput) ? normalizedInput : 'MP4';
 }
 
+function generateTimestamp() {
+    const now = new Date();
+    const options = { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    };
+    return now.toLocaleDateString('fr-FR', options);
+}
+
 module.exports = async (senderId, prompt, api) => {
     try {
         if (prompt === 'RESET_CONVERSATION') {
@@ -150,15 +199,19 @@ module.exports = async (senderId, prompt, api) => {
                     const format = normalizeFormat(input);
                     await handleClipDownload(senderId, userSession.selectedClip, format);
                 } else {
+                    const border = generateDynamicBorder();
                     await sendMessage(senderId, `
-❌ 𝗙𝗼𝗿𝗺𝗮𝘁 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Veuillez choisir un format valide :
+❌ 𝗙𝗢𝗥𝗠𝗔𝗧 𝗜𝗡𝗩𝗔𝗟𝗜𝗗𝗘 ❌
+${border}
 
-🎵 MP3 - Audio uniquement
-🎬 MP4 - Vidéo complète
+${getRandomEmoji('music')} Veuillez choisir un format valide :
 
-💡 Tapez simplement : MP3 ou MP4
+┌─────────────────────┐
+│  🎵 𝗠𝗣𝟯 ─ Audio     │
+│  🎬 𝗠𝗣𝟰 ─ Vidéo     │
+└─────────────────────┘
+
+💡 Tapez simplement : 𝗠𝗣𝟯 ou 𝗠𝗣𝟰
                     `.trim());
                 }
             } else if (/^\d+$/.test(input) && userSession.clips && userSession.clips.length > 0) {
@@ -173,65 +226,111 @@ Veuillez choisir un format valide :
                         pendingFormat: true
                     });
                     
+                    const border = generateDynamicBorder();
+                    const emoji1 = getRandomEmoji('video');
+                    const emoji2 = getRandomEmoji('success');
+                    
                     await sendMessage(senderId, `
-🎬 𝗖𝗟𝗜𝗣 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ 🎬
-━━━━━━━━━━━━━━━━━━━
-📹 ${selectedClip.Titre || selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
-⏱️ Durée : ${formatDuration(selectedClip.Duree || selectedClip.duree || selectedClip.duration)}
+${emoji1} 𝗖𝗟𝗜𝗣 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ ${emoji2}
+${border}
 
-🎵 𝗤𝘂𝗲𝗹 𝘁𝘆𝗽𝗲 𝘀𝗼𝘂𝗵𝗮𝗶𝘁𝗲𝘇-𝘃𝗼𝘂𝘀 ?
-━━━━━━━━━━━━━━━━━━━
+📹 𝗧𝗶𝘁𝗿𝗲 : ${selectedClip.Titre || selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
 
-🎵 MP3 - Télécharger l'audio uniquement
-🎬 MP4 - Télécharger la vidéo complète
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${formatDuration(selectedClip.Duree || selectedClip.duree || selectedClip.duration)}
 
-💡 Envoyez : MP3 ou MP4
+${border}
+${getRandomEmoji('music')} 𝗖𝗵𝗼𝗶𝘀𝗶𝘀𝘀𝗲𝘇 𝘃𝗼𝘁𝗿𝗲 𝗳𝗼𝗿𝗺𝗮𝘁 :
+${border}
+
+┌───────────────────────────┐
+│                           │
+│  🎵 𝗠𝗣𝟯 ─ Audio seul      │
+│     └─ Musique légère     │
+│                           │
+│  🎬 𝗠𝗣𝟰 ─ Vidéo HD        │
+│     └─ Qualité optimale   │
+│                           │
+└───────────────────────────┘
+
+💬 𝗘𝗻𝘃𝗼𝘆𝗲𝘇 : MP3 ou MP4
                     `.trim());
                 } else {
                     await sendMessage(senderId, `
 ❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Veuillez choisir un numéro entre 1 et ${userSession.clips.length}.
+${generateDynamicBorder()}
+
+⚠️ Veuillez choisir un numéro entre 𝟏 et ${userSession.clips.length}.
+
+💡 Réessayez avec un numéro valide
                     `.trim());
                 }
             } else {
                 await handleClipSearch(senderId, input);
             }
         } else {
+            const border = generateDynamicBorder();
+            const emoji1 = getRandomEmoji('video');
+            const emoji2 = getRandomEmoji('music');
+            
             await sendMessage(senderId, `
-🎬 𝗖𝗟𝗜𝗣 𝗗𝗔𝗜𝗟𝗬𝗠𝗢𝗧𝗜𝗢𝗡 🎬
-━━━━━━━━━━━━━━━━━━━
-Recherchez et téléchargez des clips Dailymotion !
+${emoji1} 𝗖𝗟𝗜𝗣 𝗗𝗔𝗜𝗟𝗬𝗠𝗢𝗧𝗜𝗢𝗡 ${emoji2}
+${border}
 
-📝 𝗨𝘁𝗶𝗹𝗶𝘀𝗮𝘁𝗶𝗼𝗻 :
-clip <terme de recherche>
+🔍 𝗥𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲𝘇 𝗲𝘁 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝘇 𝘃𝗼𝘀 𝗰𝗹𝗶𝗽𝘀 !
 
-💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 :
-clip Naël clip
-clip Odyai
+${border}
+📝 𝗨𝗧𝗜𝗟𝗜𝗦𝗔𝗧𝗜𝗢𝗡 :
+${border}
 
-🔢 𝗘́𝘁𝗮𝗽𝗲𝘀 :
-1️⃣ Recherchez un clip
-2️⃣ Envoyez le numéro du clip
-3️⃣ Choisissez MP3 ou MP4
-4️⃣ Recevez votre fichier !
+➤ clip <terme de recherche>
+
+💡 𝗘𝗫𝗘𝗠𝗣𝗟𝗘𝗦 :
+   • clip Naël clip
+   • clip Odyai
+   • clip Arnaah
+
+${border}
+🔢 𝗘́𝗧𝗔𝗣𝗘𝗦 :
+${border}
+
+   1️⃣ Recherchez un clip
+   2️⃣ Sélectionnez le numéro
+   3️⃣ Choisissez MP3 ou MP4
+   4️⃣ Recevez votre fichier + lien !
+
+${getRandomEmoji('success')} 𝗩𝗜𝗣 𝗘𝗫𝗖𝗟𝗨𝗦𝗜𝗙 ${getRandomEmoji('success')}
             `.trim());
         }
 
     } catch (error) {
         console.error('Erreur commande clip:', error.message);
         await sendMessage(senderId, `
-❌ 𝗘𝗥𝗥𝗘𝗨𝗥 ❌
-━━━━━━━━━━━━━━━━━━━
-Une erreur s'est produite.
-Veuillez réessayer plus tard. 🔧
+❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗦𝗬𝗦𝗧𝗘̀𝗠𝗘 ❌
+${generateDynamicBorder()}
+
+⚠️ Une erreur inattendue s'est produite.
+
+🔄 Veuillez réessayer dans quelques instants.
+
+💬 Tapez "clip" pour recommencer
         `.trim());
     }
 };
 
 async function handleClipSearch(senderId, query) {
     try {
-        await sendMessage(senderId, `🔍 Recherche de "${query}" en cours... ⏳`);
+        const border = generateDynamicBorder();
+        const loadingEmoji = getRandomEmoji('loading');
+        
+        await sendMessage(senderId, `
+${loadingEmoji} 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦...
+${border}
+
+🔍 Recherche : "${query}"
+
+${generateProgressBar(30)} 30%
+⏳ Connexion au serveur...
+        `.trim());
         
         const searchUrl = `${API_BASE}/recherche?clip=${encodeURIComponent(query)}`;
         console.log('Appel API Clip:', searchUrl);
@@ -250,12 +349,18 @@ async function handleClipSearch(senderId, query) {
                 selectedClip: null
             });
             
+            const successEmoji = getRandomEmoji('success');
+            const videoEmoji = getRandomEmoji('video');
+            
             let headerText = `
-🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗖𝗟𝗜𝗣𝗦 🎬
-━━━━━━━━━━━━━━━━━━━
-🔎 Recherche : ${query}
+${videoEmoji} 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗖𝗟𝗜𝗣𝗦 ${successEmoji}
+${border}
+
+🔎 𝗥𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 : ${query}
 📊 ${clips.length} clip(s) trouvé(s)
-━━━━━━━━━━━━━━━━━━━
+⏰ ${generateTimestamp()}
+
+${border}
             `.trim();
             
             await sendMessage(senderId, headerText);
@@ -265,12 +370,19 @@ async function handleClipSearch(senderId, query) {
             for (let i = 0; i < maxClips; i++) {
                 const clip = clips[i];
                 const title = (clip.Titre || clip.titre || clip.title || 'Sans titre');
-                const displayTitle = title.length > 80 ? title.substring(0, 77) + '...' : title;
+                const displayTitle = title.length > 70 ? title.substring(0, 67) + '...' : title;
                 const duration = formatDuration(clip.Duree || clip.duree || clip.duration);
                 
+                const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+                const numEmoji = numberEmojis[i] || `${i + 1}️⃣`;
+                
                 await sendMessage(senderId, `
-${i + 1}️⃣ ${displayTitle}
-⏱️ Durée : ${duration}
+┌─────────────────────────┐
+│ ${numEmoji} 𝗖𝗟𝗜𝗣 #${i + 1}
+├─────────────────────────┤
+│ 📹 ${displayTitle}
+│ ⏱️ Durée : ${duration}
+└─────────────────────────┘
                 `.trim());
                 
                 const imageUrl = clip.Image_url || clip.image_url || clip.thumbnail || clip.image || clip.poster;
@@ -294,33 +406,50 @@ ${i + 1}️⃣ ${displayTitle}
             }
             
             await sendMessage(senderId, `
-━━━━━━━━━━━━━━━━━━━
-📥 𝗦𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲𝘇 𝘂𝗻 𝗰𝗹𝗶𝗽
-━━━━━━━━━━━━━━━━━━━
-Envoyez le numéro (1-${maxClips}) pour choisir un clip.
+${generateDynamicBorder()}
+${getRandomEmoji('download')} 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘𝗭 𝗨𝗡 𝗖𝗟𝗜𝗣
+${generateDynamicBorder()}
 
-💡 Exemple : Tapez "2" pour le clip n°2
+📌 Envoyez le numéro (𝟏-${maxClips}) pour choisir
+
+💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 : Tapez "𝟐" pour le clip n°2
+
+${getRandomEmoji('success')} Téléchargement MP3/MP4 disponible !
             `.trim());
 
         } else {
             await sendMessage(senderId, `
-❌ 𝗔𝘂𝗰𝘂𝗻 𝗿𝗲́𝘀𝘂𝗹𝘁𝗮𝘁 ❌
-━━━━━━━━━━━━━━━━━━━
-Aucun clip trouvé pour "${query}".
-Essayez avec d'autres mots-clés. 🔍
+❌ 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧 ❌
+${generateDynamicBorder()}
 
-💡 Exemple : clip Naël clip
+🔍 Recherche : "${query}"
+📭 Aucun clip trouvé pour cette recherche.
+
+${generateDynamicBorder()}
+💡 𝗦𝗨𝗚𝗚𝗘𝗦𝗧𝗜𝗢𝗡𝗦 :
+${generateDynamicBorder()}
+
+   • Essayez d'autres mots-clés
+   • Vérifiez l'orthographe
+   • Utilisez le nom de l'artiste
+
+📝 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 : clip Naël clip
             `.trim());
         }
 
     } catch (error) {
         console.error('Erreur recherche clip:', error.message);
         await sendMessage(senderId, `
-❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 ❌
-━━━━━━━━━━━━━━━━━━━
-Impossible de contacter le serveur.
-Erreur: ${error.message}
-Veuillez réessayer plus tard. 🔧
+❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗖𝗢𝗡𝗡𝗘𝗫𝗜𝗢𝗡 ❌
+${generateDynamicBorder()}
+
+⚠️ Impossible de contacter le serveur.
+📡 Erreur: ${error.message}
+
+${generateDynamicBorder()}
+🔄 Veuillez réessayer dans quelques instants.
+
+💬 Tapez "clip" pour recommencer
         `.trim());
     }
 }
@@ -333,9 +462,12 @@ async function handleClipDownload(senderId, clip, format) {
         if (!clipUrl) {
             await sendMessage(senderId, `
 ⚠️ 𝗦𝗢𝗨𝗥𝗖𝗘 𝗜𝗡𝗧𝗥𝗢𝗨𝗩𝗔𝗕𝗟𝗘 ⚠️
-━━━━━━━━━━━━━━━━━━━
-❌ Impossible de récupérer le lien de ce clip.
-Veuillez réessayer avec un autre clip.
+${generateDynamicBorder()}
+
+❌ Impossible de récupérer le lien source.
+
+${generateDynamicBorder()}
+💡 Essayez avec un autre clip de la liste.
 
 🔄 Tapez "clip" pour une nouvelle recherche
             `.trim());
@@ -354,21 +486,37 @@ Veuillez réessayer avec un autre clip.
             selectedClip: null
         });
         
+        const formatEmoji = format === 'MP3' ? getRandomEmoji('music') : getRandomEmoji('video');
         const formatLabel = format === 'MP3' ? '🎵 Audio MP3' : '🎬 Vidéo MP4';
+        const border = generateDynamicBorder();
         
         await sendMessage(senderId, `
-⏳ 𝗣𝗥𝗘́𝗣𝗔𝗥𝗔𝗧𝗜𝗢𝗡 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
-━━━━━━━━━━━━━━━━━━━
-🎬 ${clipTitle.substring(0, 50)}${clipTitle.length > 50 ? '...' : ''}
-📁 Format : ${formatLabel}
+${getRandomEmoji('loading')} 𝗣𝗥𝗘́𝗣𝗔𝗥𝗔𝗧𝗜𝗢𝗡 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦...
+${border}
 
-Je vais vous envoyer le fichier en pièce jointe ${format}...
-Veuillez patienter... 🕐
+${formatEmoji} 𝗧𝗶𝘁𝗿𝗲 : ${clipTitle.substring(0, 45)}${clipTitle.length > 45 ? '...' : ''}
+📁 𝗙𝗼𝗿𝗺𝗮𝘁 : ${formatLabel}
+
+${border}
+${generateProgressBar(20)} 20%
+⏳ Préparation du fichier...
+
+💫 Veuillez patienter...
         `.trim());
 
         const downloadUrl = `${API_BASE}/download?video=${encodeURIComponent(clipUrl)}&type=${format}`;
         
         console.log('URL de téléchargement:', downloadUrl);
+        
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        await sendMessage(senderId, `
+${getRandomEmoji('download')} 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧...
+${border}
+
+${generateProgressBar(50)} 50%
+📥 Téléchargement en cours...
+        `.trim());
         
         const MAX_FB_SIZE = 25 * 1024 * 1024;
         const fileExt = format === 'MP3' ? 'mp3' : 'mp4';
@@ -377,30 +525,56 @@ Veuillez patienter... 🕐
         
         let fileData = null;
         let fileSentSuccessfully = false;
+        let fileSize = 0;
         
         try {
             console.log('Téléchargement en mémoire...');
             fileData = await downloadToBuffer(downloadUrl);
+            fileSize = fileData.size;
             console.log(`Fichier téléchargé: ${(fileData.size / (1024 * 1024)).toFixed(2)} MB`);
+            
+            await sendMessage(senderId, `
+${getRandomEmoji('loading')} 𝗧𝗥𝗔𝗜𝗧𝗘𝗠𝗘𝗡𝗧...
+${border}
+
+${generateProgressBar(75)} 75%
+📤 Envoi du fichier...
+📊 Taille : ${formatFileSize(fileSize)}
+            `.trim());
             
             if (fileData.size > MAX_FB_SIZE) {
                 console.log(`Fichier trop volumineux (${(fileData.size / (1024 * 1024)).toFixed(2)} MB > 25 MB)`);
                 
+                const successEmoji = getRandomEmoji('success');
+                const downloadEmoji = getRandomEmoji('download');
+                
                 await sendMessage(senderId, `
-📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
-━━━━━━━━━━━━━━━━━━━
-🎬 ${clipTitle}
-📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
+${successEmoji} 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format} ${successEmoji}
+${border}
 
-⚠️ Fichier trop volumineux (${(fileData.size / (1024 * 1024)).toFixed(1)} MB).
-📱 Facebook limite à 25 MB maximum.
-🔗 Utilisez le lien ci-dessous :
+${formatEmoji} 𝗧𝗶𝘁𝗿𝗲 : ${clipTitle}
+📁 𝗙𝗼𝗿𝗺𝗮𝘁 : ${format === 'MP3' ? 'Audio MP3' : 'Vidéo MP4'}
+📊 𝗧𝗮𝗶𝗹𝗹𝗲 : ${formatFileSize(fileSize)}
+
+${border}
+⚠️ Fichier volumineux (>${formatFileSize(MAX_FB_SIZE)})
+📱 Limite Facebook dépassée
+
+${downloadEmoji} 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 :
                 `.trim());
                 
                 await sendMessage(senderId, downloadUrl);
                 
                 await sendMessage(senderId, `
-💡 Cliquez sur le lien pour télécharger.
+${border}
+💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
+${border}
+
+   1️⃣ Cliquez sur le lien ci-dessus
+   2️⃣ Le téléchargement démarre auto
+   3️⃣ Fichier sauvegardé sur votre appareil
+
+${getRandomEmoji('success')} Profitez de votre ${format === 'MP3' ? 'musique' : 'vidéo'} !
 
 🔄 Tapez "clip" pour une nouvelle recherche
                 `.trim());
@@ -424,31 +598,76 @@ Veuillez patienter... 🕐
         }
         
         if (fileSentSuccessfully) {
+            const successEmoji = getRandomEmoji('success');
+            const downloadEmoji = getRandomEmoji('download');
+            
             await sendMessage(senderId, `
-✅ ${format === 'MP3' ? '𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯' : '𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰'} 𝗘𝗡𝗩𝗢𝗬𝗘́${format === 'MP4' ? 'E' : ''} !
-━━━━━━━━━━━━━━━━━━━
-🎬 ${clipTitle}
-📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
+${successEmoji}${successEmoji}${successEmoji} 𝗦𝗨𝗖𝗖𝗘̀𝗦 ! ${successEmoji}${successEmoji}${successEmoji}
+${border}
 
-${format === 'MP3' ? '🎵' : '🎬'} Votre fichier a été envoyé ci-dessus !
+${generateProgressBar(100)} 100%
 
-🔄 Tapez "clip" pour une nouvelle recherche
-            `.trim());
-        } else {
-            await sendMessage(senderId, `
-📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
-━━━━━━━━━━━━━━━━━━━
-🎬 ${clipTitle}
-📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
+${formatEmoji} ${format === 'MP3' ? '𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯' : '𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰'} 𝗘𝗡𝗩𝗢𝗬𝗘́${format === 'MP4' ? 'E' : ''} !
 
-⚠️ L'envoi direct a échoué.
-🔗 Utilisez le lien ci-dessous :
+${border}
+📋 𝗗𝗘́𝗧𝗔𝗜𝗟𝗦 :
+${border}
+
+   📹 𝗧𝗶𝘁𝗿𝗲 : ${clipTitle.substring(0, 40)}${clipTitle.length > 40 ? '...' : ''}
+   📁 𝗙𝗼𝗿𝗺𝗮𝘁 : ${format}
+   📊 𝗧𝗮𝗶𝗹𝗹𝗲 : ${formatFileSize(fileSize)}
+   ⏰ 𝗗𝗮𝘁𝗲 : ${generateTimestamp()}
+
+${border}
+${downloadEmoji} 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗗𝗜𝗥𝗘𝗖𝗧 :
             `.trim());
             
             await sendMessage(senderId, downloadUrl);
             
             await sendMessage(senderId, `
-💡 Cliquez sur le lien pour télécharger.
+${border}
+💎 𝗔𝗩𝗔𝗡𝗧𝗔𝗚𝗘𝗦 𝗗𝗨 𝗟𝗜𝗘𝗡 :
+${border}
+
+   ✅ Téléchargement illimité
+   ✅ Partage facile avec vos amis
+   ✅ Aucune limite de temps
+   ✅ Qualité optimale
+
+${border}
+${getRandomEmoji('success')} 𝗠𝗘𝗥𝗖𝗜 𝗗'𝗨𝗧𝗜𝗟𝗜𝗦𝗘𝗥 𝗡𝗢𝗧𝗥𝗘 𝗦𝗘𝗥𝗩𝗜𝗖𝗘 !
+${border}
+
+🔄 Tapez "clip" pour une nouvelle recherche
+👑 𝗩𝗜𝗣 𝗘𝗫𝗖𝗟𝗨𝗦𝗜𝗙
+            `.trim());
+        } else {
+            const downloadEmoji = getRandomEmoji('download');
+            
+            await sendMessage(senderId, `
+${downloadEmoji} 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
+${border}
+
+${formatEmoji} 𝗧𝗶𝘁𝗿𝗲 : ${clipTitle}
+📁 𝗙𝗼𝗿𝗺𝗮𝘁 : ${format === 'MP3' ? 'Audio MP3' : 'Vidéo MP4'}
+
+${border}
+⚠️ L'envoi direct a rencontré un problème.
+${downloadEmoji} Utilisez le lien alternatif ci-dessous :
+            `.trim());
+            
+            await sendMessage(senderId, downloadUrl);
+            
+            await sendMessage(senderId, `
+${border}
+💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
+${border}
+
+   1️⃣ Cliquez sur le lien
+   2️⃣ Téléchargement automatique
+   3️⃣ Profitez de votre ${format === 'MP3' ? 'audio' : 'vidéo'} !
+
+${getRandomEmoji('success')} Lien valide et fonctionnel !
 
 🔄 Tapez "clip" pour une nouvelle recherche
             `.trim());
@@ -458,12 +677,16 @@ ${format === 'MP3' ? '🎵' : '🎬'} Votre fichier a été envoyé ci-dessus !
         console.error('Erreur téléchargement clip:', error.message);
         
         await sendMessage(senderId, `
-⚠️ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
-━━━━━━━━━━━━━━━━━━━
-❌ Erreur: ${error.message}
-📥 Veuillez réessayer plus tard.
+⚠️ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
+${generateDynamicBorder()}
 
-🔄 Tapez "clip" pour une nouvelle recherche
+❌ Erreur : ${error.message}
+
+${generateDynamicBorder()}
+📥 Le téléchargement a échoué.
+🔄 Veuillez réessayer plus tard.
+
+💬 Tapez "clip" pour recommencer
         `.trim());
     }
 }
@@ -483,19 +706,32 @@ module.exports.handleNumber = async (senderId, number) => {
                 pendingFormat: true
             });
             
+            const border = generateDynamicBorder();
+            const emoji1 = getRandomEmoji('video');
+            const emoji2 = getRandomEmoji('success');
+            
             await sendMessage(senderId, `
-🎬 𝗖𝗟𝗜𝗣 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ 🎬
-━━━━━━━━━━━━━━━━━━━
+${emoji1} 𝗖𝗟𝗜𝗣 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ ${emoji2}
+${border}
+
 📹 ${selectedClip.Titre || selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
 ⏱️ Durée : ${formatDuration(selectedClip.Duree || selectedClip.duree || selectedClip.duration)}
 
-🎵 𝗤𝘂𝗲𝗹 𝘁𝘆𝗽𝗲 𝘀𝗼𝘂𝗵𝗮𝗶𝘁𝗲𝘇-𝘃𝗼𝘂𝘀 ?
-━━━━━━━━━━━━━━━━━━━
+${border}
+${getRandomEmoji('music')} 𝗖𝗵𝗼𝗶𝘀𝗶𝘀𝘀𝗲𝘇 𝘃𝗼𝘁𝗿𝗲 𝗳𝗼𝗿𝗺𝗮𝘁 :
+${border}
 
-🎵 MP3 - Télécharger l'audio uniquement
-🎬 MP4 - Télécharger la vidéo complète
+┌───────────────────────────┐
+│                           │
+│  🎵 𝗠𝗣𝟯 ─ Audio seul      │
+│     └─ Musique légère     │
+│                           │
+│  🎬 𝗠𝗣𝟰 ─ Vidéo HD        │
+│     └─ Qualité optimale   │
+│                           │
+└───────────────────────────┘
 
-💡 Envoyez : MP3 ou MP4
+💬 Envoyez : MP3 ou MP4
             `.trim());
             return true;
         }
