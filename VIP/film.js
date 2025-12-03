@@ -3,6 +3,63 @@ const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://daylimotion-film.onrender.com';
 
+const EMOJIS = {
+    film: ['🎬', '🎥', '📽️', '🎞️', '🎦', '🎭', '🎪', '🎫'],
+    quality: ['📊', '🔮', '💎', '✨', '🌟', '⚡', '🔥', '💫'],
+    success: ['✅', '🎉', '🏆', '👑', '💯', '🌈', '🎊', '⭐'],
+    loading: ['⏳', '🔄', '⚡', '💫', '🕐', '🕑', '🕒', '🕓'],
+    download: ['📥', '💾', '📲', '🔽', '⬇️', '📁', '💿', '🎁'],
+    cinema: ['🍿', '🎪', '🎭', '🎟️', '📺', '🖥️', '📀', '💽'],
+    star: ['⭐', '🌟', '✨', '💫', '🔥', '💎', '👑', '🏆']
+};
+
+function getRandomEmoji(category) {
+    const emojis = EMOJIS[category] || EMOJIS.star;
+    return emojis[Math.floor(Math.random() * emojis.length)];
+}
+
+function generateDynamicBorder() {
+    const borders = [
+        '━━━━━━━━━━━━━━━━━━━━━━━━━',
+        '═══════════════════════════',
+        '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬',
+        '◆━━━━━━━━━━━━━━━━━━━━━━◆',
+        '✦═════════════════════════✦',
+        '◈━━━━━━━━━━━━━━━━━━━━━━◈',
+        '★━━━━━━━━━━━━━━━━━━━━━━★',
+        '◇═════════════════════════◇'
+    ];
+    return borders[Math.floor(Math.random() * borders.length)];
+}
+
+function generateProgressBar(percent) {
+    const filled = Math.floor(percent / 10);
+    const empty = 10 - filled;
+    return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+
+function formatFileSize(quality) {
+    if (quality === '720p') return '~800MB - 1.5GB';
+    return '~300MB - 600MB';
+}
+
+function generateTimestamp() {
+    const now = new Date();
+    const options = { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    };
+    return now.toLocaleDateString('fr-FR', options);
+}
+
+function getQualityStars(quality) {
+    if (quality === '720p') return '⭐⭐⭐⭐⭐';
+    return '⭐⭐⭐';
+}
+
 const userSessions = new Map();
 
 const QUALITY_OPTIONS = ['360p', '720p'];
@@ -64,15 +121,26 @@ module.exports = async (senderId, prompt, api) => {
                     const quality = normalizeQuality(input);
                     await handleFilmDownload(senderId, userSession.selectedFilm, quality);
                 } else {
+                    const border = generateDynamicBorder();
                     await sendMessage(senderId, `
-❌ 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Veuillez choisir une qualité valide :
+❌ 𝗤𝗨𝗔𝗟𝗜𝗧𝗘́ 𝗜𝗡𝗩𝗔𝗟𝗜𝗗𝗘 ❌
+${border}
 
-📊 360p - Qualité standard (recommandé)
-📊 720p - Haute qualité (HD)
+${getRandomEmoji('quality')} Veuillez choisir une qualité valide :
 
-💡 Tapez : 360p ou 720p
+┌─────────────────────────────┐
+│                             │
+│  📊 𝟯𝟲𝟬𝗽 ─ Standard         │
+│     └─ Fichier léger        │
+│     └─ ${getQualityStars('360p')}              │
+│                             │
+│  💎 𝟳𝟮𝟬𝗽 ─ Haute Définition │
+│     └─ Meilleure qualité    │
+│     └─ ${getQualityStars('720p')}        │
+│                             │
+└─────────────────────────────┘
+
+💡 Tapez : 𝟯𝟲𝟬𝗽 ou 𝟳𝟮𝟬𝗽
                     `.trim());
                 }
             } else if (/^\d+$/.test(input) && userSession.films && userSession.films.length > 0) {
@@ -87,24 +155,43 @@ Veuillez choisir une qualité valide :
                         pendingQuality: true
                     });
                     
+                    const border = generateDynamicBorder();
+                    const emoji1 = getRandomEmoji('film');
+                    const emoji2 = getRandomEmoji('success');
+                    
                     await sendMessage(senderId, `
-🎬 𝗙𝗜𝗟𝗠 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ 🎬
-━━━━━━━━━━━━━━━━━━━
-📽️ ${selectedFilm.titre}
-⏱️ Durée : ${formatDuration(selectedFilm.duree)}
+${emoji1} 𝗙𝗜𝗟𝗠 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ ${emoji2}
+${border}
 
-📊 𝗤𝘂𝗲𝗹𝗹𝗲 𝗾𝘂𝗮𝗹𝗶𝘁𝗲́ 𝘀𝗼𝘂𝗵𝗮𝗶𝘁𝗲𝘇-𝘃𝗼𝘂𝘀 ?
-━━━━━━━━━━━━━━━━━━━
-1. 360p - Qualité standard (fichier plus léger)
-2. 720p - Haute qualité HD (meilleure image)
+📽️ 𝗧𝗶𝘁𝗿𝗲 : ${selectedFilm.titre}
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${formatDuration(selectedFilm.duree)}
 
-💡 Envoyez : 360p ou 720p
+${border}
+${getRandomEmoji('quality')} 𝗖𝗛𝗢𝗜𝗦𝗜𝗦𝗦𝗘𝗭 𝗟𝗔 𝗤𝗨𝗔𝗟𝗜𝗧𝗘́ :
+${border}
+
+┌─────────────────────────────────┐
+│                                 │
+│  📊 𝟯𝟲𝟬𝗽 ─ Qualité Standard     │
+│     ├─ Taille : ${formatFileSize('360p')}    │
+│     └─ ${getQualityStars('360p')} Recommandé      │
+│                                 │
+│  💎 𝟳𝟮𝟬𝗽 ─ Haute Définition HD  │
+│     ├─ Taille : ${formatFileSize('720p')}  │
+│     └─ ${getQualityStars('720p')} Premium    │
+│                                 │
+└─────────────────────────────────┘
+
+💬 𝗘𝗻𝘃𝗼𝘆𝗲𝘇 : 360p ou 720p
                     `.trim());
                 } else {
                     await sendMessage(senderId, `
-❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Veuillez choisir un numéro entre 1 et ${userSession.films.length}.
+❌ 𝗡𝗨𝗠𝗘́𝗥𝗢 𝗜𝗡𝗩𝗔𝗟𝗜𝗗𝗘 ❌
+${generateDynamicBorder()}
+
+⚠️ Veuillez choisir un numéro entre 𝟏 et ${userSession.films.length}.
+
+💡 Réessayez avec un numéro valide de la liste
                     `.trim());
                 }
             } else if (input.toLowerCase().startsWith('page ')) {
@@ -113,60 +200,99 @@ Veuillez choisir un numéro entre 1 et ${userSession.films.length}.
                     await handleFilmSearch(senderId, userSession.query, pageNum);
                 } else if (!userSession.query) {
                     await sendMessage(senderId, `
-❌ 𝗔𝘂𝗰𝘂𝗻𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 𝗮𝗰𝘁𝗶𝘃𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Veuillez d'abord effectuer une recherche.
-Exemple : film Jackie Chan
+❌ 𝗔𝗨𝗖𝗨𝗡𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 𝗔𝗖𝗧𝗜𝗩𝗘 ❌
+${generateDynamicBorder()}
+
+⚠️ Veuillez d'abord effectuer une recherche.
+
+💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 : film Jackie Chan
                     `.trim());
                 } else {
                     await sendMessage(senderId, `
-❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗱𝗲 𝗽𝗮𝗴𝗲 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Utilisez : film page <numéro>
-Exemple : film page 2
+❌ 𝗡𝗨𝗠𝗘́𝗥𝗢 𝗗𝗘 𝗣𝗔𝗚𝗘 𝗜𝗡𝗩𝗔𝗟𝗜𝗗𝗘 ❌
+${generateDynamicBorder()}
+
+⚠️ Utilisez : film page <numéro>
+
+💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 : film page 2
                     `.trim());
                 }
             } else {
                 await handleFilmSearch(senderId, input, 1);
             }
         } else {
+            const border = generateDynamicBorder();
+            const emoji1 = getRandomEmoji('film');
+            const emoji2 = getRandomEmoji('cinema');
+            const emoji3 = getRandomEmoji('star');
+            
             await sendMessage(senderId, `
-🎬 𝗙𝗜𝗟𝗠 𝗦𝗘𝗔𝗥𝗖𝗛 🎬
-━━━━━━━━━━━━━━━━━━━
-❌ Veuillez fournir un titre de film !
+${emoji1} 𝗙𝗜𝗟𝗠 𝗦𝗧𝗥𝗘𝗔𝗠𝗜𝗡𝗚 ${emoji2}
+${border}
 
-📝 𝗨𝘁𝗶𝗹𝗶𝘀𝗮𝘁𝗶𝗼𝗻 :
-film <titre du film>
+${emoji3} 𝗧𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝘇 𝘃𝗼𝘀 𝗳𝗶𝗹𝗺𝘀 𝗽𝗿𝗲́𝗳𝗲́𝗿𝗲́𝘀 !
 
-💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲𝘀 :
-film Jackie Chan
-film Donnie Yen
-film Fast and Furious
+${border}
+📝 𝗨𝗧𝗜𝗟𝗜𝗦𝗔𝗧𝗜𝗢𝗡 :
+${border}
 
-🔢 Après la recherche :
-1. Envoyez le numéro du film (1, 2, 3...)
-2. Choisissez la qualité (360p ou 720p)
-3. Cliquez sur le lien pour télécharger
+➤ film <titre du film>
 
-📄 𝗣𝗮𝗴𝗶𝗻𝗮𝘁𝗶𝗼𝗻 :
-film page 2
+💡 𝗘𝗫𝗘𝗠𝗣𝗟𝗘𝗦 :
+   • film Jackie Chan
+   • film Donnie Yen
+   • film Fast and Furious
+   • film John Wick
+
+${border}
+🔢 𝗘́𝗧𝗔𝗣𝗘𝗦 :
+${border}
+
+   1️⃣ Recherchez un film
+   2️⃣ Sélectionnez le numéro
+   3️⃣ Choisissez 360p ou 720p
+   4️⃣ Téléchargez via le lien !
+
+${border}
+📄 𝗣𝗔𝗚𝗜𝗡𝗔𝗧𝗜𝗢𝗡 :
+${border}
+
+➤ film page 2 (page suivante)
+
+${getRandomEmoji('success')} 𝗩𝗜𝗣 𝗘𝗫𝗖𝗟𝗨𝗦𝗜𝗙 - 𝗙𝗶𝗹𝗺𝘀 𝗛𝗗 ${getRandomEmoji('success')}
             `.trim());
         }
 
     } catch (error) {
         console.error('Erreur commande film:', error.message);
         await sendMessage(senderId, `
-❌ 𝗘𝗥𝗥𝗘𝗨𝗥 ❌
-━━━━━━━━━━━━━━━━━━━
-Une erreur s'est produite.
-Veuillez réessayer plus tard.
+❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗦𝗬𝗦𝗧𝗘̀𝗠𝗘 ❌
+${generateDynamicBorder()}
+
+⚠️ Une erreur inattendue s'est produite.
+
+🔄 Veuillez réessayer dans quelques instants.
+
+💬 Tapez "film" pour recommencer
         `.trim());
     }
 };
 
 async function handleFilmSearch(senderId, query, page = 1) {
     try {
-        await sendMessage(senderId, `🔍 Recherche de films "${query}" (page ${page}) en cours... ⏳`);
+        const border = generateDynamicBorder();
+        const loadingEmoji = getRandomEmoji('loading');
+        
+        await sendMessage(senderId, `
+${loadingEmoji} 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦...
+${border}
+
+🔍 Recherche : "${query}"
+📄 Page : ${page}
+
+${generateProgressBar(30)} 30%
+⏳ Connexion au serveur de films...
+        `.trim());
         
         const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&page=${page}`;
         console.log('Appel API Film:', searchUrl);
@@ -194,28 +320,41 @@ async function handleFilmSearch(senderId, query, page = 1) {
                 selectedFilm: null
             });
             
+            const filmEmoji = getRandomEmoji('film');
+            const successEmoji = getRandomEmoji('success');
+            
             let headerText = `
-🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗙𝗜𝗟𝗠𝗦 🎬
-━━━━━━━━━━━━━━━━━━━
-🔎 Recherche : ${query}
-📄 Page : ${currentPage}
-📊 Résultats : ${totalResults} films trouvés
-🎞️ Filtre : Films de 1h30 minimum
-━━━━━━━━━━━━━━━━━━━
+${filmEmoji} 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗙𝗜𝗟𝗠𝗦 ${successEmoji}
+${border}
+
+🔎 𝗥𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 : ${query}
+📄 𝗣𝗮𝗴𝗲 : ${currentPage}${totalPages > 1 ? ` / ${totalPages}` : ''}
+📊 ${totalResults} film(s) trouvé(s)
+🎞️ 𝗙𝗶𝗹𝘁𝗿𝗲 : Films longue durée (1h30+)
+⏰ ${generateTimestamp()}
+
+${border}
             `.trim();
             
             await sendMessage(senderId, headerText);
             
             const maxFilms = Math.min(films.length, 10);
+            const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
             
             for (let i = 0; i < maxFilms; i++) {
                 const film = films[i];
-                const title = film.titre.length > 60 ? film.titre.substring(0, 57) + '...' : film.titre;
+                const title = film.titre.length > 55 ? film.titre.substring(0, 52) + '...' : film.titre;
                 const duration = formatDuration(film.duree);
+                const numEmoji = numberEmojis[i] || `${i + 1}️⃣`;
                 
                 const filmInfo = `
-${i + 1}️⃣ 𝗧𝗶𝘁𝗿𝗲 : ${title}
-⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${duration}
+┌─────────────────────────────┐
+│ ${numEmoji} 𝗙𝗜𝗟𝗠 #${i + 1}
+├─────────────────────────────┤
+│ 📽️ ${title}
+│ ⏱️ Durée : ${duration}
+│ ${getRandomEmoji('quality')} Qualités : 360p / 720p
+└─────────────────────────────┘
                 `.trim();
                 
                 await sendMessage(senderId, filmInfo);
@@ -241,48 +380,80 @@ ${i + 1}️⃣ 𝗧𝗶𝘁𝗿𝗲 : ${title}
             
             let paginationInfo = '';
             if (hasNextPage || currentPage > 1) {
-                paginationInfo = `\n📄 𝗣𝗮𝗴𝗶𝗻𝗮𝘁𝗶𝗼𝗻 :`;
+                paginationInfo = `
+${border}
+📄 𝗣𝗔𝗚𝗜𝗡𝗔𝗧𝗜𝗢𝗡 :
+${border}`;
                 if (currentPage > 1) {
-                    paginationInfo += `\n• film page ${currentPage - 1} - Page précédente`;
+                    paginationInfo += `
+   ◀️ film page ${currentPage - 1} ─ Précédente`;
                 }
                 if (hasNextPage) {
-                    paginationInfo += `\n• film page ${currentPage + 1} - Page suivante`;
+                    paginationInfo += `
+   ▶️ film page ${currentPage + 1} ─ Suivante`;
                 }
             }
             
             let footerText = `
-━━━━━━━━━━━━━━━━━━━
-📥 𝗘𝗻𝘃𝗼𝘆𝗲𝘇 𝗹𝗲 𝗻𝘂𝗺𝗲́𝗿𝗼 (1-${maxFilms}) 𝗽𝗼𝘂𝗿 𝘀𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲𝗿
-📊 Qualités disponibles : 360p, 720p
+${border}
+${getRandomEmoji('download')} 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘𝗭 𝗨𝗡 𝗙𝗜𝗟𝗠
+${border}
+
+📌 Envoyez le numéro (𝟏-${maxFilms}) pour choisir
+
+┌─────────────────────────────┐
+│ 📊 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́𝘀 𝗱𝗶𝘀𝗽𝗼𝗻𝗶𝗯𝗹𝗲𝘀 :   │
+│   • 360p ─ Standard         │
+│   • 720p ─ HD Premium       │
+└─────────────────────────────┘
 ${paginationInfo}
 
-💡 Exemple : Tapez 1 pour le premier film
+💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲 : Tapez "𝟑" pour le film n°3
+
+${getRandomEmoji('star')} 𝗕𝗼𝗻 𝘃𝗶𝘀𝗶𝗼𝗻𝗻𝗮𝗴𝗲 ! ${getRandomEmoji('cinema')}
             `.trim();
             
             await sendMessage(senderId, footerText);
 
         } else {
             await sendMessage(senderId, `
-❌ 𝗔𝘂𝗰𝘂𝗻 𝗿𝗲́𝘀𝘂𝗹𝘁𝗮𝘁 ❌
-━━━━━━━━━━━━━━━━━━━
-Aucun film trouvé pour "${query}" (page ${page}).
-Veuillez essayer avec d'autres mots-clés.
+❌ 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧 ❌
+${generateDynamicBorder()}
 
-💡 Conseils :
-• Utilisez des mots simples
-• Essayez le nom d'un acteur
-• Essayez le titre en anglais
+🔍 Recherche : "${query}"
+📄 Page : ${page}
+📭 Aucun film trouvé.
+
+${generateDynamicBorder()}
+💡 𝗦𝗨𝗚𝗚𝗘𝗦𝗧𝗜𝗢𝗡𝗦 :
+${generateDynamicBorder()}
+
+   • Vérifiez l'orthographe
+   • Essayez le nom d'un acteur célèbre
+   • Utilisez le titre en anglais
+   • Essayez des mots-clés simples
+
+📝 𝗘𝘅𝗲𝗺𝗽𝗹𝗲𝘀 :
+   • film action
+   • film Jackie Chan
+   • film marvel
             `.trim());
         }
 
     } catch (error) {
         console.error('Erreur recherche film:', error.message);
         await sendMessage(senderId, `
-❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 ❌
-━━━━━━━━━━━━━━━━━━━
-Impossible de contacter le serveur.
-Erreur: ${error.message}
-Veuillez réessayer plus tard.
+❌ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗖𝗢𝗡𝗡𝗘𝗫𝗜𝗢𝗡 ❌
+${generateDynamicBorder()}
+
+⚠️ Impossible de contacter le serveur.
+📡 Erreur : ${error.message}
+
+${generateDynamicBorder()}
+🔄 Le serveur peut être en cours de réveil.
+⏳ Veuillez réessayer dans 30 secondes.
+
+💬 Tapez "film" pour recommencer
         `.trim());
     }
 }
@@ -297,38 +468,89 @@ async function handleFilmDownload(senderId, film, quality = '360p') {
             selectedFilm: null
         });
         
+        const border = generateDynamicBorder();
+        const loadingEmoji = getRandomEmoji('loading');
+        const filmEmoji = getRandomEmoji('film');
+        
         await sendMessage(senderId, `
-⏳ 𝗣𝗥𝗘́𝗣𝗔𝗥𝗔𝗧𝗜𝗢𝗡 𝗗𝗨 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⏳
-━━━━━━━━━━━━━━━━━━━
-🎬 ${film.titre.substring(0, 50)}${film.titre.length > 50 ? '...' : ''}
-📊 Qualité : ${quality}
-⏱️ Durée : ${formatDuration(film.duree)}
+${loadingEmoji} 𝗣𝗥𝗘́𝗣𝗔𝗥𝗔𝗧𝗜𝗢𝗡 𝗗𝗨 𝗙𝗜𝗟𝗠...
+${border}
 
-Génération du lien en cours...
+${filmEmoji} 𝗧𝗶𝘁𝗿𝗲 : ${film.titre.substring(0, 40)}${film.titre.length > 40 ? '...' : ''}
+📊 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ : ${quality} ${getQualityStars(quality)}
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${formatDuration(film.duree)}
+
+${border}
+${generateProgressBar(25)} 25%
+⏳ Génération du lien en cours...
+        `.trim());
+
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        await sendMessage(senderId, `
+${getRandomEmoji('loading')} 𝗧𝗥𝗔𝗜𝗧𝗘𝗠𝗘𝗡𝗧...
+${border}
+
+${generateProgressBar(60)} 60%
+🔗 Préparation du lien de téléchargement...
         `.trim());
 
         const qualityNum = quality.replace('p', '');
         const downloadUrl = `${API_BASE}/telecharger/${film.video_id}?quality=${qualityNum}`;
         
         console.log('URL de téléchargement:', downloadUrl);
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const successEmoji = getRandomEmoji('success');
+        const downloadEmoji = getRandomEmoji('download');
+        const starEmoji = getRandomEmoji('star');
         
         await sendMessage(senderId, `
-✅ 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗣𝗥𝗘̂𝗧 ✅
-━━━━━━━━━━━━━━━━━━━
-🎬 ${film.titre}
-📊 Qualité : ${quality}
-⏱️ Durée : ${formatDuration(film.duree)}
+${successEmoji}${successEmoji}${successEmoji} 𝗟𝗜𝗘𝗡 𝗣𝗥𝗘̂𝗧 ! ${successEmoji}${successEmoji}${successEmoji}
+${border}
 
-📥 𝗖𝗹𝗶𝗾𝘂𝗲𝘇 𝘀𝘂𝗿 𝗹𝗲 𝗹𝗶𝗲𝗻 𝗰𝗶-𝗱𝗲𝘀𝘀𝗼𝘂𝘀 :
+${generateProgressBar(100)} 100%
+
+${filmEmoji} 𝗗𝗘́𝗧𝗔𝗜𝗟𝗦 𝗗𝗨 𝗙𝗜𝗟𝗠 :
+${border}
+
+   📽️ 𝗧𝗶𝘁𝗿𝗲 : ${film.titre}
+   📊 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ : ${quality} ${getQualityStars(quality)}
+   ⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${formatDuration(film.duree)}
+   📁 𝗧𝗮𝗶𝗹𝗹𝗲 : ${formatFileSize(quality)}
+   ⏰ 𝗗𝗮𝘁𝗲 : ${generateTimestamp()}
+
+${border}
+${downloadEmoji} 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 :
         `.trim());
         
         await sendMessage(senderId, downloadUrl);
         
         await sendMessage(senderId, `
-💡 Le téléchargement démarrera automatiquement
-📱 Le fichier sera enregistré sur votre téléphone
+${border}
+💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦 :
+${border}
+
+   1️⃣ Cliquez sur le lien ci-dessus
+   2️⃣ Le téléchargement démarre automatiquement
+   3️⃣ Fichier enregistré sur votre appareil
+
+${border}
+${starEmoji} 𝗔𝗩𝗔𝗡𝗧𝗔𝗚𝗘𝗦 :
+${border}
+
+   ✅ Téléchargement rapide
+   ✅ Qualité ${quality} garantie
+   ✅ Compatible tous appareils
+   ✅ Aucune limite de temps
+
+${border}
+${getRandomEmoji('cinema')} 𝗕𝗢𝗡 𝗩𝗜𝗦𝗜𝗢𝗡𝗡𝗔𝗚𝗘 ! ${getRandomEmoji('cinema')}
+${border}
 
 🔄 Tapez "film" pour une nouvelle recherche
+👑 𝗩𝗜𝗣 𝗘𝗫𝗖𝗟𝗨𝗦𝗜𝗙 - 𝗙𝗜𝗟𝗠𝗦 𝗛𝗗
         `.trim());
 
     } catch (error) {
@@ -336,9 +558,15 @@ Génération du lien en cours...
         
         await sendMessage(senderId, `
 ⚠️ 𝗘𝗥𝗥𝗘𝗨𝗥 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ⚠️
-━━━━━━━━━━━━━━━━━━━
-❌ Erreur: ${error.message}
-📥 Veuillez réessayer plus tard.
+${generateDynamicBorder()}
+
+❌ Erreur : ${error.message}
+
+${generateDynamicBorder()}
+📥 Le téléchargement a échoué.
+🔄 Veuillez réessayer plus tard.
+
+💬 Tapez "film" pour recommencer
         `.trim());
     }
 }
@@ -358,18 +586,34 @@ module.exports.handleNumber = async (senderId, number) => {
                 pendingQuality: true
             });
             
+            const border = generateDynamicBorder();
+            const emoji1 = getRandomEmoji('film');
+            const emoji2 = getRandomEmoji('success');
+            
             await sendMessage(senderId, `
-🎬 𝗙𝗜𝗟𝗠 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ 🎬
-━━━━━━━━━━━━━━━━━━━
-📽️ ${selectedFilm.titre}
-⏱️ Durée : ${formatDuration(selectedFilm.duree)}
+${emoji1} 𝗙𝗜𝗟𝗠 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ ${emoji2}
+${border}
 
-📊 𝗤𝘂𝗲𝗹𝗹𝗲 𝗾𝘂𝗮𝗹𝗶𝘁𝗲́ 𝘀𝗼𝘂𝗵𝗮𝗶𝘁𝗲𝘇-𝘃𝗼𝘂𝘀 ?
-━━━━━━━━━━━━━━━━━━━
-1. 360p - Qualité standard (fichier plus léger)
-2. 720p - Haute qualité HD (meilleure image)
+📽️ 𝗧𝗶𝘁𝗿𝗲 : ${selectedFilm.titre}
+⏱️ 𝗗𝘂𝗿𝗲́𝗲 : ${formatDuration(selectedFilm.duree)}
 
-💡 Envoyez : 360p ou 720p
+${border}
+${getRandomEmoji('quality')} 𝗖𝗛𝗢𝗜𝗦𝗜𝗦𝗦𝗘𝗭 𝗟𝗔 𝗤𝗨𝗔𝗟𝗜𝗧𝗘́ :
+${border}
+
+┌─────────────────────────────────┐
+│                                 │
+│  📊 𝟯𝟲𝟬𝗽 ─ Qualité Standard     │
+│     ├─ Taille : ${formatFileSize('360p')}    │
+│     └─ ${getQualityStars('360p')} Recommandé      │
+│                                 │
+│  💎 𝟳𝟮𝟬𝗽 ─ Haute Définition HD  │
+│     ├─ Taille : ${formatFileSize('720p')}  │
+│     └─ ${getQualityStars('720p')} Premium    │
+│                                 │
+└─────────────────────────────────┘
+
+💬 𝗘𝗻𝘃𝗼𝘆𝗲𝘇 : 360p ou 720p
             `.trim());
             return true;
         }
