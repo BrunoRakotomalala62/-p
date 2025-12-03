@@ -122,8 +122,8 @@ Veuillez choisir un format valide :
                     await sendMessage(senderId, `
 🎬 𝗖𝗟𝗜𝗣 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ 🎬
 ━━━━━━━━━━━━━━━━━━━
-📹 ${selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
-⏱️ Durée : ${formatDuration(selectedClip.duree || selectedClip.duration)}
+📹 ${selectedClip.Titre || selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
+⏱️ Durée : ${formatDuration(selectedClip.Duree || selectedClip.duree || selectedClip.duration)}
 
 🎵 𝗤𝘂𝗲𝗹 𝘁𝘆𝗽𝗲 𝘀𝗼𝘂𝗵𝗮𝗶𝘁𝗲𝘇-𝘃𝗼𝘂𝘀 ?
 ━━━━━━━━━━━━━━━━━━━
@@ -186,7 +186,7 @@ async function handleClipSearch(senderId, query) {
         
         console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
-        const clips = response.data?.clips || response.data?.videos || response.data?.results || [];
+        const clips = response.data?.clips || response.data?.videos || response.data?.results || response.data?.resultats || [];
         
         if (clips && clips.length > 0) {
             userSessions.set(senderId, {
@@ -210,16 +210,16 @@ async function handleClipSearch(senderId, query) {
             
             for (let i = 0; i < maxClips; i++) {
                 const clip = clips[i];
-                const title = (clip.titre || clip.title || 'Sans titre');
+                const title = (clip.Titre || clip.titre || clip.title || 'Sans titre');
                 const displayTitle = title.length > 80 ? title.substring(0, 77) + '...' : title;
-                const duration = formatDuration(clip.duree || clip.duration);
+                const duration = formatDuration(clip.Duree || clip.duree || clip.duration);
                 
                 await sendMessage(senderId, `
 ${i + 1}️⃣ ${displayTitle}
 ⏱️ Durée : ${duration}
                 `.trim());
                 
-                const imageUrl = clip.image_url || clip.thumbnail || clip.image || clip.poster;
+                const imageUrl = clip.Image_url || clip.image_url || clip.thumbnail || clip.image || clip.poster;
                 if (imageUrl) {
                     try {
                         await sendMessage(senderId, {
@@ -273,8 +273,8 @@ Veuillez réessayer plus tard. 🔧
 
 async function handleClipDownload(senderId, clip, format) {
     try {
-        const clipTitle = clip.titre || clip.title || 'Clip';
-        const clipUrl = clip.url_video || clip.url || clip.video_url || clip.link || clip.video || clip.source;
+        const clipTitle = clip.Titre || clip.titre || clip.title || 'Clip';
+        const clipUrl = clip.Video_url || clip.url_video || clip.url || clip.video_url || clip.link || clip.video || clip.source;
         
         if (!clipUrl) {
             await sendMessage(senderId, `
@@ -445,8 +445,8 @@ module.exports.handleNumber = async (senderId, number) => {
             await sendMessage(senderId, `
 🎬 𝗖𝗟𝗜𝗣 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́ 🎬
 ━━━━━━━━━━━━━━━━━━━
-📹 ${selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
-⏱️ Durée : ${formatDuration(selectedClip.duree || selectedClip.duration)}
+📹 ${selectedClip.Titre || selectedClip.titre || selectedClip.title || 'Clip sélectionné'}
+⏱️ Durée : ${formatDuration(selectedClip.Duree || selectedClip.duree || selectedClip.duration)}
 
 🎵 𝗤𝘂𝗲𝗹 𝘁𝘆𝗽𝗲 𝘀𝗼𝘂𝗵𝗮𝗶𝘁𝗲𝘇-𝘃𝗼𝘂𝘀 ?
 ━━━━━━━━━━━━━━━━━━━
