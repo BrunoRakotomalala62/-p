@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const FormData = require('form-data');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://clip-dai.onrender.com';
@@ -56,9 +57,47 @@ function cleanupFile(filePath) {
     }, 120000);
 }
 
+async function sendFileToMessenger(recipientId, filePath, fileType) {
+    try {
+        const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+        if (!PAGE_ACCESS_TOKEN) {
+            throw new Error('PAGE_ACCESS_TOKEN non défini');
+        }
+
+        const form = new FormData();
+        form.append('recipient', JSON.stringify({ id: recipientId }));
+        form.append('message', JSON.stringify({
+            attachment: {
+                type: fileType,
+                payload: {
+                    is_reusable: false
+                }
+            }
+        }));
+        form.append('filedata', fs.createReadStream(filePath));
+
+        const response = await axios.post(
+            `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            form,
+            {
+                headers: form.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                timeout: 180000
+            }
+        );
+
+        console.log('Fichier envoyé via FormData:', response.data);
+        return { success: true, data: response.data };
+    } catch (error) {
+        const errorData = error.response ? error.response.data : error.message;
+        console.error('Erreur envoi FormData:', errorData);
+        return { success: false, error: errorData };
+    }
+}
+
 const userSessions = new Map();
 
-const QUALITY_OPTIONS = ['720p', '480p', '360p'];
 const FORMAT_OPTIONS = ['MP3', 'MP4'];
 
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
@@ -337,7 +376,6 @@ Veuillez réessayer avec un autre clip.
             selectedClip: null
         });
         
-        const quality = '360p';
         const formatLabel = format === 'MP3' ? '🎵 Audio MP3' : '🎬 Vidéo MP4';
         
         await sendMessage(senderId, `
@@ -345,13 +383,12 @@ Veuillez réessayer avec un autre clip.
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle.substring(0, 50)}${clipTitle.length > 50 ? '...' : ''}
 📁 Format : ${formatLabel}
-📊 Qualité : ${quality}
 
 Je vais vous envoyer le fichier en pièce jointe ${format}...
 Veuillez patienter... 🕐
         `.trim());
 
-        const downloadUrl = `${API_BASE}/download?video=${encodeURIComponent(clipUrl)}&type=${format}&qualite=${quality}`;
+        const downloadUrl = `${API_BASE}/download?video=${encodeURIComponent(clipUrl)}&type=${format}`;
         
         console.log('URL de téléchargement:', downloadUrl);
         
@@ -393,30 +430,40 @@ Veuillez patienter... 🕐
                 return;
             }
             
-            const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-                ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-                : `http://localhost:${process.env.PORT || 5000}`;
-            const localUrl = `${baseUrl}/temp/clips/${filename}`;
-            
-            console.log('URL locale générée:', localUrl);
-            
             const attachmentType = format === 'MP3' ? 'audio' : 'video';
             
-            const sendResult = await sendMessage(senderId, {
-                attachment: {
-                    type: attachmentType,
-                    payload: {
-                        url: localUrl,
-                        is_reusable: false
-                    }
-                }
-            });
+            console.log(`Envoi du fichier ${format} via FormData...`);
+            const sendResult = await sendFileToMessenger(senderId, localFile.filePath, attachmentType);
             
             if (sendResult && sendResult.success) {
                 fileSentSuccessfully = true;
-                console.log(`${format} envoyé avec succès via URL locale`);
+                console.log(`${format} envoyé avec succès via FormData`);
             } else {
-                console.log(`Échec envoi ${format} via URL locale:`, sendResult?.error || 'Erreur inconnue');
+                console.log(`Échec envoi ${format} via FormData:`, sendResult?.error || 'Erreur inconnue');
+                
+                const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+                    ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+                    : `http://localhost:${process.env.PORT || 5000}`;
+                const localUrl = `${baseUrl}/temp/clips/${filename}`;
+                
+                console.log('Tentative via URL locale:', localUrl);
+                
+                const urlResult = await sendMessage(senderId, {
+                    attachment: {
+                        type: attachmentType,
+                        payload: {
+                            url: localUrl,
+                            is_reusable: false
+                        }
+                    }
+                });
+                
+                if (urlResult && urlResult.success) {
+                    fileSentSuccessfully = true;
+                    console.log(`${format} envoyé avec succès via URL locale`);
+                } else {
+                    console.log(`Échec envoi ${format} via URL locale:`, urlResult?.error || 'Erreur inconnue');
+                }
             }
             
         } catch (downloadError) {
