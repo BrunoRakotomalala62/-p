@@ -2,7 +2,6 @@ const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://clip-dai.onrender.com';
-const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 
@@ -36,19 +35,6 @@ async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
                 throw error;
             }
         }
-    }
-}
-
-async function getFileSize(url) {
-    try {
-        const response = await axios.head(url, {
-            timeout: 30000,
-            maxRedirects: 5
-        });
-        return parseInt(response.headers['content-length'] || '0');
-    } catch (error) {
-        console.log('Impossible de récupérer la taille:', error.message);
-        return 0;
     }
 }
 
@@ -319,47 +305,27 @@ Veuillez patienter... 🕐
         console.log('URL de téléchargement:', downloadUrl);
         
         if (format === 'MP3') {
-            await sendMessage(senderId, `📥 Préparation de l'audio... ⏳`);
-            
-            try {
-                await axios.head(downloadUrl, { timeout: 10000 });
-                console.log('API clip-dai réchauffée pour MP3');
-            } catch (warmupError) {
-                console.log('Réchauffement API MP3 (ignoré):', warmupError.message);
-            }
-            
-            const audioSize = await getFileSize(downloadUrl);
-            const sizeMB = (audioSize / (1024 * 1024)).toFixed(2);
-            
-            console.log(`Taille audio MP3: ${sizeMB} MB`);
-            
             let audioSentSuccessfully = false;
             
-            if (audioSize === 0 || audioSize < MAX_DIRECT_SEND_SIZE) {
-                await sendMessage(senderId, `📤 Envoi de l'audio en cours...`);
-                
-                try {
-                    const sendResult = await sendMessage(senderId, {
-                        attachment: {
-                            type: 'audio',
-                            payload: {
-                                url: downloadUrl,
-                                is_reusable: true
-                            }
+            try {
+                const sendResult = await sendMessage(senderId, {
+                    attachment: {
+                        type: 'audio',
+                        payload: {
+                            url: downloadUrl,
+                            is_reusable: true
                         }
-                    });
-                    
-                    if (sendResult && sendResult.success) {
-                        audioSentSuccessfully = true;
-                        console.log('Audio MP3 envoyé avec succès en pièce jointe');
-                    } else {
-                        console.log('Échec envoi audio:', sendResult?.error || 'Erreur inconnue');
-                        audioSentSuccessfully = false;
                     }
-                } catch (sendError) {
-                    console.log('Erreur envoi direct de l\'audio:', sendError.message);
-                    audioSentSuccessfully = false;
+                });
+                
+                if (sendResult && sendResult.success) {
+                    audioSentSuccessfully = true;
+                    console.log('Audio MP3 envoyé avec succès en pièce jointe');
+                } else {
+                    console.log('Échec envoi audio:', sendResult?.error || 'Erreur inconnue');
                 }
+            } catch (sendError) {
+                console.log('Erreur envoi direct de l\'audio:', sendError.message);
             }
             
             if (audioSentSuccessfully) {
@@ -368,7 +334,6 @@ Veuillez patienter... 🕐
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
 📁 Format : MP3 (Audio)
-${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 
 🎵 Votre audio a été envoyé ci-dessus !
 
@@ -380,7 +345,6 @@ ${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
 📁 Format : MP3 (Audio)
-${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 
 ⚠️ L'envoi direct a échoué.
 🔗 Utilisez le lien ci-dessous :
@@ -396,47 +360,27 @@ ${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
             }
             
         } else {
-            await sendMessage(senderId, `📥 Préparation de la vidéo... ⏳`);
-            
-            try {
-                await axios.head(downloadUrl, { timeout: 10000 });
-                console.log('API clip-dai réchauffée');
-            } catch (warmupError) {
-                console.log('Réchauffement API (ignoré):', warmupError.message);
-            }
-            
-            const videoSize = await getFileSize(downloadUrl);
-            const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
-            
-            console.log(`Taille vidéo MP4: ${sizeMB} MB`);
-            
             let videoSentSuccessfully = false;
             
-            if (videoSize === 0 || videoSize < MAX_DIRECT_SEND_SIZE) {
-                await sendMessage(senderId, `📤 Envoi de la vidéo en cours...`);
-                
-                try {
-                    const sendResult = await sendMessage(senderId, {
-                        attachment: {
-                            type: 'video',
-                            payload: {
-                                url: downloadUrl,
-                                is_reusable: true
-                            }
+            try {
+                const sendResult = await sendMessage(senderId, {
+                    attachment: {
+                        type: 'video',
+                        payload: {
+                            url: downloadUrl,
+                            is_reusable: true
                         }
-                    });
-                    
-                    if (sendResult && sendResult.success) {
-                        videoSentSuccessfully = true;
-                        console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
-                    } else {
-                        console.log('Échec envoi vidéo:', sendResult?.error || 'Erreur inconnue');
-                        videoSentSuccessfully = false;
                     }
-                } catch (sendError) {
-                    console.log('Erreur envoi direct de la vidéo:', sendError.message);
-                    videoSentSuccessfully = false;
+                });
+                
+                if (sendResult && sendResult.success) {
+                    videoSentSuccessfully = true;
+                    console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
+                } else {
+                    console.log('Échec envoi vidéo:', sendResult?.error || 'Erreur inconnue');
                 }
+            } catch (sendError) {
+                console.log('Erreur envoi direct de la vidéo:', sendError.message);
             }
             
             if (videoSentSuccessfully) {
@@ -445,7 +389,6 @@ ${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
 📁 Format : MP4 (Vidéo)
-${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 
 🎬 Votre vidéo a été envoyée ci-dessus !
 
@@ -457,7 +400,6 @@ ${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
 📁 Format : MP4 (Vidéo)
-${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 
 ⚠️ L'envoi direct a échoué.
 🔗 Utilisez le lien ci-dessous :
