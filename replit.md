@@ -4,6 +4,17 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**December 3, 2025 - Amélioration Commande Clip Dailymotion**
+- Suppression du paramètre `qualite` de l'URL de téléchargement (qualité par défaut de l'API)
+- Nouvelle méthode d'envoi de fichiers via FormData direct sur Facebook Messenger
+- Logique d'envoi améliorée avec fallback :
+  1. Téléchargement local du fichier
+  2. Vérification de la taille (< 25 MB)
+  3. Envoi direct via FormData (méthode principale)
+  4. Fallback via URL locale si FormData échoue
+  5. Lien de téléchargement si tout échoue
+- Endpoints API utilisés : `/recherche?clip=<query>`, `/download?video=<URL>&type=<MP3|MP4>`, `/videoinfo?video=<id>`
+
 **December 2, 2025 - Commande Clip Dailymotion**
 - Nouvelle commande VIP `clip` pour rechercher et télécharger des clips Dailymotion
 - Utilise l'API externe `https://clip-dai.onrender.com/`
@@ -12,13 +23,11 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
   - Affichage des résultats avec titre, durée, taille estimée et image
   - Sélection interactive en plusieurs étapes :
     1. Envoi du numéro de la vidéo (1-10)
-    2. Choix de la qualité (360p ou 720p)
-    3. Choix du format (MP3 ou MP4)
+    2. Choix du format (MP3 ou MP4)
   - Envoi automatique du fichier en pièce jointe (si < 25 MB)
   - Envoi du lien de téléchargement dynamique dans tous les cas
   - Gestion des sessions utilisateurs pour le flux de sélection
 - Endpoints API utilisés : `/recherche`, `/download`, `/videoinfo`
-- URL de téléchargement dynamique : `API_BASE + /download?video=<URL>&type=<MP3|MP4>&qualite=<360p|720p>`
 
 **November 26, 2025 - Système de Commandes VIP**
 - Nouveau répertoire `VIP/` pour les commandes réservées aux membres VIP
