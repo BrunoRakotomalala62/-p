@@ -4,6 +4,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const axios = require('axios');
 const multer = require('multer');
+const cron = require('node-cron');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -234,6 +235,22 @@ app.get('/download/:id', async (req, res) => {
 // Route par défaut - redirection vers le chatbot
 app.get('/', (req, res) => {
     res.redirect('/chatbot');
+});
+
+// Route de santé pour le ping
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Auto-ping toutes les 14 minutes pour garder le bot éveillé sur Render
+cron.schedule('*/14 * * * *', async () => {
+    try {
+        const appUrl = process.env.RENDER_URL || 'https://votre-app.onrender.com';
+        const response = await axios.get(`${appUrl}/health`);
+        console.log(`Auto-ping: ${response.status}`);
+    } catch (error) {
+        console.error(`Erreur ping: ${error.message}`);
+    }
 });
 
 // Démarrer le serveur
