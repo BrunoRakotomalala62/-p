@@ -1,69 +1,44 @@
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 const FormData = require('form-data');
+const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://clip-dai.onrender.com';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
-const TEMP_DIR = '/tmp/clips';
 
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-}
-
-async function downloadFileLocally(url, filename) {
+async function downloadToBuffer(url) {
     try {
-        const filePath = path.join(TEMP_DIR, filename);
+        console.log('Téléchargement en mémoire:', url);
         const response = await axios({
             method: 'GET',
             url: url,
-            responseType: 'stream',
-            timeout: 120000,
+            responseType: 'arraybuffer',
+            timeout: 180000,
             maxRedirects: 5,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
         
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
-        
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                const stats = fs.statSync(filePath);
-                console.log(`Fichier téléchargé: ${filePath} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
-                resolve({ filePath, size: stats.size });
-            });
-            writer.on('error', reject);
-        });
+        const buffer = Buffer.from(response.data);
+        console.log(`Fichier téléchargé en mémoire: ${(buffer.length / (1024 * 1024)).toFixed(2)} MB`);
+        return { buffer, size: buffer.length };
     } catch (error) {
-        console.error('Erreur téléchargement local:', error.message);
+        console.error('Erreur téléchargement en mémoire:', error.message);
         throw error;
     }
 }
 
-function cleanupFile(filePath) {
-    setTimeout(() => {
-        try {
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-                console.log(`Fichier temporaire supprimé: ${filePath}`);
-            }
-        } catch (error) {
-            console.error('Erreur suppression fichier:', error.message);
-        }
-    }, 120000);
-}
-
-async function sendFileToMessenger(recipientId, filePath, fileType) {
+async function sendBufferToMessenger(recipientId, buffer, fileType, filename) {
     try {
         const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
         if (!PAGE_ACCESS_TOKEN) {
             throw new Error('PAGE_ACCESS_TOKEN non défini');
         }
 
+        const stream = Readable.from(buffer);
+        
         const form = new FormData();
         form.append('recipient', JSON.stringify({ id: recipientId }));
         form.append('message', JSON.stringify({
@@ -74,7 +49,10 @@ async function sendFileToMessenger(recipientId, filePath, fileType) {
                 }
             }
         }));
-        form.append('filedata', fs.createReadStream(filePath));
+        form.append('filedata', stream, {
+            filename: filename,
+            contentType: fileType === 'audio' ? 'audio/mpeg' : 'video/mp4'
+        });
 
         const response = await axios.post(
             `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
@@ -397,17 +375,16 @@ Veuillez patienter... 🕐
         const safeTitle = clipTitle.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
         const filename = `${safeTitle}_${Date.now()}.${fileExt}`;
         
-        let localFile = null;
+        let fileData = null;
         let fileSentSuccessfully = false;
         
         try {
-            console.log('Téléchargement local du fichier...');
-            localFile = await downloadFileLocally(downloadUrl, filename);
-            console.log(`Fichier téléchargé: ${localFile.filePath} (${(localFile.size / (1024 * 1024)).toFixed(2)} MB)`);
+            console.log('Téléchargement en mémoire...');
+            fileData = await downloadToBuffer(downloadUrl);
+            console.log(`Fichier téléchargé: ${(fileData.size / (1024 * 1024)).toFixed(2)} MB`);
             
-            if (localFile.size > MAX_FB_SIZE) {
-                console.log(`Fichier trop volumineux (${(localFile.size / (1024 * 1024)).toFixed(2)} MB > 25 MB)`);
-                cleanupFile(localFile.filePath);
+            if (fileData.size > MAX_FB_SIZE) {
+                console.log(`Fichier trop volumineux (${(fileData.size / (1024 * 1024)).toFixed(2)} MB > 25 MB)`);
                 
                 await sendMessage(senderId, `
 📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
@@ -415,7 +392,7 @@ Veuillez patienter... 🕐
 🎬 ${clipTitle}
 📁 Format : ${format === 'MP3' ? 'MP3 (Audio)' : 'MP4 (Vidéo)'}
 
-⚠️ Fichier trop volumineux (${(localFile.size / (1024 * 1024)).toFixed(1)} MB).
+⚠️ Fichier trop volumineux (${(fileData.size / (1024 * 1024)).toFixed(1)} MB).
 📱 Facebook limite à 25 MB maximum.
 🔗 Utilisez le lien ci-dessous :
                 `.trim());
@@ -432,47 +409,21 @@ Veuillez patienter... 🕐
             
             const attachmentType = format === 'MP3' ? 'audio' : 'video';
             
-            console.log(`Envoi du fichier ${format} via FormData...`);
-            const sendResult = await sendFileToMessenger(senderId, localFile.filePath, attachmentType);
+            console.log(`Envoi du fichier ${format} directement à Facebook...`);
+            const sendResult = await sendBufferToMessenger(senderId, fileData.buffer, attachmentType, filename);
             
             if (sendResult && sendResult.success) {
                 fileSentSuccessfully = true;
-                console.log(`${format} envoyé avec succès via FormData`);
+                console.log(`${format} envoyé avec succès à Facebook`);
             } else {
-                console.log(`Échec envoi ${format} via FormData:`, sendResult?.error || 'Erreur inconnue');
-                
-                const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-                    ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-                    : `http://localhost:${process.env.PORT || 5000}`;
-                const localUrl = `${baseUrl}/temp/clips/${filename}`;
-                
-                console.log('Tentative via URL locale:', localUrl);
-                
-                const urlResult = await sendMessage(senderId, {
-                    attachment: {
-                        type: attachmentType,
-                        payload: {
-                            url: localUrl,
-                            is_reusable: false
-                        }
-                    }
-                });
-                
-                if (urlResult && urlResult.success) {
-                    fileSentSuccessfully = true;
-                    console.log(`${format} envoyé avec succès via URL locale`);
-                } else {
-                    console.log(`Échec envoi ${format} via URL locale:`, urlResult?.error || 'Erreur inconnue');
-                }
+                console.log(`Échec envoi ${format}:`, sendResult?.error || 'Erreur inconnue');
             }
             
         } catch (downloadError) {
-            console.error('Erreur lors du téléchargement local:', downloadError.message);
+            console.error('Erreur lors du téléchargement:', downloadError.message);
         }
         
         if (fileSentSuccessfully) {
-            if (localFile) cleanupFile(localFile.filePath);
-            
             await sendMessage(senderId, `
 ✅ ${format === 'MP3' ? '𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯' : '𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰'} 𝗘𝗡𝗩𝗢𝗬𝗘́${format === 'MP4' ? 'E' : ''} !
 ━━━━━━━━━━━━━━━━━━━
@@ -484,8 +435,6 @@ ${format === 'MP3' ? '🎵' : '🎬'} Votre fichier a été envoyé ci-dessus !
 🔄 Tapez "clip" pour une nouvelle recherche
             `.trim());
         } else {
-            if (localFile) cleanupFile(localFile.filePath);
-            
             await sendMessage(senderId, `
 📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 ${format}
 ━━━━━━━━━━━━━━━━━━━

@@ -6,13 +6,15 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 **December 3, 2025 - Amélioration Commande Clip Dailymotion**
 - Suppression du paramètre `qualite` de l'URL de téléchargement (qualité par défaut de l'API)
-- Nouvelle méthode d'envoi de fichiers via FormData direct sur Facebook Messenger
-- Logique d'envoi améliorée avec fallback :
-  1. Téléchargement local du fichier
+- Suppression de l'utilisation du dossier temporaire `/tmp/clips`
+- Téléchargement en mémoire (Buffer) au lieu du disque
+- Envoi direct à Facebook Messenger via FormData avec Readable stream
+- Logique d'envoi améliorée :
+  1. Téléchargement en mémoire (Buffer)
   2. Vérification de la taille (< 25 MB)
-  3. Envoi direct via FormData (méthode principale)
-  4. Fallback via URL locale si FormData échoue
-  5. Lien de téléchargement si tout échoue
+  3. Envoi direct via FormData avec stream
+  4. Lien de téléchargement si l'envoi échoue
+- Compatible avec les environnements serverless (Vercel, etc.)
 - Endpoints API utilisés : `/recherche?clip=<query>`, `/download?video=<URL>&type=<MP3|MP4>`, `/videoinfo?video=<id>`
 
 **December 2, 2025 - Commande Clip Dailymotion**
