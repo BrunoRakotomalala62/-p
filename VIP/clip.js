@@ -319,6 +319,15 @@ Veuillez patienter... 🕐
         console.log('URL de téléchargement:', downloadUrl);
         
         if (format === 'MP3') {
+            await sendMessage(senderId, `📥 Préparation de l'audio... ⏳`);
+            
+            try {
+                await axios.head(downloadUrl, { timeout: 10000 });
+                console.log('API clip-dai réchauffée pour MP3');
+            } catch (warmupError) {
+                console.log('Réchauffement API MP3 (ignoré):', warmupError.message);
+            }
+            
             const audioSize = await getFileSize(downloadUrl);
             const sizeMB = (audioSize / (1024 * 1024)).toFixed(2);
             
@@ -327,8 +336,10 @@ Veuillez patienter... 🕐
             let audioSentSuccessfully = false;
             
             if (audioSize === 0 || audioSize < MAX_DIRECT_SEND_SIZE) {
+                await sendMessage(senderId, `📤 Envoi de l'audio en cours...`);
+                
                 try {
-                    await sendMessage(senderId, {
+                    const sendResult = await sendMessage(senderId, {
                         attachment: {
                             type: 'audio',
                             payload: {
@@ -337,35 +348,63 @@ Veuillez patienter... 🕐
                             }
                         }
                     });
-                    audioSentSuccessfully = true;
-                    console.log('Audio MP3 envoyé avec succès en pièce jointe');
+                    
+                    if (sendResult && sendResult.success) {
+                        audioSentSuccessfully = true;
+                        console.log('Audio MP3 envoyé avec succès en pièce jointe');
+                    } else {
+                        console.log('Échec envoi audio:', sendResult?.error || 'Erreur inconnue');
+                        audioSentSuccessfully = false;
+                    }
                 } catch (sendError) {
                     console.log('Erreur envoi direct de l\'audio:', sendError.message);
                     audioSentSuccessfully = false;
                 }
             }
             
-            await sendMessage(senderId, `
-${audioSentSuccessfully ? '✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́ !' : '📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗠𝗣𝟯'}
+            if (audioSentSuccessfully) {
+                await sendMessage(senderId, `
+✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́ !
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
 📁 Format : MP3 (Audio)
 ${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 
-${audioSentSuccessfully ? '🎵 Votre audio a été envoyé ci-dessus !' : ''}
-
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-            `.trim());
-            
-            await sendMessage(senderId, downloadUrl);
-            
-            await sendMessage(senderId, `
-💡 Cliquez sur le lien ci-dessus pour télécharger directement sur votre téléphone.
+🎵 Votre audio a été envoyé ci-dessus !
 
 🔄 Tapez "clip" pour une nouvelle recherche
-            `.trim());
+                `.trim());
+            } else {
+                await sendMessage(senderId, `
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗠𝗣𝟯
+━━━━━━━━━━━━━━━━━━━
+🎬 ${clipTitle}
+📁 Format : MP3 (Audio)
+${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
+
+⚠️ L'envoi direct a échoué.
+🔗 Utilisez le lien ci-dessous :
+                `.trim());
+                
+                await sendMessage(senderId, downloadUrl);
+                
+                await sendMessage(senderId, `
+💡 Cliquez sur le lien pour télécharger.
+
+🔄 Tapez "clip" pour une nouvelle recherche
+                `.trim());
+            }
             
         } else {
+            await sendMessage(senderId, `📥 Préparation de la vidéo... ⏳`);
+            
+            try {
+                await axios.head(downloadUrl, { timeout: 10000 });
+                console.log('API clip-dai réchauffée');
+            } catch (warmupError) {
+                console.log('Réchauffement API (ignoré):', warmupError.message);
+            }
+            
             const videoSize = await getFileSize(downloadUrl);
             const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
             
@@ -374,8 +413,10 @@ ${audioSentSuccessfully ? '🎵 Votre audio a été envoyé ci-dessus !' : ''}
             let videoSentSuccessfully = false;
             
             if (videoSize === 0 || videoSize < MAX_DIRECT_SEND_SIZE) {
+                await sendMessage(senderId, `📤 Envoi de la vidéo en cours...`);
+                
                 try {
-                    await sendMessage(senderId, {
+                    const sendResult = await sendMessage(senderId, {
                         attachment: {
                             type: 'video',
                             payload: {
@@ -384,33 +425,52 @@ ${audioSentSuccessfully ? '🎵 Votre audio a été envoyé ci-dessus !' : ''}
                             }
                         }
                     });
-                    videoSentSuccessfully = true;
-                    console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
+                    
+                    if (sendResult && sendResult.success) {
+                        videoSentSuccessfully = true;
+                        console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
+                    } else {
+                        console.log('Échec envoi vidéo:', sendResult?.error || 'Erreur inconnue');
+                        videoSentSuccessfully = false;
+                    }
                 } catch (sendError) {
                     console.log('Erreur envoi direct de la vidéo:', sendError.message);
                     videoSentSuccessfully = false;
                 }
             }
             
-            await sendMessage(senderId, `
-${videoSentSuccessfully ? '✅ 𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 !' : '📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗠𝗣𝟰'}
+            if (videoSentSuccessfully) {
+                await sendMessage(senderId, `
+✅ 𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘 !
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${clipTitle}
 📁 Format : MP4 (Vidéo)
 ${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
 
-${videoSentSuccessfully ? '🎬 Votre vidéo a été envoyée ci-dessus !' : ''}
-
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-            `.trim());
-            
-            await sendMessage(senderId, downloadUrl);
-            
-            await sendMessage(senderId, `
-💡 Cliquez sur le lien ci-dessus pour télécharger directement sur votre téléphone.
+🎬 Votre vidéo a été envoyée ci-dessus !
 
 🔄 Tapez "clip" pour une nouvelle recherche
-            `.trim());
+                `.trim());
+            } else {
+                await sendMessage(senderId, `
+📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗠𝗣𝟰
+━━━━━━━━━━━━━━━━━━━
+🎬 ${clipTitle}
+📁 Format : MP4 (Vidéo)
+${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
+
+⚠️ L'envoi direct a échoué.
+🔗 Utilisez le lien ci-dessous :
+                `.trim());
+                
+                await sendMessage(senderId, downloadUrl);
+                
+                await sendMessage(senderId, `
+💡 Cliquez sur le lien pour télécharger.
+
+🔄 Tapez "clip" pour une nouvelle recherche
+                `.trim());
+            }
         }
 
     } catch (error) {
