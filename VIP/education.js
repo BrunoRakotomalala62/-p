@@ -14,10 +14,11 @@ const MATIERES = {
     'hg': { emoji: '🌍', name: 'Histoire-Géo', aliases: ['histoire', 'geo', 'geographie'] },
     'malagasy': { emoji: '🇲🇬', name: 'Malagasy', aliases: ['mlg', 'gasy'] },
     'philosophie': { emoji: '🧠', name: 'Philosophie', aliases: ['philo'] },
-    'francais': { emoji: '📚', name: 'Français', aliases: ['fr', 'french'] }
+    'francais': { emoji: '📚', name: 'Français', aliases: ['fr', 'french'] },
+    'anglais': { emoji: '🇬🇧', name: 'Anglais', aliases: ['ang', 'english', 'eng'] }
 };
 
-const SERIES = ['A', 'C', 'D', 'L', 'S', 'OSE', 'A-C-D', 'C-D'];
+const SERIES = ['A', 'C', 'D', 'L', 'S', 'OSE', 'A-C-D', 'C-D', 'ACD', 'CD'];
 const TYPES = ['sujet', 'correction'];
 
 const SEARCH_MESSAGES = [
@@ -220,7 +221,8 @@ ${DECORATIONS.divider}
 🌍 hg (histoire, geo)
 🇲🇬 malagasy (mlg)
 🧠 philosophie (philo)
-📚 francais (fr)`.trim();
+📚 francais (fr)
+🇬🇧 anglais (ang, english)`.trim();
 
     await sendMessage(senderId, matieres);
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -244,11 +246,17 @@ ${DECORATIONS.divider}
 📌 education francais A 2019
    ➜ Français série A, année 2019
 
+📌 education anglais A 2017
+   ➜ Anglais série A, année 2017
+
+📌 education anglais C sujet
+   ➜ Sujets Anglais série C-D
+
+📌 education anglais OSE
+   ➜ Anglais série OSE
+
 📌 education philo correction
    ➜ Corrections de philosophie
-
-📌 education svt sujet 2020
-   ➜ Sujets SVT année 2020
 
 📌 education hg C correction 2018
    ➜ Correction HG série C 2018`.trim();

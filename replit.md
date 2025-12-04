@@ -4,6 +4,21 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**December 4, 2025 - Ajout Matière Anglais dans la Commande Education**
+- Ajout de la matière "Anglais" dans la liste des matières disponibles pour la commande VIP `education`
+- Emoji: 🇬🇧, Aliases: ang, english, eng
+- Séries disponibles pour Anglais :
+  - Série A (1999-2022)
+  - Série C-D (1999-2023) 
+  - Série A-C-D (Remplacement 2000-2002)
+  - Série OSE (2022)
+- Exemples d'utilisation :
+  - `education anglais A 2017` - Anglais série A, année 2017
+  - `education anglais C sujet` - Sujets Anglais série C-D
+  - `education anglais OSE` - Anglais série OSE
+- Mise à jour de l'aide avec les nouvelles séries supportées (ACD, CD)
+- API utilisée: `https://pdf-0r0j.onrender.com/recherche?pdf=anglais&serie=<SERIE>&type=sujet&annee=<ANNEE>`
+
 **December 3, 2025 - Amélioration Commande Clip Dailymotion**
 - Suppression du paramètre `qualite` de l'URL de téléchargement (qualité par défaut de l'API)
 - Suppression de l'utilisation du dossier temporaire `/tmp/clips`

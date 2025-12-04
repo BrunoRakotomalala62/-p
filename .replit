@@ -1,5 +1,5 @@
 entrypoint = "index.js"
-modules = ["nodejs-14", "web"]
+modules = ["web", "nodejs-20"]
 hidden = [".config", "package-lock.json"]
 
 [gitHubImport]
@@ -44,7 +44,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm start"
+args = "node index.js"
 waitForPort = 5000
 
 [agent]
@@ -59,7 +59,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 38829
+localPort = 37567
 externalPort = 8008
 
 [[ports]]
