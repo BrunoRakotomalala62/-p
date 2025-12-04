@@ -4,6 +4,23 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**December 4, 2025 - Nouvelle Commande VIP Livre (Bibliothèque PDF)**
+- Nouvelle commande VIP `livre` pour accéder à une bibliothèque de livres PDF gratuits
+- API utilisée: `https://livre-pdf-gratuit.vercel.app/livres`
+- Fonctionnalités :
+  - Affichage de 5 livres par page avec titre et image en pièce jointe
+  - Navigation par pages: `page 2`, `page 3`, etc.
+  - Téléchargement en envoyant le numéro du livre (1-5)
+  - Logique d'envoi intelligente :
+    - PDF < 25 Mo: envoi direct en pièce jointe Messenger
+    - PDF > 25 Mo: envoi du lien de téléchargement cliquable
+  - Gestion des sessions utilisateurs pour la sélection
+- Commandes disponibles:
+  - `livre` - Affiche les 5 premiers livres
+  - `page X` - Va à la page X
+  - `1-5` - Télécharge le livre correspondant
+  - `livre aide` - Affiche le guide d'utilisation
+
 **December 4, 2025 - Ajout Matière Anglais dans la Commande Education**
 - Ajout de la matière "Anglais" dans la liste des matières disponibles pour la commande VIP `education`
 - Emoji: 🇬🇧, Aliases: ang, english, eng
