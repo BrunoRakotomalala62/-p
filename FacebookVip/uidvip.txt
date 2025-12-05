@@ -1,5 +1,7 @@
 # Liste des UIDs des utilisateurs VIP
 # Format: UID|Date d'expiration (YYYY-MM-DD)
 # Les administrateurs ont automatiquement accès aux commandes VIP
-9112979805413256| 2030-01-04
-27215201668128044| 2035-01-04
+9112979805413256| 2030-01-04 # Micka
+27215201668128044| 2035-01-04 # Miavo
+32516615711271177| 2030-01-04 # Henikaja
+8748181628537095| 2030-01-04 # Tsiahy
