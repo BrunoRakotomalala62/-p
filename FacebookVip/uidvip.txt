@@ -1,3 +1,4 @@
 # Liste des UIDs des utilisateurs VIP
 # Format: UID|Date d'expiration (YYYY-MM-DD)
 # Les administrateurs ont automatiquement accès aux commandes VIP
+9112979805413256| 2030-01-04
