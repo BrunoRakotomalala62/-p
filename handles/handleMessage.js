@@ -6,6 +6,7 @@ const { checkSubscription } = require('../utils/subscription');
 const { checkVIPStatus } = require('../utils/vipSubscription');
 const geminiModule = require('../auto/gemini');
 const controle = require('../ACTIVE&DESACTIVE/controle');
+const { autoReact } = require('../utils/autoReaction');
 
 // Charger toutes les commandes du dossier 'commands'
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -60,6 +61,14 @@ const expirationAlertSent = {};
 const handleMessage = async (event, api) => {
     const senderId = event.sender.id;
     const message = event.message;
+    const messageId = message.mid;
+
+    // Ajouter une réaction automatique basée sur le contexte du message
+    if (messageId && message.text) {
+        autoReact(messageId, message.text).catch(err => {
+            console.log('Erreur réaction auto:', err.message || err);
+        });
+    }
 
     // Vérifier l'abonnement de l'utilisateur
     const subscription = checkSubscription(senderId);
