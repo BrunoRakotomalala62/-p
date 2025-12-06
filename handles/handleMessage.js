@@ -5,6 +5,7 @@ const axios = require('axios');
 const { checkSubscription } = require('../utils/subscription');
 const { checkVIPStatus } = require('../utils/vipSubscription');
 const geminiModule = require('../auto/gemini');
+const controle = require('../ACTIVE&DESACTIVE/controle');
 
 // Charger toutes les commandes du dossier 'commands'
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -78,11 +79,13 @@ const handleMessage = async (event, api) => {
     );
 
     // NOUVELLE LOGIQUE D'ACCÈS:
-    // - VIP (uidvip.txt) → accès aux deux répertoires commands/ ET VIP/
-    // - Abonné normal (uid.txt seulement) → accès uniquement à commands/
-    // - Non abonné → pas d'accès (sauf commande uid)
+    // - Si modeRestreint est désactivé (false) → tout le monde a accès
+    // - Si modeRestreint est activé (true) → comportement normal:
+    //   - VIP (uidvip.txt) → accès aux deux répertoires commands/ ET VIP/
+    //   - Abonné normal (uid.txt seulement) → accès uniquement à commands/
+    //   - Non abonné → pas d'accès (sauf commande uid)
     
-    const hasFullAccess = vipStatus.isVIP || subscription.isSubscribed;
+    const hasFullAccess = !controle.isAccessRestricted() || vipStatus.isVIP || subscription.isSubscribed;
 
     // Si l'utilisateur n'a aucun accès et que ce n'est pas une commande autorisée
     if (!hasFullAccess && !isCommandAllowed) {
@@ -310,7 +313,8 @@ Contactez l'administrateur pour renouveler votre abonnement VIP.
     
     // PRIORITÉ 1: Si une commande VIP est détectée, la traiter en premier
     if (vipCommandDetected) {
-        if (!vipStatus.isVIP) {
+        const canAccessVIP = !controle.isAccessRestricted() || vipStatus.isVIP;
+        if (!canAccessVIP) {
             await sendMessage(senderId, `
 👑 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗘 𝗩𝗜𝗣 👑
 ━━━━━━━━━━━━━━━━━━━
