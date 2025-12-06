@@ -238,7 +238,7 @@ async function handleDownload(senderId, app) {
     const downloadMsg = getRandomMessage(DOWNLOAD_MESSAGES);
     
     await sendMessage(senderId, `
-⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
+⏳ 𝗣𝗥𝗘́𝗣𝗔𝗥𝗔𝗧𝗜𝗢𝗡 𝗗𝗨 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧
 ${DECORATIONS.divider}
 📱 ${nom}
 ✨ ${downloadMsg}
@@ -259,76 +259,59 @@ disponible pour cette application.
             return;
         }
 
-        const sizeFromApi = parseSizeToBytes(app.taille);
-        let fileSize = sizeFromApi;
-        
-        if (fileSize === 0) {
-            fileSize = await getFileSize(apkUrl);
-        }
-        
-        const sizeMB = (fileSize / (1024 * 1024)).toFixed(2);
-        console.log(`Taille de l'APK: ${sizeMB} MB`);
+        const sizeInfo = app.taille || 'Taille inconnue';
 
-        if (fileSize > 0 && fileSize < MAX_FILE_SIZE) {
-            await sendMessage(senderId, `
-📊 Taille: ${app.taille || sizeMB + ' MB'}
-📥 Envoi de l'APK en pièce jointe...
-⏳ Cela peut prendre quelques instants...
-            `.trim());
-
+        if (app.image_url) {
             try {
-                const { buffer } = await downloadToBuffer(apkUrl);
-                const filename = `${nom.replace(/[^a-zA-Z0-9]/g, '_')}.apk`;
-                
-                const result = await sendApkToMessenger(senderId, buffer, filename);
-                
-                if (result.success) {
-                    await sendMessage(senderId, `
-✅ 𝗔𝗣𝗞 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦
-${DECORATIONS.header}
-📱 ${nom}
-📊 Taille: ${app.taille || sizeMB + ' MB'}
-${DECORATIONS.footer}
-
-💡 L'APK a été envoyé en pièce jointe !
-📲 Clique dessus pour télécharger
-⚙️ Puis installe-le sur ton Android
-
-🔄 Tape "apk <nom>" pour chercher d'autres apps
-                    `.trim());
-                    return;
-                }
-            } catch (downloadError) {
-                console.log('Erreur envoi direct APK, envoi du lien:', downloadError.message);
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: 'image',
+                        payload: {
+                            url: app.image_url,
+                            is_reusable: true
+                        }
+                    }
+                });
+            } catch (imgError) {
+                console.log('Erreur envoi image:', imgError.message);
             }
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        const sizeInfo = app.taille || (fileSize > 0 ? `${sizeMB} MB` : 'Taille inconnue');
-        const sizeWarning = fileSize >= MAX_FILE_SIZE ? '\n⚠️ Fichier > 50 MB, envoi direct impossible' : '';
-        
         await sendMessage(senderId, `
-📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧
+✅ 𝗔𝗣𝗣𝗟𝗜𝗖𝗔𝗧𝗜𝗢𝗡 𝗣𝗥𝗘̂𝗧𝗘 !
 ${DECORATIONS.header}
 📱 ${nom}
-📊 Taille: ${sizeInfo}${sizeWarning}
+📦 Taille: ${sizeInfo}
+🤖 Format: APK Android
 ${DECORATIONS.footer}
         `.trim());
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        await sendMessage(senderId, `
+📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧
+${DECORATIONS.divider}
+🔗 Clique ici pour télécharger :
+        `.trim());
+
+        await sendMessage(senderId, apkUrl);
 
         await new Promise(resolve => setTimeout(resolve, 200));
 
         await sendMessage(senderId, `
-🔗 𝗖𝗹𝗶𝗾𝘂𝗲 𝗶𝗰𝗶 𝗽𝗼𝘂𝗿 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿:
-${apkUrl}
-        `.trim());
-
-        await sendMessage(senderId, `
-💡 𝗜𝗡𝗦𝗧𝗥𝗨𝗖𝗧𝗜𝗢𝗡𝗦
-${DECORATIONS.subDivider}
+📲 𝗚𝗨𝗜𝗗𝗘 𝗗'𝗜𝗡𝗦𝗧𝗔𝗟𝗟𝗔𝗧𝗜𝗢𝗡
+${DECORATIONS.header}
 1️⃣ Clique sur le lien ci-dessus
-2️⃣ L'APK sera téléchargé
-3️⃣ Ouvre le fichier téléchargé
-4️⃣ Autorise l'installation d'apps externes
+2️⃣ Attends le téléchargement
+3️⃣ Ouvre le fichier .apk
+4️⃣ Active "Sources inconnues" si demandé
 5️⃣ Installe et profite !
+${DECORATIONS.footer}
+
+💡 𝗔𝗦𝗧𝗨𝗖𝗘: Si l'installation est bloquée,
+va dans Paramètres > Sécurité >
+Sources inconnues > Activer
 
 🔄 Tape "apk <nom>" pour d'autres apps
         `.trim());
