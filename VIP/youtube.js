@@ -479,6 +479,8 @@ ${formatEmoji} Format : ${formatLabel}
         const downloadUrl = `${API_BASE}/telecharger/${downloadEndpoint}/${videoId}`;
         const extension = format === 'MP3' ? 'mp3' : 'mp4';
         
+        const directMediaUrl = format === 'MP3' ? video.url_mp3 : video.url_mp4;
+        
         const safeTitle = sanitizeFilename(video.titre || videoId);
         const originalFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}`);
         const pdfFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}.pdf`);
@@ -486,6 +488,7 @@ ${formatEmoji} Format : ${formatLabel}
         filesToCleanup.push(originalFilePath, pdfFilePath);
         
         console.log('Téléchargement depuis:', downloadUrl);
+        console.log('URL média directe:', directMediaUrl);
         console.log('Vers:', originalFilePath);
         
         await downloadFile(downloadUrl, originalFilePath);
@@ -505,51 +508,44 @@ ${formatEmoji} Format : ${formatLabel}
             
             let fileSentSuccessfully = false;
             try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: format === 'MP3' ? 'audio' : 'video',
-                        payload: {
-                            url: downloadUrl,
-                            is_reusable: true
+                if (directMediaUrl) {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: format === 'MP3' ? 'audio' : 'video',
+                            payload: {
+                                url: directMediaUrl,
+                                is_reusable: true
+                            }
                         }
-                    }
-                });
-                fileSentSuccessfully = true;
-                console.log(`${format} envoyé avec succès en pièce jointe`);
+                    });
+                    fileSentSuccessfully = true;
+                    console.log(`${format} envoyé avec succès en pièce jointe via URL directe`);
+                } else {
+                    console.log('URL directe non disponible, envoi via API');
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: format === 'MP3' ? 'audio' : 'video',
+                            payload: {
+                                url: downloadUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    fileSentSuccessfully = true;
+                    console.log(`${format} envoyé avec succès en pièce jointe via API`);
+                }
             } catch (sendError) {
                 console.log('Erreur envoi média:', sendError.message);
             }
             
-            try {
-                const FormData = require('form-data');
-                const formData = new FormData();
-                formData.append('file', fs.createReadStream(pdfFilePath), {
-                    filename: `${safeTitle}.${extension}.pdf`,
-                    contentType: 'application/pdf'
-                });
-                
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'file',
-                        payload: {
-                            is_reusable: true
-                        }
-                    },
-                    filedata: formData
-                });
-                console.log('Fichier PDF envoyé avec succès');
-            } catch (pdfError) {
-                console.log('Envoi PDF via form-data échoué, tentative URL directe:', pdfError.message);
-            }
-            
             await sendMessage(senderId, `
-${fileSentSuccessfully ? '✅' : '📥'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 ${format} ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
+${fileSentSuccessfully ? '✅' : '❌'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 ${format} ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : '𝗡𝗢𝗡 𝗘𝗡𝗩𝗢𝗬𝗘́'}
 ━━━━━━━━━━━━━━━━━━━
 ${formatEmoji} ${video.titre}
 📊 Format : ${format}
 📦 Taille : ${sizeMB} MB
 
-${fileSentSuccessfully ? '✅ Fichier média envoyé ci-dessus' : ''}
+${fileSentSuccessfully ? '✅ Fichier média envoyé ci-dessus' : '⚠️ Impossible d\'envoyer le fichier en pièce jointe'}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
 ${downloadUrl}
@@ -581,20 +577,21 @@ ${formatEmoji} ${video.titre}
             `.trim());
             
             let fileSentSuccessfully = false;
-            if (fileSize <= MAX_DIRECT_SEND_SIZE) {
+            if (directMediaUrl) {
                 try {
                     await sendMessage(senderId, {
                         attachment: {
                             type: format === 'MP3' ? 'audio' : 'video',
                             payload: {
-                                url: downloadUrl,
+                                url: directMediaUrl,
                                 is_reusable: true
                             }
                         }
                     });
                     fileSentSuccessfully = true;
+                    console.log('Fichier envoyé via URL directe pour gros fichier');
                 } catch (e) {
-                    console.log('Envoi média direct impossible pour gros fichier');
+                    console.log('Envoi média direct impossible pour gros fichier:', e.message);
                 }
             }
             
