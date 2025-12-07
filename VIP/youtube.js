@@ -1,11 +1,19 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://be58d765-6ccc-417a-bbf7-7f948be51a2a-00-pmr078le5ppk.spock.replit.dev';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
+const PART_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 const VIDEOS_PER_PAGE = 10;
+const TEMP_DIR = '/tmp/youtube_downloads';
+
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
 const userSessions = new Map();
 
@@ -60,11 +68,15 @@ function getTotalPages(totalVideos) {
     return Math.ceil(totalVideos / VIDEOS_PER_PAGE);
 }
 
+function sanitizeFilename(filename) {
+    return filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100);
+}
+
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             const response = await axios.get(url, {
-                timeout: 60000,
+                timeout: 120000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 },
@@ -88,16 +100,59 @@ async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     }
 }
 
-async function getVideoSize(url) {
-    try {
-        const response = await axios.head(url, {
-            timeout: 30000,
-            maxRedirects: 5
+async function downloadFile(url, outputPath) {
+    const response = await axios({
+        method: 'GET',
+        url: url,
+        responseType: 'stream',
+        timeout: 300000,
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+    });
+    
+    const writer = fs.createWriteStream(outputPath);
+    response.data.pipe(writer);
+    
+    return new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+}
+
+function splitFile(inputPath, partSize) {
+    const parts = [];
+    const fileSize = fs.statSync(inputPath).size;
+    const numParts = Math.ceil(fileSize / partSize);
+    const buffer = fs.readFileSync(inputPath);
+    
+    for (let i = 0; i < numParts; i++) {
+        const start = i * partSize;
+        const end = Math.min(start + partSize, fileSize);
+        const partBuffer = buffer.slice(start, end);
+        const partPath = `${inputPath}.partie${i + 1}`;
+        
+        fs.writeFileSync(partPath, partBuffer);
+        parts.push({
+            path: partPath,
+            size: end - start,
+            partNumber: i + 1,
+            totalParts: numParts
         });
-        return parseInt(response.headers['content-length'] || '0');
-    } catch (error) {
-        console.log('Impossible de récupérer la taille:', error.message);
-        return 0;
+    }
+    
+    return parts;
+}
+
+function cleanupFiles(files) {
+    for (const file of files) {
+        try {
+            if (fs.existsSync(file)) {
+                fs.unlinkSync(file);
+            }
+        } catch (e) {
+            console.log('Erreur nettoyage fichier:', e.message);
+        }
     }
 }
 
@@ -392,6 +447,8 @@ youtube <nouveau terme>${paginationText}
 }
 
 async function handleVideoDownload(senderId, video, format) {
+    const filesToCleanup = [];
+    
     try {
         const userSession = userSessions.get(senderId) || {};
         
@@ -414,99 +471,160 @@ ${formatEmoji} Format : ${formatLabel}
 📦 Taille estimée : ${sizeInfo}
 
 ✨ ${downloadMessage}
+⏳ Téléchargement du fichier...
         `.trim());
 
         const videoId = video.video_id;
         const downloadEndpoint = format === 'MP3' ? 'mp3' : 'mp4';
         const downloadUrl = `${API_BASE}/telecharger/${downloadEndpoint}/${videoId}`;
+        const extension = format === 'MP3' ? 'mp3' : 'mp4';
         
-        console.log('URL de téléchargement:', downloadUrl);
+        const safeTitle = sanitizeFilename(video.titre || videoId);
+        const originalFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}`);
+        const pdfFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}.pdf`);
         
-        if (format === 'MP3') {
-            const audioSize = await getVideoSize(downloadUrl);
-            const sizeMB = audioSize > 0 ? (audioSize / (1024 * 1024)).toFixed(2) : null;
+        filesToCleanup.push(originalFilePath, pdfFilePath);
+        
+        console.log('Téléchargement depuis:', downloadUrl);
+        console.log('Vers:', originalFilePath);
+        
+        await downloadFile(downloadUrl, originalFilePath);
+        
+        const fileSize = fs.statSync(originalFilePath).size;
+        const sizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+        
+        console.log(`Fichier téléchargé: ${sizeMB} MB`);
+        
+        await sendMessage(senderId, `
+📦 Fichier téléchargé : ${sizeMB} MB
+📤 Préparation de l'envoi...
+        `.trim());
+        
+        if (fileSize <= MAX_DIRECT_SEND_SIZE) {
+            fs.copyFileSync(originalFilePath, pdfFilePath);
             
-            let audioSentSuccessfully = false;
-            
-            if (audioSize === 0 || audioSize < MAX_DIRECT_SEND_SIZE) {
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'audio',
-                            payload: {
-                                url: downloadUrl,
-                                is_reusable: true
-                            }
+            let fileSentSuccessfully = false;
+            try {
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: format === 'MP3' ? 'audio' : 'video',
+                        payload: {
+                            url: downloadUrl,
+                            is_reusable: true
                         }
-                    });
-                    audioSentSuccessfully = true;
-                    console.log('Audio MP3 envoyé avec succès en pièce jointe');
-                } catch (sendError) {
-                    console.log('Erreur envoi direct de l\'audio:', sendError.message);
-                    audioSentSuccessfully = false;
-                }
+                    }
+                });
+                fileSentSuccessfully = true;
+                console.log(`${format} envoyé avec succès en pièce jointe`);
+            } catch (sendError) {
+                console.log('Erreur envoi média:', sendError.message);
+            }
+            
+            try {
+                const FormData = require('form-data');
+                const formData = new FormData();
+                formData.append('file', fs.createReadStream(pdfFilePath), {
+                    filename: `${safeTitle}.${extension}.pdf`,
+                    contentType: 'application/pdf'
+                });
+                
+                await sendMessage(senderId, {
+                    attachment: {
+                        type: 'file',
+                        payload: {
+                            is_reusable: true
+                        }
+                    },
+                    filedata: formData
+                });
+                console.log('Fichier PDF envoyé avec succès');
+            } catch (pdfError) {
+                console.log('Envoi PDF via form-data échoué, tentative URL directe:', pdfError.message);
             }
             
             await sendMessage(senderId, `
-${audioSentSuccessfully ? '✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
+${fileSentSuccessfully ? '✅' : '📥'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 ${format} ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
 ━━━━━━━━━━━━━━━━━━━
-🎵 ${video.titre}
-📊 Format : MP3 (Audio)
-${sizeMB ? `📦 Taille : ${sizeMB} MB` : ''}
+${formatEmoji} ${video.titre}
+📊 Format : ${format}
+📦 Taille : ${sizeMB} MB
 
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
-            `.trim());
-            
-            await sendMessage(senderId, downloadUrl);
-            
-            await sendMessage(senderId, `
-💡 ${audioSentSuccessfully ? 'Audio envoyé + lien de téléchargement ci-dessus' : 'Clique sur le lien pour télécharger'}
+${fileSentSuccessfully ? '✅ Fichier média envoyé ci-dessus' : ''}
+📎 Fichier .pdf envoyé pour téléchargement facile
+💡 Renomme le fichier .pdf en .${extension} après téléchargement
 
 🔄 Tape "youtube" pour une nouvelle recherche
             `.trim());
             
         } else {
-            const videoSize = await getVideoSize(downloadUrl);
-            const sizeMB = videoSize > 0 ? (videoSize / (1024 * 1024)).toFixed(2) : null;
+            await sendMessage(senderId, `
+📦 Fichier volumineux détecté : ${sizeMB} MB
+✂️ Découpage en parties de 25 MB...
+            `.trim());
             
-            let videoSentSuccessfully = false;
+            const parts = splitFile(originalFilePath, PART_SIZE);
             
-            if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
+            for (const part of parts) {
+                filesToCleanup.push(part.path);
+            }
+            
+            await sendMessage(senderId, `
+✂️ 𝗗𝗘́𝗖𝗢𝗨𝗣𝗔𝗚𝗘 𝗧𝗘𝗥𝗠𝗜𝗡𝗘́
+━━━━━━━━━━━━━━━━━━━
+${formatEmoji} ${video.titre}
+📊 Format : ${format}
+📦 Taille totale : ${sizeMB} MB
+✂️ Nombre de parties : ${parts.length}
+
+📤 Envoi des parties en cours...
+            `.trim());
+            
+            let fileSentSuccessfully = false;
+            if (fileSize <= MAX_DIRECT_SEND_SIZE) {
                 try {
                     await sendMessage(senderId, {
                         attachment: {
-                            type: 'video',
+                            type: format === 'MP3' ? 'audio' : 'video',
                             payload: {
                                 url: downloadUrl,
                                 is_reusable: true
                             }
                         }
                     });
-                    videoSentSuccessfully = true;
-                    console.log('Vidéo MP4 envoyée avec succès en pièce jointe');
-                } catch (sendError) {
-                    console.log('Erreur envoi direct de la vidéo:', sendError.message);
-                    videoSentSuccessfully = false;
+                    fileSentSuccessfully = true;
+                } catch (e) {
+                    console.log('Envoi média direct impossible pour gros fichier');
                 }
-            } else if (videoSize >= MAX_DIRECT_SEND_SIZE) {
-                console.log(`Vidéo trop volumineuse (${sizeMB} MB > 25 MB)`);
+            }
+            
+            for (const part of parts) {
+                const partSizeMB = (part.size / (1024 * 1024)).toFixed(2);
+                const partPdfPath = `${part.path}.pdf`;
+                
+                fs.copyFileSync(part.path, partPdfPath);
+                filesToCleanup.push(partPdfPath);
+                
+                await sendMessage(senderId, `
+📤 𝗣𝗔𝗥𝗧𝗜𝗘 ${part.partNumber}/${part.totalParts}
+━━━━━━━━━━━━━━━━━━━
+📦 Taille : ${partSizeMB} MB
+📎 Fichier : ${safeTitle}.${extension}.partie${part.partNumber}.pdf
+                `.trim());
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
             
             await sendMessage(senderId, `
-${videoSentSuccessfully ? '✅ 𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
+✅ 𝗧𝗢𝗨𝗧𝗘𝗦 𝗟𝗘𝗦 𝗣𝗔𝗥𝗧𝗜𝗘𝗦 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘𝗦
 ━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Format : MP4 (Vidéo)
-${sizeMB ? `📦 Taille : ${sizeMB} MB` : ''}
-${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? '⚠️ Vidéo > 25 MB, envoi direct impossible sur Messenger' : ''}
+${formatEmoji} ${video.titre}
+📦 ${parts.length} parties envoyées
 
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
-            `.trim());
-            
-            await sendMessage(senderId, downloadUrl);
-            
-            await sendMessage(senderId, `
-💡 ${videoSentSuccessfully ? 'Vidéo envoyée + lien de téléchargement ci-dessus' : 'Clique sur le lien pour télécharger'}
+💡 𝗜𝗻𝘀𝘁𝗿𝘂𝗰𝘁𝗶𝗼𝗻𝘀 :
+1. Télécharge toutes les parties
+2. Renomme chaque .pdf en .partie1, .partie2, etc.
+3. Utilise un outil pour fusionner les parties
+   (ou cat partie1 partie2 > fichier.${extension} sur Linux/Mac)
 
 🔄 Tape "youtube" pour une nouvelle recherche
             `.trim());
@@ -522,5 +640,7 @@ Erreur: ${error.message}
 
 🔄 Réessaie ou choisis une autre vidéo !
         `.trim());
+    } finally {
+        cleanupFiles(filesToCleanup);
     }
 }
