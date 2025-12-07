@@ -550,8 +550,9 @@ ${formatEmoji} ${video.titre}
 📦 Taille : ${sizeMB} MB
 
 ${fileSentSuccessfully ? '✅ Fichier média envoyé ci-dessus' : ''}
-📎 Fichier .pdf envoyé pour téléchargement facile
-💡 Renomme le fichier .pdf en .${extension} après téléchargement
+
+🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+${downloadUrl}
 
 🔄 Tape "youtube" pour une nouvelle recherche
             `.trim());
@@ -619,6 +620,9 @@ ${formatEmoji} ${video.titre}
 ━━━━━━━━━━━━━━━━━━━
 ${formatEmoji} ${video.titre}
 📦 ${parts.length} parties envoyées
+
+🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+${downloadUrl}
 
 💡 𝗜𝗻𝘀𝘁𝗿𝘂𝗰𝘁𝗶𝗼𝗻𝘀 :
 1. Télécharge toutes les parties
