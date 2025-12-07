@@ -1,16 +1,14 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://download-video-youtube-crib.onrender.com';
+const API_BASE = 'https://be58d765-6ccc-417a-bbf7-7f948be51a2a-00-pmr078le5ppk.spock.replit.dev';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 const VIDEOS_PER_PAGE = 10;
-const MAX_API_RESULTS = 50;
 
 const userSessions = new Map();
 
-const QUALITY_OPTIONS = ['360p', '720p', '1080p'];
 const FORMAT_OPTIONS = ['MP3', 'MP4'];
 
 const SEARCH_MESSAGES = [
@@ -30,14 +28,6 @@ const FORMAT_QUESTIONS = [
     "Quel format te ferait plaisir ? MP3 ou MP4 ?"
 ];
 
-const QUALITY_QUESTIONS = [
-    "Quelle qualité tu veux ? Choisis entre 360p, 720p ou 1080p",
-    "À quelle résolution ? 360p (légère), 720p (HD) ou 1080p (Full HD) ?",
-    "Choisis ta qualité préférée : 360p, 720p ou 1080p",
-    "Quelle définition pour ta vidéo ? 360p / 720p / 1080p",
-    "Petite, moyenne ou grande qualité ? 360p, 720p, 1080p ?"
-];
-
 const DOWNLOAD_MESSAGES = [
     "C'est parti ! Je t'envoie ça tout de suite",
     "Préparation en cours... Ça arrive !",
@@ -50,25 +40,24 @@ function getRandomMessage(messages) {
     return messages[Math.floor(Math.random() * messages.length)];
 }
 
-function formatDuration(duration) {
-    if (!duration) return 'N/A';
-    if (typeof duration === 'string') return duration;
-    const minutes = Math.floor(duration / 60);
-    const seconds = duration % 60;
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+function isFormatInput(input) {
+    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
+    return FORMAT_OPTIONS.includes(normalizedInput);
 }
 
-function formatViews(views) {
-    if (!views) return 'N/A';
-    if (typeof views === 'string') return views;
-    const numViews = parseInt(views.toString().replace(/[^0-9]/g, ''));
-    if (isNaN(numViews)) return views;
-    if (numViews >= 1000000) {
-        return (numViews / 1000000).toFixed(1) + 'M vues';
-    } else if (numViews >= 1000) {
-        return (numViews / 1000).toFixed(1) + 'K vues';
-    }
-    return numViews + ' vues';
+function normalizeFormat(input) {
+    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
+    return FORMAT_OPTIONS.includes(normalizedInput) ? normalizedInput : 'MP4';
+}
+
+function getVideosForPage(allVideos, page) {
+    const startIndex = (page - 1) * VIDEOS_PER_PAGE;
+    const endIndex = startIndex + VIDEOS_PER_PAGE;
+    return allVideos.slice(startIndex, endIndex);
+}
+
+function getTotalPages(totalVideos) {
+    return Math.ceil(totalVideos / VIDEOS_PER_PAGE);
 }
 
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
@@ -112,85 +101,16 @@ async function getVideoSize(url) {
     }
 }
 
-function isQualityInput(input) {
-    const normalizedInput = input.toLowerCase().replace(/\s/g, '');
-    return QUALITY_OPTIONS.some(q => q.toLowerCase() === normalizedInput);
-}
-
-function normalizeQuality(input) {
-    const normalizedInput = input.toLowerCase().replace(/\s/g, '');
-    const found = QUALITY_OPTIONS.find(q => q.toLowerCase() === normalizedInput);
-    return found || '360p';
-}
-
-function isFormatInput(input) {
-    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
-    return FORMAT_OPTIONS.includes(normalizedInput);
-}
-
-function normalizeFormat(input) {
-    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
-    return FORMAT_OPTIONS.includes(normalizedInput) ? normalizedInput : 'MP4';
-}
-
-function getVideosForPage(allVideos, page) {
-    const startIndex = (page - 1) * VIDEOS_PER_PAGE;
-    const endIndex = startIndex + VIDEOS_PER_PAGE;
-    return allVideos.slice(startIndex, endIndex);
-}
-
-function getTotalPages(totalVideos) {
-    return Math.ceil(totalVideos / VIDEOS_PER_PAGE);
-}
-
 module.exports = async (senderId, prompt, api) => {
     try {
         const userSession = userSessions.get(senderId) || {};
         const input = (typeof prompt === 'string') ? prompt.trim() : '';
         
         if (input && input.length > 0) {
-            if (userSession.pendingQuality && userSession.selectedVideo && userSession.selectedFormat) {
-                if (isQualityInput(input)) {
-                    const quality = normalizeQuality(input);
-                    await handleVideoDownload(senderId, userSession.selectedVideo, quality, userSession.selectedFormat);
-                } else {
-                    await sendMessage(senderId, `
-❌ 𝗤𝘂𝗮𝗹𝗶𝘁𝗲́ 𝗻𝗼𝗻 𝗿𝗲𝗰𝗼𝗻𝗻𝘂𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Les qualités disponibles sont :
-
-📺 360p - Légère et rapide
-📺 720p - HD, bon compromis
-📺 1080p - Full HD, meilleure qualité
-
-💡 Tape juste : 360p, 720p ou 1080p
-                    `.trim());
-                }
-            } else if (userSession.pendingFormat && userSession.selectedVideo) {
+            if (userSession.pendingFormat && userSession.selectedVideo) {
                 if (isFormatInput(input)) {
                     const format = normalizeFormat(input);
-                    
-                    userSessions.set(senderId, {
-                        ...userSession,
-                        pendingFormat: false,
-                        pendingQuality: true,
-                        selectedFormat: format
-                    });
-                    
-                    const qualityQuestion = getRandomMessage(QUALITY_QUESTIONS);
-                    
-                    await sendMessage(senderId, `
-✅ 𝗙𝗼𝗿𝗺𝗮𝘁 ${format} 𝘀𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲́ !
-━━━━━━━━━━━━━━━━━━━
-
-📊 ${qualityQuestion}
-
-📺 360p  ➜ Légère (~5-15 MB)
-📺 720p  ➜ HD (~20-50 MB)  
-📺 1080p ➜ Full HD (~50-100 MB)
-
-💡 Envoie la qualité souhaitée
-                    `.trim());
+                    await handleVideoDownload(senderId, userSession.selectedVideo, format);
                 } else {
                     await sendMessage(senderId, `
 ❌ 𝗙𝗼𝗿𝗺𝗮𝘁 𝗻𝗼𝗻 𝗿𝗲𝗰𝗼𝗻𝗻𝘂 ❌
@@ -214,9 +134,7 @@ Les qualités disponibles sont :
                     userSessions.set(senderId, {
                         ...userSession,
                         selectedVideo: selectedVideo,
-                        pendingFormat: true,
-                        pendingQuality: false,
-                        selectedFormat: null
+                        pendingFormat: true
                     });
                     
                     const formatQuestion = getRandomMessage(FORMAT_QUESTIONS);
@@ -224,12 +142,12 @@ Les qualités disponibles sont :
                     await sendMessage(senderId, `
 🎯 𝗩𝗜𝗗𝗘́𝗢 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́𝗘 🎯
 ━━━━━━━━━━━━━━━━━━━
-📹 ${selectedVideo.titre || selectedVideo.title}
+📹 ${selectedVideo.titre}
 
 🎵 ${formatQuestion}
 
-🎵 𝗠𝗣𝟯 ➜ Audio uniquement (musique)
-🎬 𝗠𝗣𝟰 ➜ Vidéo complète
+🎵 𝗠𝗣𝟯 ➜ Audio uniquement (${selectedVideo.taille_mp3})
+🎬 𝗠𝗣𝟰 ➜ Vidéo complète (${selectedVideo.taille_mp4})
 
 💡 Envoie : MP3 ou MP4
                     `.trim());
@@ -301,8 +219,7 @@ youtube <artiste ou titre>
 1️⃣ Cherche ta vidéo
 2️⃣ Choisis le numéro
 3️⃣ Sélectionne MP3 ou MP4
-4️⃣ Choisis la qualité
-5️⃣ Reçois ton fichier !
+4️⃣ Reçois ton fichier !
 
 📄 𝗡𝗮𝘃𝗶𝗴𝗮𝘁𝗶𝗼𝗻 :
 • youtube page 2 - Aller à la page 2
@@ -330,15 +247,15 @@ async function handleVideoSearch(senderId, query) {
 ⏳ Patiente quelques secondes...
         `.trim());
         
-        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&max_results=${MAX_API_RESULTS}`;
+        const searchUrl = `${API_BASE}/recherche?audio=${encodeURIComponent(query)}&limit=20`;
         console.log('Appel API YouTube:', searchUrl);
         
         const response = await axiosWithRetry(searchUrl);
         
         console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
-        if (response.data && response.data.videos && response.data.videos.length > 0) {
-            const allVideos = response.data.videos;
+        if (response.data && response.data.resultats && response.data.resultats.length > 0) {
+            const allVideos = response.data.resultats;
             
             userSessions.set(senderId, {
                 allVideos: allVideos,
@@ -346,9 +263,7 @@ async function handleVideoSearch(senderId, query) {
                 currentPage: 1,
                 totalPages: getTotalPages(allVideos.length),
                 pendingFormat: false,
-                pendingQuality: false,
-                selectedVideo: null,
-                selectedFormat: null
+                selectedVideo: null
             });
             
             await displayPage(senderId, allVideos, 1, query);
@@ -373,7 +288,7 @@ Aucune vidéo pour "${query}" 😕
         await sendMessage(senderId, `
 ❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 ❌
 ━━━━━━━━━━━━━━━━━━━
-Impossible de contacter YouTube.
+Impossible de contacter l'API.
 Erreur: ${error.message}
 
 🔄 Réessaie dans quelques instants !
@@ -410,25 +325,26 @@ async function displayPage(senderId, allVideos, page, query) {
     for (let i = 0; i < pageVideos.length; i++) {
         const video = pageVideos[i];
         const displayNum = i + 1;
-        const title = (video.titre || video.title || 'Sans titre').length > 55 
-            ? (video.titre || video.title || 'Sans titre').substring(0, 52) + '...' 
-            : (video.titre || video.title || 'Sans titre');
-        const duration = formatDuration(video.duree || video.duration);
-        const views = formatViews(video.vues || video.views);
-        const author = video.auteur || video.author || 'Inconnu';
+        const title = (video.titre || 'Sans titre').length > 55 
+            ? (video.titre || 'Sans titre').substring(0, 52) + '...' 
+            : (video.titre || 'Sans titre');
+        const duration = video.duree || 'N/A';
+        const sizeMp3 = video.taille_mp3 || 'N/A';
+        const sizeMp4 = video.taille_mp4 || 'N/A';
         
         const videoInfo = `
 ┏━━━━━━━━━━━━━━━━━━━
 ┃ ${displayNum}️⃣ ${title}
 ┣━━━━━━━━━━━━━━━━━━━
-┃ 👤 ${author}
-┃ ⏱️ ${duration} │ 👁️ ${views}
+┃ ⏱️ Durée : ${duration}
+┃ 🎵 MP3 : ${sizeMp3}
+┃ 🎬 MP4 : ${sizeMp4}
 ┗━━━━━━━━━━━━━━━━━━━
         `.trim();
         
         await sendMessage(senderId, videoInfo);
         
-        const imageUrl = video.miniature || video.thumbnail || video.image_url;
+        const imageUrl = video.image_url;
         if (imageUrl) {
             try {
                 await sendMessage(senderId, {
@@ -475,50 +391,40 @@ youtube <nouveau terme>${paginationText}
     await sendMessage(senderId, footerText);
 }
 
-async function handleVideoDownload(senderId, video, quality = '360p', format = 'MP4') {
+async function handleVideoDownload(senderId, video, format) {
     try {
         const userSession = userSessions.get(senderId) || {};
         
         userSessions.set(senderId, {
             ...userSession,
             pendingFormat: false,
-            pendingQuality: false,
-            selectedVideo: null,
-            selectedFormat: null
+            selectedVideo: null
         });
         
         const downloadMessage = getRandomMessage(DOWNLOAD_MESSAGES);
         const formatEmoji = format === 'MP3' ? '🎵' : '🎬';
         const formatLabel = format === 'MP3' ? 'Audio MP3' : 'Vidéo MP4';
+        const sizeInfo = format === 'MP3' ? video.taille_mp3 : video.taille_mp4;
         
         await sendMessage(senderId, `
 ⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
 ━━━━━━━━━━━━━━━━━━━
-📹 ${(video.titre || video.title || 'Vidéo').substring(0, 40)}...
+📹 ${(video.titre || 'Vidéo').substring(0, 40)}...
 ${formatEmoji} Format : ${formatLabel}
-📊 Qualité : ${quality}
+📦 Taille estimée : ${sizeInfo}
 
 ✨ ${downloadMessage}
-⏳ Vérification de la taille...
         `.trim());
 
-        const videoUrl = video.lien || video.url || video.video_url || video.link;
-        const downloadUrl = `${API_BASE}/download?video_url=${encodeURIComponent(videoUrl)}&qualite=${quality}&type=${format}`;
+        const videoId = video.video_id;
+        const downloadEndpoint = format === 'MP3' ? 'mp3' : 'mp4';
+        const downloadUrl = `${API_BASE}/telecharger/${downloadEndpoint}/${videoId}`;
         
-        console.log('URL de téléchargement YouTube:', downloadUrl);
+        console.log('URL de téléchargement:', downloadUrl);
         
         if (format === 'MP3') {
             const audioSize = await getVideoSize(downloadUrl);
-            const sizeMB = (audioSize / (1024 * 1024)).toFixed(2);
-            
-            console.log(`Taille audio MP3 (${quality}): ${sizeMB} MB`);
-            
-            const sizeInfo = audioSize > 0 ? `${sizeMB} MB` : 'En cours...';
-            
-            await sendMessage(senderId, `
-📦 Taille : ${sizeInfo}
-📤 Préparation de l'envoi...
-            `.trim());
+            const sizeMB = audioSize > 0 ? (audioSize / (1024 * 1024)).toFixed(2) : null;
             
             let audioSentSuccessfully = false;
             
@@ -539,17 +445,14 @@ ${formatEmoji} Format : ${formatLabel}
                     console.log('Erreur envoi direct de l\'audio:', sendError.message);
                     audioSentSuccessfully = false;
                 }
-            } else {
-                console.log(`Audio trop volumineux (${sizeMB} MB > 25 MB), envoi en pièce jointe non possible`);
             }
             
             await sendMessage(senderId, `
 ${audioSentSuccessfully ? '✅ 𝗔𝗨𝗗𝗜𝗢 𝗠𝗣𝟯 𝗘𝗡𝗩𝗢𝗬𝗘́' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
 ━━━━━━━━━━━━━━━━━━━
-🎵 ${video.titre || video.title}
+🎵 ${video.titre}
 📊 Format : MP3 (Audio)
-${audioSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
-${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 25 MB, envoi direct impossible sur Messenger` : ''}
+${sizeMB ? `📦 Taille : ${sizeMB} MB` : ''}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
             `.trim());
@@ -564,20 +467,11 @@ ${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 
             
         } else {
             const videoSize = await getVideoSize(downloadUrl);
-            const sizeMB = (videoSize / (1024 * 1024)).toFixed(2);
-            
-            console.log(`Taille vidéo MP4 (${quality}): ${sizeMB} MB`);
-            
-            const sizeInfo = videoSize > 0 ? `${sizeMB} MB` : 'En cours...';
-            
-            await sendMessage(senderId, `
-📦 Taille : ${sizeInfo}
-📤 Préparation de l'envoi...
-            `.trim());
+            const sizeMB = videoSize > 0 ? (videoSize / (1024 * 1024)).toFixed(2) : null;
             
             let videoSentSuccessfully = false;
             
-            if (videoSize === 0 || videoSize < MAX_DIRECT_SEND_SIZE) {
+            if (videoSize > 0 && videoSize < MAX_DIRECT_SEND_SIZE) {
                 try {
                     await sendMessage(senderId, {
                         attachment: {
@@ -594,18 +488,17 @@ ${!audioSentSuccessfully && audioSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Audio > 
                     console.log('Erreur envoi direct de la vidéo:', sendError.message);
                     videoSentSuccessfully = false;
                 }
-            } else {
-                console.log(`Vidéo trop volumineuse (${sizeMB} MB > 25 MB), envoi en pièce jointe non possible`);
+            } else if (videoSize >= MAX_DIRECT_SEND_SIZE) {
+                console.log(`Vidéo trop volumineuse (${sizeMB} MB > 25 MB)`);
             }
             
             await sendMessage(senderId, `
 ${videoSentSuccessfully ? '✅ 𝗩𝗜𝗗𝗘́𝗢 𝗠𝗣𝟰 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
 ━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre || video.title}
-📊 Qualité : ${quality}
-📁 Format : MP4 (Vidéo)
-${videoSize > 0 ? `📦 Taille : ${sizeMB} MB` : ''}
-${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Vidéo > 25 MB, envoi direct impossible sur Messenger` : ''}
+🎬 ${video.titre}
+📊 Format : MP4 (Vidéo)
+${sizeMB ? `📦 Taille : ${sizeMB} MB` : ''}
+${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? '⚠️ Vidéo > 25 MB, envoi direct impossible sur Messenger' : ''}
 
 🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 :
             `.trim());
@@ -620,118 +513,14 @@ ${!videoSentSuccessfully && videoSize >= MAX_DIRECT_SEND_SIZE ? `⚠️ Vidéo >
         }
 
     } catch (error) {
-        console.error('Erreur téléchargement YouTube:', error.message);
-        
+        console.error('Erreur téléchargement:', error.message);
         await sendMessage(senderId, `
-⚠️ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 ⚠️
+❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 ❌
 ━━━━━━━━━━━━━━━━━━━
-❌ ${error.message}
+Impossible de télécharger cette vidéo.
+Erreur: ${error.message}
 
-💡 Essaie avec une autre vidéo ou réessaie plus tard.
-🔄 Tape "youtube" pour une nouvelle recherche
+🔄 Réessaie ou choisis une autre vidéo !
         `.trim());
     }
 }
-
-module.exports.handleNumber = async (senderId, number) => {
-    const userSession = userSessions.get(senderId);
-    
-    if (userSession && userSession.allVideos && userSession.allVideos.length > 0) {
-        const currentPage = userSession.currentPage || 1;
-        const pageVideos = getVideosForPage(userSession.allVideos, currentPage);
-        const localIndex = number - 1;
-        
-        if (localIndex >= 0 && localIndex < pageVideos.length) {
-            const selectedVideo = pageVideos[localIndex];
-            
-            userSessions.set(senderId, {
-                ...userSession,
-                selectedVideo: selectedVideo,
-                pendingFormat: true,
-                pendingQuality: false,
-                selectedFormat: null
-            });
-            
-            const formatQuestion = getRandomMessage(FORMAT_QUESTIONS);
-            
-            await sendMessage(senderId, `
-🎯 𝗩𝗜𝗗𝗘́𝗢 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́𝗘 🎯
-━━━━━━━━━━━━━━━━━━━
-📹 ${selectedVideo.titre || selectedVideo.title}
-
-🎵 ${formatQuestion}
-
-🎵 𝗠𝗣𝟯 ➜ Audio uniquement (musique)
-🎬 𝗠𝗣𝟰 ➜ Vidéo complète
-
-💡 Envoie : MP3 ou MP4
-            `.trim());
-            return true;
-        }
-    }
-    return false;
-};
-
-module.exports.handleFormat = async (senderId, formatInput) => {
-    const userSession = userSessions.get(senderId);
-    
-    if (userSession && userSession.pendingFormat && userSession.selectedVideo) {
-        if (isFormatInput(formatInput)) {
-            const format = normalizeFormat(formatInput);
-            
-            userSessions.set(senderId, {
-                ...userSession,
-                pendingFormat: false,
-                pendingQuality: true,
-                selectedFormat: format
-            });
-            
-            const qualityQuestion = getRandomMessage(QUALITY_QUESTIONS);
-            
-            await sendMessage(senderId, `
-✅ 𝗙𝗼𝗿𝗺𝗮𝘁 ${format} 𝘀𝗲́𝗹𝗲𝗰𝘁𝗶𝗼𝗻𝗻𝗲́ !
-━━━━━━━━━━━━━━━━━━━
-
-📊 ${qualityQuestion}
-
-📺 360p  ➜ Légère (~5-15 MB)
-📺 720p  ➜ HD (~20-50 MB)  
-📺 1080p ➜ Full HD (~50-100 MB)
-
-💡 Envoie la qualité souhaitée
-            `.trim());
-            return true;
-        }
-    }
-    return false;
-};
-
-module.exports.handleQuality = async (senderId, qualityInput) => {
-    const userSession = userSessions.get(senderId);
-    
-    if (userSession && userSession.pendingQuality && userSession.selectedVideo && userSession.selectedFormat) {
-        if (isQualityInput(qualityInput)) {
-            const quality = normalizeQuality(qualityInput);
-            await handleVideoDownload(senderId, userSession.selectedVideo, quality, userSession.selectedFormat);
-            return true;
-        }
-    }
-    return false;
-};
-
-module.exports.hasActiveSession = (senderId) => {
-    const session = userSessions.get(senderId);
-    return session && (session.allVideos?.length > 0 || session.pendingFormat || session.pendingQuality);
-};
-
-module.exports.clearSession = (senderId) => {
-    userSessions.delete(senderId);
-};
-
-module.exports.info = {
-    name: "youtube",
-    description: "Recherche et télécharge des vidéos YouTube en MP3 ou MP4 avec pagination. Utilise 'youtube <recherche>' pour chercher, 'youtube page X' pour naviguer.",
-    usage: "youtube <artiste ou titre> | youtube page <numéro> | Puis choisis le numéro, le format (MP3/MP4) et la qualité (360p/720p/1080p)",
-    author: "Bruno",
-    isVIP: true
-};
