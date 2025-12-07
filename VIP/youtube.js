@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://be58d765-6ccc-417a-bbf7-7f948be51a2a-00-pmr078le5ppk.spock.replit.dev';
+const API_BASE = 'https://mutual-terese-tekenespa-31ac883e.koyeb.app';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const PART_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
