@@ -5,6 +5,8 @@ const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://mutual-terese-tekenespa-31ac883e.koyeb.app';
 const MP3_API_BASE = 'https://norch-project.gleeze.com/api/ytmp3';
+const MP4_API_BASE = 'https://norch-project.gleeze.com/api/ytdl';
+const DEFAULT_VIDEO_QUALITY = '360';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const PART_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
@@ -572,77 +574,86 @@ ${directDownloadUrl}
             }
             
         } else {
-            const downloadEndpoint = 'mp4';
-            const downloadUrl = `${API_BASE}/telecharger/${downloadEndpoint}/${videoId}`;
-            const directMediaUrl = video.url_mp4;
+            const youtubeUrl = `https://youtu.be/${videoId}`;
+            const mp4ApiUrl = `${MP4_API_BASE}?url=${encodeURIComponent(youtubeUrl)}&format=${DEFAULT_VIDEO_QUALITY}`;
             
-            const originalFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}`);
-            const pdfFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}.pdf`);
-            
-            filesToCleanup.push(originalFilePath, pdfFilePath);
-            
-            console.log('Téléchargement MP4 depuis:', downloadUrl);
-            console.log('URL média directe:', directMediaUrl);
-            console.log('Vers:', originalFilePath);
-            
-            await downloadFile(downloadUrl, originalFilePath);
-            
-            const fileSize = fs.statSync(originalFilePath).size;
-            const sizeMB = (fileSize / (1024 * 1024)).toFixed(2);
-            
-            console.log(`Fichier téléchargé: ${sizeMB} MB`);
+            console.log('Appel API MP4:', mp4ApiUrl);
             
             await sendMessage(senderId, `
-📦 Fichier téléchargé : ${sizeMB} MB
-📤 Préparation de l'envoi...
+🔄 Connexion à l'API de téléchargement vidéo...
+📺 Qualité : ${DEFAULT_VIDEO_QUALITY}p
+⏳ Veuillez patienter...
             `.trim());
             
-            if (fileSize <= MAX_DIRECT_SEND_SIZE) {
-                fs.copyFileSync(originalFilePath, pdfFilePath);
+            const mp4Response = await axiosWithRetry(mp4ApiUrl);
+            
+            if (mp4Response.data && mp4Response.data.success && mp4Response.data.result) {
+                const result = mp4Response.data.result;
+                const mp4DownloadUrl = result.downloadUrl;
+                const mp4Title = result.title || video.titre;
+                const mp4Duration = result.duration || video.duree;
+                const mp4Cover = result.cover || '';
+                const mp4Quality = result.quality || DEFAULT_VIDEO_QUALITY;
+                
+                console.log('API MP4 réponse:', {
+                    title: mp4Title,
+                    duration: mp4Duration,
+                    quality: mp4Quality,
+                    downloadUrl: mp4DownloadUrl
+                });
+                
+                await sendMessage(senderId, `
+✅ Lien de téléchargement récupéré !
+🎬 ${mp4Title}
+⏱️ Durée : ${mp4Duration}
+📺 Qualité : ${mp4Quality}p
+📤 Envoi de la vidéo...
+                `.trim());
+                
+                if (mp4Cover) {
+                    try {
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'image',
+                                payload: {
+                                    url: mp4Cover,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+                    } catch (coverError) {
+                        console.log('Erreur envoi cover vidéo:', coverError.message);
+                    }
+                }
                 
                 let fileSentSuccessfully = false;
                 try {
-                    if (directMediaUrl) {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'video',
-                                payload: {
-                                    url: directMediaUrl,
-                                    is_reusable: true
-                                }
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'video',
+                            payload: {
+                                url: mp4DownloadUrl,
+                                is_reusable: true
                             }
-                        });
-                        fileSentSuccessfully = true;
-                        console.log('MP4 envoyé avec succès en pièce jointe via URL directe');
-                    } else {
-                        console.log('URL directe non disponible, envoi via API');
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'video',
-                                payload: {
-                                    url: downloadUrl,
-                                    is_reusable: true
-                                }
-                            }
-                        });
-                        fileSentSuccessfully = true;
-                        console.log('MP4 envoyé avec succès en pièce jointe via API');
-                    }
+                        }
+                    });
+                    fileSentSuccessfully = true;
+                    console.log('MP4 envoyé avec succès en pièce jointe');
                 } catch (sendError) {
                     console.log('Erreur envoi vidéo:', sendError.message);
                 }
                 
                 await sendMessage(senderId, `
-${fileSentSuccessfully ? '✅' : '❌'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟰 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : '𝗡𝗢𝗡 𝗘𝗡𝗩𝗢𝗬𝗘́'}
+${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟰 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
 ━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📊 Format : MP4
-📦 Taille : ${sizeMB} MB
+🎬 ${mp4Title}
+⏱️ Durée : ${mp4Duration}
+📺 Qualité : ${mp4Quality}p
 
-${fileSentSuccessfully ? '✅ Fichier vidéo envoyé ci-dessus' : '⚠️ Impossible d\'envoyer le fichier en pièce jointe'}
+${fileSentSuccessfully ? '✅ Fichier vidéo envoyé ci-dessus !' : '⚠️ Envoi direct impossible'}
 
 📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${downloadUrl}
+${mp4DownloadUrl}
 
 💡 Clique sur le lien pour télécharger directement sur ton téléphone !
 
@@ -650,81 +661,7 @@ ${downloadUrl}
                 `.trim());
                 
             } else {
-                await sendMessage(senderId, `
-📦 Fichier volumineux détecté : ${sizeMB} MB
-✂️ Découpage en parties de 25 MB...
-                `.trim());
-                
-                const parts = splitFile(originalFilePath, PART_SIZE);
-                
-                for (const part of parts) {
-                    filesToCleanup.push(part.path);
-                }
-                
-                await sendMessage(senderId, `
-✂️ 𝗗𝗘́𝗖𝗢𝗨𝗣𝗔𝗚𝗘 𝗧𝗘𝗥𝗠𝗜𝗡𝗘́
-━━━━━━━━━━━━━━━━━━━
-${formatEmoji} ${video.titre}
-📊 Format : ${format}
-📦 Taille totale : ${sizeMB} MB
-✂️ Nombre de parties : ${parts.length}
-
-📤 Envoi des parties en cours...
-                `.trim());
-                
-                let fileSentSuccessfully = false;
-                if (directMediaUrl) {
-                    try {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'video',
-                                payload: {
-                                    url: directMediaUrl,
-                                    is_reusable: true
-                                }
-                            }
-                        });
-                        fileSentSuccessfully = true;
-                        console.log('Fichier envoyé via URL directe pour gros fichier');
-                    } catch (e) {
-                        console.log('Envoi média direct impossible pour gros fichier:', e.message);
-                    }
-                }
-                
-                for (const part of parts) {
-                    const partSizeMB = (part.size / (1024 * 1024)).toFixed(2);
-                    const partPdfPath = `${part.path}.pdf`;
-                    
-                    fs.copyFileSync(part.path, partPdfPath);
-                    filesToCleanup.push(partPdfPath);
-                    
-                    await sendMessage(senderId, `
-📤 𝗣𝗔𝗥𝗧𝗜𝗘 ${part.partNumber}/${part.totalParts}
-━━━━━━━━━━━━━━━━━━━
-📦 Taille : ${partSizeMB} MB
-📎 Fichier : ${safeTitle}.${extension}.partie${part.partNumber}.pdf
-                    `.trim());
-                    
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-                
-                await sendMessage(senderId, `
-✅ 𝗧𝗢𝗨𝗧𝗘𝗦 𝗟𝗘𝗦 𝗣𝗔𝗥𝗧𝗜𝗘𝗦 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘𝗦
-━━━━━━━━━━━━━━━━━━━
-🎬 ${video.titre}
-📦 ${parts.length} parties envoyées
-
-📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${downloadUrl}
-
-💡 𝗜𝗻𝘀𝘁𝗿𝘂𝗰𝘁𝗶𝗼𝗻𝘀 :
-1. Télécharge toutes les parties
-2. Renomme chaque .pdf en .partie1, .partie2, etc.
-3. Utilise un outil pour fusionner les parties
-   (ou cat partie1 partie2 > fichier.${extension} sur Linux/Mac)
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
+                throw new Error('Réponse API MP4 invalide ou téléchargement échoué');
             }
         }
 
