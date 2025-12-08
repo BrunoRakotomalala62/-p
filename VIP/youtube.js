@@ -4,6 +4,7 @@ const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://mutual-terese-tekenespa-31ac883e.koyeb.app';
+const MP3_API_BASE = 'https://norch-project.gleeze.com/api/ytmp3';
 const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
 const PART_SIZE = 25 * 1024 * 1024;
 const MAX_RETRIES = 3;
@@ -471,101 +472,196 @@ ${formatEmoji} Format : ${formatLabel}
 📦 Taille estimée : ${sizeInfo}
 
 ✨ ${downloadMessage}
-⏳ Téléchargement du fichier...
+⏳ Récupération du fichier...
         `.trim());
 
         const videoId = video.video_id;
-        const downloadEndpoint = format === 'MP3' ? 'mp3' : 'mp4';
-        const downloadUrl = `${API_BASE}/telecharger/${downloadEndpoint}/${videoId}`;
         const extension = format === 'MP3' ? 'mp3' : 'mp4';
-        
-        const directMediaUrl = format === 'MP3' ? video.url_mp3 : video.url_mp4;
-        
         const safeTitle = sanitizeFilename(video.titre || videoId);
-        const originalFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}`);
-        const pdfFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}.pdf`);
         
-        filesToCleanup.push(originalFilePath, pdfFilePath);
+        let directDownloadUrl = '';
+        let mp3Title = '';
+        let mp3Duration = '';
+        let mp3Cover = '';
         
-        console.log('Téléchargement depuis:', downloadUrl);
-        console.log('URL média directe:', directMediaUrl);
-        console.log('Vers:', originalFilePath);
-        
-        await downloadFile(downloadUrl, originalFilePath);
-        
-        const fileSize = fs.statSync(originalFilePath).size;
-        const sizeMB = (fileSize / (1024 * 1024)).toFixed(2);
-        
-        console.log(`Fichier téléchargé: ${sizeMB} MB`);
-        
-        await sendMessage(senderId, `
-📦 Fichier téléchargé : ${sizeMB} MB
-📤 Préparation de l'envoi...
-        `.trim());
-        
-        if (fileSize <= MAX_DIRECT_SEND_SIZE) {
-            fs.copyFileSync(originalFilePath, pdfFilePath);
+        if (format === 'MP3') {
+            const youtubeUrl = `https://youtu.be/${videoId}`;
+            const mp3ApiUrl = `${MP3_API_BASE}?url=${encodeURIComponent(youtubeUrl)}`;
             
-            let fileSentSuccessfully = false;
-            try {
-                if (directMediaUrl) {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: format === 'MP3' ? 'audio' : 'video',
-                            payload: {
-                                url: directMediaUrl,
-                                is_reusable: true
-                            }
-                        }
-                    });
-                    fileSentSuccessfully = true;
-                    console.log(`${format} envoyé avec succès en pièce jointe via URL directe`);
-                } else {
-                    console.log('URL directe non disponible, envoi via API');
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: format === 'MP3' ? 'audio' : 'video',
-                            payload: {
-                                url: downloadUrl,
-                                is_reusable: true
-                            }
-                        }
-                    });
-                    fileSentSuccessfully = true;
-                    console.log(`${format} envoyé avec succès en pièce jointe via API`);
-                }
-            } catch (sendError) {
-                console.log('Erreur envoi média:', sendError.message);
-            }
+            console.log('Appel API MP3:', mp3ApiUrl);
             
             await sendMessage(senderId, `
-${fileSentSuccessfully ? '✅' : '❌'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 ${format} ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : '𝗡𝗢𝗡 𝗘𝗡𝗩𝗢𝗬𝗘́'}
+🔄 Connexion à l'API de téléchargement...
+⏳ Veuillez patienter...
+            `.trim());
+            
+            const mp3Response = await axiosWithRetry(mp3ApiUrl);
+            
+            if (mp3Response.data && mp3Response.data.success && mp3Response.data.result) {
+                const result = mp3Response.data.result;
+                directDownloadUrl = result.downloadUrl;
+                mp3Title = result.title || video.titre;
+                mp3Duration = result.duration || video.duree;
+                mp3Cover = result.cover || '';
+                
+                console.log('API MP3 réponse:', {
+                    title: mp3Title,
+                    duration: mp3Duration,
+                    downloadUrl: directDownloadUrl
+                });
+                
+                await sendMessage(senderId, `
+✅ Lien de téléchargement récupéré !
+🎵 ${mp3Title}
+⏱️ Durée : ${mp3Duration}
+📤 Envoi du fichier audio...
+                `.trim());
+                
+                if (mp3Cover) {
+                    try {
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'image',
+                                payload: {
+                                    url: mp3Cover,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+                    } catch (coverError) {
+                        console.log('Erreur envoi cover:', coverError.message);
+                    }
+                }
+                
+                let fileSentSuccessfully = false;
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'audio',
+                            payload: {
+                                url: directDownloadUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    fileSentSuccessfully = true;
+                    console.log('MP3 envoyé avec succès en pièce jointe');
+                } catch (sendError) {
+                    console.log('Erreur envoi audio:', sendError.message);
+                }
+                
+                await sendMessage(senderId, `
+${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟯 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
 ━━━━━━━━━━━━━━━━━━━
-${formatEmoji} ${video.titre}
-📊 Format : ${format}
-📦 Taille : ${sizeMB} MB
+🎵 ${mp3Title}
+⏱️ Durée : ${mp3Duration}
+📊 Format : MP3 (128 kbps)
 
-${fileSentSuccessfully ? '✅ Fichier média envoyé ci-dessus' : '⚠️ Impossible d\'envoyer le fichier en pièce jointe'}
+${fileSentSuccessfully ? '✅ Fichier audio envoyé ci-dessus !' : '⚠️ Envoi direct impossible'}
 
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${downloadUrl}
+📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+${directDownloadUrl}
+
+💡 Clique sur le lien pour télécharger directement sur ton téléphone !
 
 🔄 Tape "youtube" pour une nouvelle recherche
-            `.trim());
-            
-        } else {
-            await sendMessage(senderId, `
-📦 Fichier volumineux détecté : ${sizeMB} MB
-✂️ Découpage en parties de 25 MB...
-            `.trim());
-            
-            const parts = splitFile(originalFilePath, PART_SIZE);
-            
-            for (const part of parts) {
-                filesToCleanup.push(part.path);
+                `.trim());
+                
+            } else {
+                throw new Error('Réponse API MP3 invalide ou téléchargement échoué');
             }
             
+        } else {
+            const downloadEndpoint = 'mp4';
+            const downloadUrl = `${API_BASE}/telecharger/${downloadEndpoint}/${videoId}`;
+            const directMediaUrl = video.url_mp4;
+            
+            const originalFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}`);
+            const pdfFilePath = path.join(TEMP_DIR, `${safeTitle}.${extension}.pdf`);
+            
+            filesToCleanup.push(originalFilePath, pdfFilePath);
+            
+            console.log('Téléchargement MP4 depuis:', downloadUrl);
+            console.log('URL média directe:', directMediaUrl);
+            console.log('Vers:', originalFilePath);
+            
+            await downloadFile(downloadUrl, originalFilePath);
+            
+            const fileSize = fs.statSync(originalFilePath).size;
+            const sizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+            
+            console.log(`Fichier téléchargé: ${sizeMB} MB`);
+            
             await sendMessage(senderId, `
+📦 Fichier téléchargé : ${sizeMB} MB
+📤 Préparation de l'envoi...
+            `.trim());
+            
+            if (fileSize <= MAX_DIRECT_SEND_SIZE) {
+                fs.copyFileSync(originalFilePath, pdfFilePath);
+                
+                let fileSentSuccessfully = false;
+                try {
+                    if (directMediaUrl) {
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'video',
+                                payload: {
+                                    url: directMediaUrl,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+                        fileSentSuccessfully = true;
+                        console.log('MP4 envoyé avec succès en pièce jointe via URL directe');
+                    } else {
+                        console.log('URL directe non disponible, envoi via API');
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'video',
+                                payload: {
+                                    url: downloadUrl,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+                        fileSentSuccessfully = true;
+                        console.log('MP4 envoyé avec succès en pièce jointe via API');
+                    }
+                } catch (sendError) {
+                    console.log('Erreur envoi vidéo:', sendError.message);
+                }
+                
+                await sendMessage(senderId, `
+${fileSentSuccessfully ? '✅' : '❌'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟰 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : '𝗡𝗢𝗡 𝗘𝗡𝗩𝗢𝗬𝗘́'}
+━━━━━━━━━━━━━━━━━━━
+🎬 ${video.titre}
+📊 Format : MP4
+📦 Taille : ${sizeMB} MB
+
+${fileSentSuccessfully ? '✅ Fichier vidéo envoyé ci-dessus' : '⚠️ Impossible d\'envoyer le fichier en pièce jointe'}
+
+📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+${downloadUrl}
+
+💡 Clique sur le lien pour télécharger directement sur ton téléphone !
+
+🔄 Tape "youtube" pour une nouvelle recherche
+                `.trim());
+                
+            } else {
+                await sendMessage(senderId, `
+📦 Fichier volumineux détecté : ${sizeMB} MB
+✂️ Découpage en parties de 25 MB...
+                `.trim());
+                
+                const parts = splitFile(originalFilePath, PART_SIZE);
+                
+                for (const part of parts) {
+                    filesToCleanup.push(part.path);
+                }
+                
+                await sendMessage(senderId, `
 ✂️ 𝗗𝗘́𝗖𝗢𝗨𝗣𝗔𝗚𝗘 𝗧𝗘𝗥𝗠𝗜𝗡𝗘́
 ━━━━━━━━━━━━━━━━━━━
 ${formatEmoji} ${video.titre}
@@ -574,51 +670,51 @@ ${formatEmoji} ${video.titre}
 ✂️ Nombre de parties : ${parts.length}
 
 📤 Envoi des parties en cours...
-            `.trim());
-            
-            let fileSentSuccessfully = false;
-            if (directMediaUrl) {
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: format === 'MP3' ? 'audio' : 'video',
-                            payload: {
-                                url: directMediaUrl,
-                                is_reusable: true
+                `.trim());
+                
+                let fileSentSuccessfully = false;
+                if (directMediaUrl) {
+                    try {
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'video',
+                                payload: {
+                                    url: directMediaUrl,
+                                    is_reusable: true
+                                }
                             }
-                        }
-                    });
-                    fileSentSuccessfully = true;
-                    console.log('Fichier envoyé via URL directe pour gros fichier');
-                } catch (e) {
-                    console.log('Envoi média direct impossible pour gros fichier:', e.message);
+                        });
+                        fileSentSuccessfully = true;
+                        console.log('Fichier envoyé via URL directe pour gros fichier');
+                    } catch (e) {
+                        console.log('Envoi média direct impossible pour gros fichier:', e.message);
+                    }
                 }
-            }
-            
-            for (const part of parts) {
-                const partSizeMB = (part.size / (1024 * 1024)).toFixed(2);
-                const partPdfPath = `${part.path}.pdf`;
                 
-                fs.copyFileSync(part.path, partPdfPath);
-                filesToCleanup.push(partPdfPath);
-                
-                await sendMessage(senderId, `
+                for (const part of parts) {
+                    const partSizeMB = (part.size / (1024 * 1024)).toFixed(2);
+                    const partPdfPath = `${part.path}.pdf`;
+                    
+                    fs.copyFileSync(part.path, partPdfPath);
+                    filesToCleanup.push(partPdfPath);
+                    
+                    await sendMessage(senderId, `
 📤 𝗣𝗔𝗥𝗧𝗜𝗘 ${part.partNumber}/${part.totalParts}
 ━━━━━━━━━━━━━━━━━━━
 📦 Taille : ${partSizeMB} MB
 📎 Fichier : ${safeTitle}.${extension}.partie${part.partNumber}.pdf
-                `.trim());
+                    `.trim());
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
                 
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
-            await sendMessage(senderId, `
+                await sendMessage(senderId, `
 ✅ 𝗧𝗢𝗨𝗧𝗘𝗦 𝗟𝗘𝗦 𝗣𝗔𝗥𝗧𝗜𝗘𝗦 𝗘𝗡𝗩𝗢𝗬𝗘́𝗘𝗦
 ━━━━━━━━━━━━━━━━━━━
-${formatEmoji} ${video.titre}
+🎬 ${video.titre}
 📦 ${parts.length} parties envoyées
 
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
 ${downloadUrl}
 
 💡 𝗜𝗻𝘀𝘁𝗿𝘂𝗰𝘁𝗶𝗼𝗻𝘀 :
@@ -628,7 +724,8 @@ ${downloadUrl}
    (ou cat partie1 partie2 > fichier.${extension} sur Linux/Mac)
 
 🔄 Tape "youtube" pour une nouvelle recherche
-            `.trim());
+                `.trim());
+            }
         }
 
     } catch (error) {
