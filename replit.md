@@ -4,6 +4,27 @@ This is a Facebook Messenger bot built with Node.js and Express that provides an
 
 # Recent Changes
 
+**December 8, 2025 - Refonte Complète de la Commande Translation**
+- Nouvelle API de traduction : `https://translation-neon.vercel.app/`
+- Support de 20 langues avec drapeaux et noms complets :
+  - FR (Français), EN (Anglais), MLG (Malgache), ES (Espagnol)
+  - DE (Allemand), IT (Italien), PT (Portugais), ZH (Chinois)
+  - JA (Japonais), AR (Arabe), RU (Russe), KO (Coréen)
+  - NL (Néerlandais), PL (Polonais), TR (Turc), VI (Vietnamien)
+  - TH (Thaï), ID (Indonésien), HI (Hindi), SW (Swahili)
+- Nouvelles fonctionnalités :
+  - Guide complet affiché quand l'utilisateur envoie juste "translation"
+  - Traduction automatique vers le Malgache par défaut
+  - Choix de la langue cible avec code (ex: `translation EN Bonjour`)
+  - Détection automatique de la langue source
+  - Interface visuelle attrayante avec encadrés et emojis
+  - Messages d'erreur formatés avec solutions
+- Endpoints API utilisés : `/translate?texte=<texte>&langue=<CODE>`, `/langues`
+- Format des commandes :
+  - `translation` - Affiche le guide complet
+  - `translation <texte>` - Traduit automatiquement vers Malgache
+  - `translation <CODE> <texte>` - Traduit vers la langue spécifiée
+
 **December 4, 2025 - Nouvelle Commande VIP Livre (Bibliothèque PDF)**
 - Nouvelle commande VIP `livre` pour accéder à une bibliothèque de livres PDF gratuits
 - API utilisée: `https://livre-pdf-gratuit.vercel.app/livres`
