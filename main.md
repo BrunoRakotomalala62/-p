@@ -1,271 +1,191 @@
-from flask import Flask, request, jsonify, Response, send_file
+from flask import Flask, request, jsonify
+import requests
+import urllib.parse
 import json
-import yt_dlp
-import os
-import tempfile
-import threading
-import time
 
 app = Flask(__name__)
 
-DOWNLOADS_DIR = "/tmp/downloads"
-os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+LANGUAGES = {
+    "FR": {"code": "fr", "name": "français"},
+    "EN": {"code": "en", "name": "anglais"},
+    "MLG": {"code": "mg", "name": "malgache"},
+    "ES": {"code": "es", "name": "espagnol"},
+    "DE": {"code": "de", "name": "allemand"},
+    "IT": {"code": "it", "name": "italien"},
+    "PT": {"code": "pt", "name": "portugais"},
+    "ZH": {"code": "zh", "name": "chinois"},
+    "JA": {"code": "ja", "name": "japonais"},
+    "AR": {"code": "ar", "name": "arabe"},
+    "RU": {"code": "ru", "name": "russe"},
+    "KO": {"code": "ko", "name": "coréen"},
+    "NL": {"code": "nl", "name": "néerlandais"},
+    "PL": {"code": "pl", "name": "polonais"},
+    "TR": {"code": "tr", "name": "turc"},
+    "VI": {"code": "vi", "name": "vietnamien"},
+    "TH": {"code": "th", "name": "thaï"},
+    "ID": {"code": "id", "name": "indonésien"},
+    "HI": {"code": "hi", "name": "hindi"},
+    "SW": {"code": "sw", "name": "swahili"},
+}
 
-def format_duration(seconds):
-    """Convert seconds to MM:SS format"""
-    if not seconds:
-        return "N/A"
-    minutes = int(seconds // 60)
-    secs = int(seconds % 60)
-    return f"{minutes}:{secs:02d}"
+CODE_TO_LANG = {info["code"]: code for code, info in LANGUAGES.items()}
 
-def format_size(bytes_size):
-    """Convert bytes to MB format"""
-    if not bytes_size:
-        return "N/A"
-    mb = bytes_size / (1024 * 1024)
-    return f"{mb:.2f} MB"
-
-def search_music(query, max_results=10):
-    """Search for music using yt-dlp"""
-    results = []
+def translate_with_auto_detect(text, target_lang, source_lang=None):
+    if target_lang not in LANGUAGES:
+        return None, None, f"Langue cible '{target_lang}' non supportée"
     
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
-        'default_search': 'ytsearch',
-        'noplaylist': True,
-        'format': 'bestaudio/best',
+    if source_lang and source_lang not in LANGUAGES:
+        return None, None, f"Langue source '{source_lang}' non supportée"
+    
+    source_code = LANGUAGES[source_lang]["code"] if source_lang else "auto"
+    target_code = LANGUAGES[target_lang]["code"]
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            search_query = f"ytsearch{max_results}:{query}"
-            info = ydl.extract_info(search_query, download=False)
+        encoded_text = urllib.parse.quote(text)
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={source_code}&tl={target_code}&dt=t&q={encoded_text}"
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        translated_text = None
+        detected_lang_code = None
+        
+        if result and isinstance(result, list) and len(result) > 0:
+            translated_parts = []
+            if result[0]:
+                for part in result[0]:
+                    if part and len(part) > 0 and part[0]:
+                        translated_parts.append(part[0])
             
-            if 'entries' in info:
-                for entry in info['entries']:
-                    if entry is None:
-                        continue
-                    
-                    video_id = entry.get('id', '')
-                    title = entry.get('title', 'Unknown')
-                    duration = entry.get('duration', 0)
-                    thumbnail = entry.get('thumbnail', '')
-                    
-                    audio_url = None
-                    video_url = None
-                    audio_size = None
-                    video_size = None
-                    
-                    formats = entry.get('formats', [])
-                    
-                    for fmt in formats:
-                        if fmt.get('acodec') != 'none' and fmt.get('vcodec') == 'none':
-                            if audio_url is None:
-                                audio_url = fmt.get('url')
-                                audio_size = fmt.get('filesize') or fmt.get('filesize_approx')
-                    
-                    for fmt in formats:
-                        if fmt.get('vcodec') != 'none' and fmt.get('acodec') != 'none':
-                            if fmt.get('ext') == 'mp4':
-                                video_url = fmt.get('url')
-                                video_size = fmt.get('filesize') or fmt.get('filesize_approx')
-                                break
-                    
-                    if not video_url:
-                        for fmt in formats:
-                            if fmt.get('ext') == 'mp4':
-                                video_url = fmt.get('url')
-                                video_size = fmt.get('filesize') or fmt.get('filesize_approx')
-                                break
-                    
-                    results.append({
-                        'titre': title,
-                        'duree': format_duration(duration),
-                        'duree_secondes': duration,
-                        'image_url': thumbnail,
-                        'taille_mp3': format_size(audio_size) if audio_size else "~3-5 MB",
-                        'taille_mp4': format_size(video_size) if video_size else "~10-50 MB",
-                        'url_mp3': audio_url,
-                        'url_mp4': video_url,
-                        'video_id': video_id,
-                        'youtube_url': f"https://www.youtube.com/watch?v={video_id}",
-                        'telecharger_mp3': f"/telecharger/mp3/{video_id}",
-                        'telecharger_mp4': f"/telecharger/mp4/{video_id}"
-                    })
-                    
+            if translated_parts:
+                translated_text = ''.join(translated_parts)
+            
+            if len(result) > 2 and result[2]:
+                detected_lang_code = result[2]
+        
+        if translated_text:
+            detected_lang = CODE_TO_LANG.get(detected_lang_code, None)
+            return translated_text, detected_lang, None
+        
+        return None, None, "Impossible d'extraire la traduction de la réponse"
+        
+    except requests.exceptions.Timeout:
+        return None, None, "Délai d'attente dépassé lors de la connexion au service de traduction"
+    except requests.exceptions.RequestException as e:
+        return None, None, f"Erreur de connexion: {str(e)}"
+    except json.JSONDecodeError:
+        return None, None, "Erreur lors du décodage de la réponse"
     except Exception as e:
-        return {'error': str(e)}
-    
-    return results
-
+        return None, None, f"Erreur inattendue: {str(e)}"
 
 @app.route('/')
 def home():
-    response_data = {
-        'message': 'API MP3 Juice - Recherche et téléchargement de musique',
-        'routes': {
-            'recherche': '/recherche?audio=<votre_recherche>',
-            'telecharger_mp3': '/telecharger/mp3/<video_id>',
-            'telecharger_mp4': '/telecharger/mp4/<video_id>'
+    return jsonify({
+        "message": "API de Traduction",
+        "usage": "/translate?texte=<texte>&langue=<CODE_LANGUE>",
+        "parametres": {
+            "texte": "Le texte à traduire (obligatoire)",
+            "langue": "Code de la langue cible: FR, EN, MLG, ES, DE, IT, etc. (obligatoire)",
+            "source": "Code de la langue source (optionnel, détection automatique si absent)"
         },
-        'exemple': '/recherche?audio=odyai'
-    }
-    return Response(
-        json.dumps(response_data, ensure_ascii=False, indent=2),
-        mimetype='application/json; charset=utf-8'
-    )
+        "langues_supportees": list(LANGUAGES.keys()),
+        "exemples": [
+            "/translate?texte=Salama inona ny vaovao?&langue=FR",
+            "/translate?texte=Bonjour comment allez-vous?&langue=MLG",
+            "/translate?texte=Hello how are you?&langue=FR&source=EN",
+            "/translate?texte=Hola como estas?&langue=FR"
+        ]
+    })
 
-
-@app.route('/recherche', methods=['GET'])
-def recherche():
-    audio = request.args.get('audio', '')
-    limit = request.args.get('limit', '10')
+@app.route('/translate', methods=['GET'])
+def translate():
+    texte = request.args.get('texte', '').strip()
+    langue_cible = request.args.get('langue', '').upper().strip()
+    langue_source = request.args.get('source', '').upper().strip() or None
     
-    try:
-        limit = int(limit)
-        limit = min(max(1, limit), 20)
-    except:
-        limit = 10
-    
-    if not audio:
+    if not texte:
         return jsonify({
-            'error': 'Paramètre "audio" requis',
-            'usage': '/recherche?audio=<votre_recherche>&limit=10'
+            "erreur": "Paramètre 'texte' manquant",
+            "usage": "/translate?texte=<texte>&langue=<CODE_LANGUE>"
         }), 400
     
-    results = search_music(audio, max_results=limit)
+    if not langue_cible:
+        return jsonify({
+            "erreur": "Paramètre 'langue' manquant",
+            "usage": "/translate?texte=<texte>&langue=<CODE_LANGUE>",
+            "langues_disponibles": list(LANGUAGES.keys())
+        }), 400
     
-    if isinstance(results, dict) and 'error' in results:
-        response_data = {
-            'recherche': audio,
-            'error': results['error'],
-            'resultats': []
-        }
+    if langue_cible not in LANGUAGES:
+        return jsonify({
+            "erreur": f"Langue cible '{langue_cible}' non supportée",
+            "langues_disponibles": list(LANGUAGES.keys())
+        }), 400
+    
+    if langue_source and langue_source not in LANGUAGES:
+        return jsonify({
+            "erreur": f"Langue source '{langue_source}' non supportée",
+            "langues_disponibles": list(LANGUAGES.keys())
+        }), 400
+    
+    detection_auto = langue_source is None
+    
+    traduction, detected_lang, erreur = translate_with_auto_detect(texte, langue_cible, langue_source)
+    
+    if erreur:
+        return jsonify({
+            "erreur": erreur,
+            "texte_original": texte,
+            "langue_source": langue_source,
+            "langue_cible": langue_cible,
+            "detection_automatique": detection_auto
+        }), 500
+    
+    final_source_lang = langue_source if langue_source else detected_lang
+    
+    if final_source_lang and final_source_lang == langue_cible:
+        return jsonify({
+            "texte_original": texte,
+            "traduction": texte,
+            "langue_source": final_source_lang,
+            "langue_source_nom": LANGUAGES.get(final_source_lang, {}).get("name", "inconnue"),
+            "langue_cible": langue_cible,
+            "langue_cible_nom": LANGUAGES[langue_cible]["name"],
+            "detection_automatique": detection_auto,
+            "note": "Les langues source et cible sont identiques"
+        })
+    
+    response_data = {
+        "texte_original": texte,
+        "traduction": traduction,
+        "langue_cible": langue_cible,
+        "langue_cible_nom": LANGUAGES[langue_cible]["name"],
+        "detection_automatique": detection_auto
+    }
+    
+    if final_source_lang:
+        response_data["langue_source"] = final_source_lang
+        response_data["langue_source_nom"] = LANGUAGES.get(final_source_lang, {}).get("name", "inconnue")
+    elif detected_lang:
+        response_data["langue_source"] = detected_lang
+        response_data["langue_source_nom"] = LANGUAGES.get(detected_lang, {}).get("name", "inconnue")
     else:
-        response_data = {
-            'recherche': audio,
-            'nombre_resultats': len(results),
-            'resultats': results
-        }
+        response_data["langue_source"] = "auto"
+        response_data["langue_source_nom"] = "détectée automatiquement"
     
-    response = Response(
-        json.dumps(response_data, ensure_ascii=False, indent=2),
-        mimetype='application/json; charset=utf-8'
-    )
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    return response
+    return jsonify(response_data)
 
-
-@app.route('/telecharger/mp3/<video_id>', methods=['GET'])
-def telecharger_mp3(video_id):
-    """Download audio as MP3"""
-    try:
-        output_path = os.path.join(DOWNLOADS_DIR, f"{video_id}.mp3")
-        
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(DOWNLOADS_DIR, f"{video_id}.%(ext)s"),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-        }
-        
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get('title', video_id)
-        
-        if os.path.exists(output_path):
-            return send_file(
-                output_path,
-                as_attachment=True,
-                download_name=f"{title}.mp3",
-                mimetype='audio/mpeg'
-            )
-        else:
-            for ext in ['m4a', 'webm', 'opus']:
-                alt_path = os.path.join(DOWNLOADS_DIR, f"{video_id}.{ext}")
-                if os.path.exists(alt_path):
-                    return send_file(
-                        alt_path,
-                        as_attachment=True,
-                        download_name=f"{title}.{ext}",
-                        mimetype='audio/mpeg'
-                    )
-        
-        return jsonify({'error': 'Fichier non trouvé après téléchargement'}), 500
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/telecharger/mp4/<video_id>', methods=['GET'])
-def telecharger_mp4(video_id):
-    """Download video as MP4"""
-    try:
-        output_path = os.path.join(DOWNLOADS_DIR, f"{video_id}.mp4")
-        
-        ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'outtmpl': output_path,
-            'merge_output_format': 'mp4',
-            'quiet': True,
-        }
-        
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get('title', video_id)
-        
-        if os.path.exists(output_path):
-            return send_file(
-                output_path,
-                as_attachment=True,
-                download_name=f"{title}.mp4",
-                mimetype='video/mp4'
-            )
-        
-        return jsonify({'error': 'Fichier non trouvé après téléchargement'}), 500
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/stream/mp3/<video_id>', methods=['GET'])
-def stream_mp3(video_id):
-    """Get direct streaming URL for MP3"""
-    try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-        }
-        
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            audio_url = info.get('url')
-            
-            if audio_url:
-                return jsonify({
-                    'titre': info.get('title'),
-                    'stream_url': audio_url,
-                    'duree': format_duration(info.get('duration')),
-                })
-        
-        return jsonify({'error': 'URL non trouvée'}), 404
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+@app.route('/langues', methods=['GET'])
+def get_languages():
+    return jsonify({
+        "langues": {code: info["name"] for code, info in LANGUAGES.items()}
+    })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
