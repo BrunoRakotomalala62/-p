@@ -75,12 +75,16 @@ function sanitizeFilename(filename) {
     return filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100);
 }
 
-// Fonction pour parser la taille en Mo depuis une chaîne (ex: "15.2 MB", "30 Mo")
-function parseSizeInMB(sizeString) {
-    if (!sizeString || typeof sizeString !== 'string') return 0;
-    const match = sizeString.match(/([\d.]+)\s*(MB|Mo|M)/i);
-    if (match) {
-        return parseFloat(match[1]);
+// Fonction pour parser la durée en minutes depuis une chaîne (ex: "3:45", "1:30:00", "45:30")
+function parseDurationInMinutes(durationString) {
+    if (!durationString || typeof durationString !== 'string') return 0;
+    const parts = durationString.split(':').map(p => parseInt(p, 10));
+    if (parts.length === 3) {
+        // Format HH:MM:SS
+        return parts[0] * 60 + parts[1] + parts[2] / 60;
+    } else if (parts.length === 2) {
+        // Format MM:SS
+        return parts[0] + parts[1] / 60;
     }
     return 0;
 }
@@ -636,26 +640,25 @@ ${directDownloadUrl}
                     }
                 }
                 
-                // Vérifier la taille du fichier MP4
-                const mp4SizeInMB = parseSizeInMB(video.taille_mp4);
-                const isFileTooLarge = mp4SizeInMB > 25;
+                // Vérifier la durée de la vidéo
+                const durationInMinutes = parseDurationInMinutes(mp4Duration);
+                const isVideoTooLong = durationInMinutes > 30;
                 
-                console.log(`Taille MP4: ${video.taille_mp4} (${mp4SizeInMB} MB), Trop grand: ${isFileTooLarge}`);
+                console.log(`Durée MP4: ${mp4Duration} (${durationInMinutes.toFixed(2)} min), Trop long: ${isVideoTooLong}`);
                 
                 let fileSentSuccessfully = false;
                 
-                // Si le fichier est trop grand (> 25 Mo), envoyer uniquement le lien
-                if (isFileTooLarge) {
-                    console.log('Fichier MP4 > 25 Mo, envoi du lien direct uniquement');
+                // Si la vidéo est trop longue (> 30 min), envoyer uniquement le lien
+                if (isVideoTooLong) {
+                    console.log('Vidéo MP4 > 30 minutes, envoi du lien direct uniquement');
                     await sendMessage(senderId, `
-⚠️ 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗧𝗥𝗢𝗣 𝗩𝗢𝗟𝗨𝗠𝗜𝗡𝗘𝗨𝗫 ⚠️
+⚠️ 𝗩𝗜𝗗𝗘́𝗢 𝗧𝗥𝗢𝗣 𝗟𝗢𝗡𝗚𝗨𝗘 ⚠️
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${mp4Title}
 ⏱️ Durée : ${mp4Duration}
 📺 Qualité : ${mp4Quality}p
-📦 Taille : ${video.taille_mp4}
 
-⚠️ Ce fichier dépasse 25 Mo et ne peut pas être envoyé directement.
+⚠️ Cette vidéo dépasse 30 minutes et ne peut pas être envoyée directement.
 
 📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
 ${mp4DownloadUrl}
@@ -665,7 +668,7 @@ ${mp4DownloadUrl}
 🔄 Tape "youtube" pour une nouvelle recherche
                     `.trim());
                 } else {
-                    // Fichier <= 25 Mo, essayer d'envoyer le fichier
+                    // Vidéo <= 30 min, envoyer le fichier + le lien
                     try {
                         await sendMessage(senderId, {
                             attachment: {
