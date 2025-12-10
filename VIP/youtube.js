@@ -1,6 +1,8 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const FormData = require('form-data');
+const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://mutual-terese-tekenespa-31ac883e.koyeb.app';
@@ -73,6 +75,81 @@ function getTotalPages(totalVideos) {
 
 function sanitizeFilename(filename) {
     return filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100);
+}
+
+// Fonction pour télécharger le fichier en mémoire (buffer)
+async function downloadToBuffer(url) {
+    try {
+        console.log('Téléchargement en mémoire:', url);
+        const response = await axios({
+            method: 'GET',
+            url: url,
+            responseType: 'arraybuffer',
+            timeout: 180000,
+            maxRedirects: 5,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        const buffer = Buffer.from(response.data);
+        console.log(`Fichier téléchargé en mémoire: ${(buffer.length / (1024 * 1024)).toFixed(2)} MB`);
+        return { buffer, size: buffer.length };
+    } catch (error) {
+        console.error('Erreur téléchargement en mémoire:', error.message);
+        throw error;
+    }
+}
+
+// Fonction pour envoyer un buffer directement à Facebook Messenger
+async function sendBufferToMessenger(recipientId, buffer, fileType, filename) {
+    try {
+        const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+        if (!PAGE_ACCESS_TOKEN) {
+            throw new Error('PAGE_ACCESS_TOKEN non défini');
+        }
+
+        const stream = Readable.from(buffer);
+        
+        const form = new FormData();
+        form.append('recipient', JSON.stringify({ id: recipientId }));
+        form.append('message', JSON.stringify({
+            attachment: {
+                type: fileType,
+                payload: {
+                    is_reusable: false
+                }
+            }
+        }));
+        form.append('filedata', stream, {
+            filename: filename,
+            contentType: fileType === 'audio' ? 'audio/mpeg' : 'video/mp4'
+        });
+
+        const response = await axios.post(
+            `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            form,
+            {
+                headers: form.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                timeout: 180000
+            }
+        );
+
+        console.log('Fichier envoyé via FormData:', response.data);
+        return { success: true, data: response.data };
+    } catch (error) {
+        const errorData = error.response ? error.response.data : error.message;
+        console.error('Erreur envoi FormData:', errorData);
+        return { success: false, error: errorData };
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
@@ -626,29 +703,42 @@ ${directDownloadUrl}
                     }
                 }
                 
-                // Toujours envoyer le fichier vidéo + le lien de téléchargement
+                // Télécharger le fichier en mémoire puis envoyer via FormData (comme clip.js)
                 let fileSentSuccessfully = false;
+                let fileSize = 0;
+                const safeTitle = sanitizeFilename(mp4Title).substring(0, 30);
+                const filename = `${safeTitle}_${Date.now()}.mp4`;
+                
                 try {
-                    console.log('Tentative envoi vidéo MP4, URL:', mp4DownloadUrl);
-                    const videoResult = await sendMessage(senderId, {
-                        attachment: {
-                            type: 'video',
-                            payload: {
-                                url: mp4DownloadUrl,
-                                is_reusable: true
-                            }
-                        }
-                    });
+                    console.log('Téléchargement MP4 en mémoire:', mp4DownloadUrl);
                     
-                    // Vérifier si l'envoi a vraiment réussi
-                    if (videoResult && videoResult.success) {
+                    await sendMessage(senderId, `
+📥 Téléchargement de la vidéo...
+⏳ Veuillez patienter...
+                    `.trim());
+                    
+                    const fileData = await downloadToBuffer(mp4DownloadUrl);
+                    fileSize = fileData.size;
+                    
+                    console.log(`Fichier MP4 téléchargé: ${formatFileSize(fileSize)}`);
+                    
+                    await sendMessage(senderId, `
+📤 Envoi de la vidéo...
+📊 Taille : ${formatFileSize(fileSize)}
+                    `.trim());
+                    
+                    // Envoyer via FormData comme clip.js
+                    console.log('Envoi du fichier MP4 via FormData...');
+                    const sendResult = await sendBufferToMessenger(senderId, fileData.buffer, 'video', filename);
+                    
+                    if (sendResult && sendResult.success) {
                         fileSentSuccessfully = true;
-                        console.log('MP4 envoyé avec succès en pièce jointe');
+                        console.log('MP4 envoyé avec succès via FormData');
                     } else {
-                        console.log('Échec envoi vidéo MP4:', videoResult?.error || 'Erreur inconnue');
+                        console.log('Échec envoi MP4:', sendResult?.error || 'Erreur inconnue');
                     }
-                } catch (sendError) {
-                    console.log('Erreur envoi vidéo:', sendError.message);
+                } catch (downloadError) {
+                    console.error('Erreur téléchargement/envoi MP4:', downloadError.message);
                 }
                 
                 await sendMessage(senderId, `
@@ -657,6 +747,7 @@ ${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣
 🎬 ${mp4Title}
 ⏱️ Durée : ${mp4Duration}
 📺 Qualité : ${mp4Quality}p
+📊 Taille : ${formatFileSize(fileSize)}
 
 ${fileSentSuccessfully ? '✅ Fichier vidéo envoyé ci-dessus !' : '⚠️ Envoi direct impossible'}
 
