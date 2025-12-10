@@ -640,52 +640,25 @@ ${directDownloadUrl}
                     }
                 }
                 
-                // Vérifier la durée de la vidéo
-                const durationInMinutes = parseDurationInMinutes(mp4Duration);
-                const isVideoTooLong = durationInMinutes > 30;
-                
-                console.log(`Durée MP4: ${mp4Duration} (${durationInMinutes.toFixed(2)} min), Trop long: ${isVideoTooLong}`);
-                
+                // Toujours envoyer le fichier vidéo + le lien de téléchargement
                 let fileSentSuccessfully = false;
-                
-                // Si la vidéo est trop longue (> 30 min), envoyer uniquement le lien
-                if (isVideoTooLong) {
-                    console.log('Vidéo MP4 > 30 minutes, envoi du lien direct uniquement');
-                    await sendMessage(senderId, `
-⚠️ 𝗩𝗜𝗗𝗘́𝗢 𝗧𝗥𝗢𝗣 𝗟𝗢𝗡𝗚𝗨𝗘 ⚠️
-━━━━━━━━━━━━━━━━━━━
-🎬 ${mp4Title}
-⏱️ Durée : ${mp4Duration}
-📺 Qualité : ${mp4Quality}p
-
-⚠️ Cette vidéo dépasse 30 minutes et ne peut pas être envoyée directement.
-
-📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${mp4DownloadUrl}
-
-💡 Clique sur le lien pour télécharger directement sur ton téléphone !
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                    `.trim());
-                } else {
-                    // Vidéo <= 30 min, envoyer le fichier + le lien
-                    try {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'video',
-                                payload: {
-                                    url: mp4DownloadUrl,
-                                    is_reusable: true
-                                }
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'video',
+                            payload: {
+                                url: mp4DownloadUrl,
+                                is_reusable: true
                             }
-                        });
-                        fileSentSuccessfully = true;
-                        console.log('MP4 envoyé avec succès en pièce jointe');
-                    } catch (sendError) {
-                        console.log('Erreur envoi vidéo:', sendError.message);
-                    }
-                    
-                    await sendMessage(senderId, `
+                        }
+                    });
+                    fileSentSuccessfully = true;
+                    console.log('MP4 envoyé avec succès en pièce jointe');
+                } catch (sendError) {
+                    console.log('Erreur envoi vidéo:', sendError.message);
+                }
+                
+                await sendMessage(senderId, `
 ${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟰 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${mp4Title}
@@ -700,8 +673,7 @@ ${mp4DownloadUrl}
 💡 Clique sur le lien pour télécharger directement sur ton téléphone !
 
 🔄 Tape "youtube" pour une nouvelle recherche
-                    `.trim());
-                }
+                `.trim());
                 
             } else {
                 throw new Error('Réponse API MP4 invalide ou téléchargement échoué');
