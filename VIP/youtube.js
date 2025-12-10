@@ -734,6 +734,20 @@ ${directDownloadUrl}
                     if (sendResult && sendResult.success) {
                         fileSentSuccessfully = true;
                         console.log('MP4 envoyé avec succès via FormData');
+                        
+                        // Programmer l'envoi du lien de téléchargement direct après 3 minutes
+                        const delayedDownloadUrl = mp4DownloadUrl;
+                        setTimeout(async () => {
+                            try {
+                                await sendMessage(senderId, `
+𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+${delayedDownloadUrl}
+                                `.trim());
+                                console.log('Lien de téléchargement direct envoyé après 3 minutes');
+                            } catch (delayedError) {
+                                console.error('Erreur envoi lien différé:', delayedError.message);
+                            }
+                        }, 3 * 60 * 1000); // 3 minutes = 180000 ms
                     } else {
                         console.log('Échec envoi MP4:', sendResult?.error || 'Erreur inconnue');
                     }
@@ -750,11 +764,6 @@ ${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣
 📊 Taille : ${formatFileSize(fileSize)}
 
 ${fileSentSuccessfully ? '✅ Fichier vidéo envoyé ci-dessus !' : '⚠️ Envoi direct impossible'}
-
-📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${mp4DownloadUrl}
-
-💡 Clique sur le lien pour télécharger directement sur ton téléphone !
 
 🔄 Tape "youtube" pour une nouvelle recherche
                 `.trim());
