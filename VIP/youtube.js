@@ -75,6 +75,16 @@ function sanitizeFilename(filename) {
     return filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100);
 }
 
+// Fonction pour parser la taille en Mo depuis une chaîne (ex: "15.2 MB", "30 Mo")
+function parseSizeInMB(sizeString) {
+    if (!sizeString || typeof sizeString !== 'string') return 0;
+    const match = sizeString.match(/([\d.]+)\s*(MB|Mo|M)/i);
+    if (match) {
+        return parseFloat(match[1]);
+    }
+    return 0;
+}
+
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -626,24 +636,53 @@ ${directDownloadUrl}
                     }
                 }
                 
-                let fileSentSuccessfully = false;
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'video',
-                            payload: {
-                                url: mp4DownloadUrl,
-                                is_reusable: true
-                            }
-                        }
-                    });
-                    fileSentSuccessfully = true;
-                    console.log('MP4 envoyé avec succès en pièce jointe');
-                } catch (sendError) {
-                    console.log('Erreur envoi vidéo:', sendError.message);
-                }
+                // Vérifier la taille du fichier MP4
+                const mp4SizeInMB = parseSizeInMB(video.taille_mp4);
+                const isFileTooLarge = mp4SizeInMB > 25;
                 
-                await sendMessage(senderId, `
+                console.log(`Taille MP4: ${video.taille_mp4} (${mp4SizeInMB} MB), Trop grand: ${isFileTooLarge}`);
+                
+                let fileSentSuccessfully = false;
+                
+                // Si le fichier est trop grand (> 25 Mo), envoyer uniquement le lien
+                if (isFileTooLarge) {
+                    console.log('Fichier MP4 > 25 Mo, envoi du lien direct uniquement');
+                    await sendMessage(senderId, `
+⚠️ 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗧𝗥𝗢𝗣 𝗩𝗢𝗟𝗨𝗠𝗜𝗡𝗘𝗨𝗫 ⚠️
+━━━━━━━━━━━━━━━━━━━
+🎬 ${mp4Title}
+⏱️ Durée : ${mp4Duration}
+📺 Qualité : ${mp4Quality}p
+📦 Taille : ${video.taille_mp4}
+
+⚠️ Ce fichier dépasse 25 Mo et ne peut pas être envoyé directement.
+
+📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
+${mp4DownloadUrl}
+
+💡 Clique sur le lien pour télécharger directement sur ton téléphone !
+
+🔄 Tape "youtube" pour une nouvelle recherche
+                    `.trim());
+                } else {
+                    // Fichier <= 25 Mo, essayer d'envoyer le fichier
+                    try {
+                        await sendMessage(senderId, {
+                            attachment: {
+                                type: 'video',
+                                payload: {
+                                    url: mp4DownloadUrl,
+                                    is_reusable: true
+                                }
+                            }
+                        });
+                        fileSentSuccessfully = true;
+                        console.log('MP4 envoyé avec succès en pièce jointe');
+                    } catch (sendError) {
+                        console.log('Erreur envoi vidéo:', sendError.message);
+                    }
+                    
+                    await sendMessage(senderId, `
 ${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟰 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
 ━━━━━━━━━━━━━━━━━━━
 🎬 ${mp4Title}
@@ -658,7 +697,8 @@ ${mp4DownloadUrl}
 💡 Clique sur le lien pour télécharger directement sur ton téléphone !
 
 🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
+                    `.trim());
+                }
                 
             } else {
                 throw new Error('Réponse API MP4 invalide ou téléchargement échoué');
