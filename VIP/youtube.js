@@ -75,20 +75,6 @@ function sanitizeFilename(filename) {
     return filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100);
 }
 
-// Fonction pour parser la durée en minutes depuis une chaîne (ex: "3:45", "1:30:00", "45:30")
-function parseDurationInMinutes(durationString) {
-    if (!durationString || typeof durationString !== 'string') return 0;
-    const parts = durationString.split(':').map(p => parseInt(p, 10));
-    if (parts.length === 3) {
-        // Format HH:MM:SS
-        return parts[0] * 60 + parts[1] + parts[2] / 60;
-    } else if (parts.length === 2) {
-        // Format MM:SS
-        return parts[0] + parts[1] / 60;
-    }
-    return 0;
-}
-
 async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
