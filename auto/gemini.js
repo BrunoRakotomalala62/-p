@@ -127,6 +127,16 @@ function convertCharToSubscript(char) {
     return subscriptMap[char] || char;
 }
 
+// Fonction pour remplacer les mentions de Claude et Anthropic
+function replaceBranding(text) {
+    let result = text;
+    // Remplacer Claude (insensible à la casse) par le nouveau nom
+    result = result.replace(/Claude/gi, '🍟Cours mathématiques et PC Madagascar✅');
+    // Remplacer Anthropic (insensible à la casse) par le nouveau nom
+    result = result.replace(/Anthropic/gi, '👉Bruno Rakotomalala ✅');
+    return result;
+}
+
 // Fonction pour formater le texte avec gras et subscript
 function formatText(text) {
     // Supprimer les marqueurs de titre Markdown (#, ##, ###, etc.)
@@ -185,7 +195,7 @@ async function chat(prompt, uid) {
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
-        return formatText(result.response);
+        return replaceBranding(formatText(result.response));
     } catch (error) {
         console.error('❌ Erreur chat Anthropic:', error.message);
         if (error.response) {
@@ -237,7 +247,7 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
-        return formatText(result.response);
+        return replaceBranding(formatText(result.response));
     } catch (error) {
         console.error('❌ Erreur chat avec images Anthropic:', error.message);
         if (error.response) {
