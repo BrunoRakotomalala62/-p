@@ -629,7 +629,8 @@ ${directDownloadUrl}
                 // Toujours envoyer le fichier vidéo + le lien de téléchargement
                 let fileSentSuccessfully = false;
                 try {
-                    await sendMessage(senderId, {
+                    console.log('Tentative envoi vidéo MP4, URL:', mp4DownloadUrl);
+                    const videoResult = await sendMessage(senderId, {
                         attachment: {
                             type: 'video',
                             payload: {
@@ -638,8 +639,14 @@ ${directDownloadUrl}
                             }
                         }
                     });
-                    fileSentSuccessfully = true;
-                    console.log('MP4 envoyé avec succès en pièce jointe');
+                    
+                    // Vérifier si l'envoi a vraiment réussi
+                    if (videoResult && videoResult.success) {
+                        fileSentSuccessfully = true;
+                        console.log('MP4 envoyé avec succès en pièce jointe');
+                    } else {
+                        console.log('Échec envoi vidéo MP4:', videoResult?.error || 'Erreur inconnue');
+                    }
                 } catch (sendError) {
                     console.log('Erreur envoi vidéo:', sendError.message);
                 }
