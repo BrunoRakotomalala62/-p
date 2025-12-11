@@ -194,7 +194,8 @@ function formatPredictData(data, filters = []) {
   return lines.join("\n").trim();
 }
 
-const gangstockCommand = async (senderId, args) => {
+const gangstockCommand = async (senderId, argsString) => {
+  const args = argsString ? argsString.trim().split(/\s+/) : [];
   const subcmd = args[0]?.toLowerCase();
 
   if (subcmd === "fav") {
