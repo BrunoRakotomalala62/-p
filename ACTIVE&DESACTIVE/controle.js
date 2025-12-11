@@ -19,7 +19,7 @@
  *   - false = désactivé (accès libre pour tous)
  */
 
-const modeRestreint = true;  // Changer ici: true = activé, false = désactivé
+const modeRestreint = false;  // Changer ici: true = activé, false = désactivé
 
 module.exports = {
     modeRestreint,
