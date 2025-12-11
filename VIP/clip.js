@@ -3,7 +3,7 @@ const FormData = require('form-data');
 const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://clip-dai.onrender.com';
+const API_BASE = 'https://clip-dai-ium2.onrender.com';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 3000;
 
