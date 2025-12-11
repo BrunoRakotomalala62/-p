@@ -51,6 +51,10 @@ const activeVIPCommands = {}; // Suivre les commandes VIP actives
 const imageHistory = {};
 const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères pour chaque message envoyé
 
+// Commandes non-persistantes qui ne nécessitent pas "stop" après utilisation
+// Ces commandes permettent d'utiliser directement d'autres commandes après
+const NON_PERSISTENT_COMMANDS = ['usage', 'help', 'uid'];
+
 // Nouveau suivi des questions par image
 const userImageQuestionCount = {};
 
@@ -368,10 +372,16 @@ Contactez l'administrateur pour renouveler votre abonnement VIP.
     }
     // PRIORITÉ 3: Si une nouvelle commande normale est détectée
     else if (newCommandDetected) {
-        // Désactiver la commande VIP et activer la commande normale
+        // Désactiver la commande VIP
         activeVIPCommands[senderId] = null;
-        activeCommands[senderId] = detectedCommandName;
-        console.log(`Nouvelle commande active pour ${senderId}: ${detectedCommandName}`);
+        
+        // Activer la commande SEULEMENT si elle n'est pas dans la liste des commandes non-persistantes
+        if (!NON_PERSISTENT_COMMANDS.includes(detectedCommandName)) {
+            activeCommands[senderId] = detectedCommandName;
+            console.log(`Nouvelle commande active pour ${senderId}: ${detectedCommandName}`);
+        } else {
+            console.log(`Commande non-persistante exécutée pour ${senderId}: ${detectedCommandName}`);
+        }
         
         const commandPrompt = userText.replace(detectedCommandName, '').trim();
         const commandFile = commands[detectedCommandName];
