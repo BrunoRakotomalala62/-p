@@ -1,655 +1,732 @@
-from flask import Flask, request, jsonify
-import requests
-from bs4 import BeautifulSoup
-import urllib.parse
-import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+const express = require('express');
+const axios = require('axios');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const cron = require('node-cron');
 
-app = Flask(__name__)
+const app = express();
+const PORT = process.env.PORT || 5000;
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL || process.env.API_URL;
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+
+const PLAYER_METADATA_URL = 'https://www.dailymotion.com/player/metadata/video';
+
+const headers = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+};
+
+async function getVideoMetadata(videoId) {
+  try {
+    const metadataUrl = `${PLAYER_METADATA_URL}/${videoId}`;
+    const response = await axios.get(metadataUrl, {
+      headers: {
+        'User-Agent': headers['User-Agent'],
+        'Referer': `https://www.dailymotion.com/video/${videoId}`,
+      },
+      timeout: 15000
+    });
+    return response.data;
+  } catch (error) {
+    return null;
+  }
 }
 
-BOOK_TYPES = {
-    'roman': ['roman pdf', 'novel pdf', 'fiction pdf', 'livre roman'],
-    'educatif': ['textbook pdf', 'cours pdf', 'education pdf', 'manuel scolaire pdf'],
-    'technique': ['programming pdf', 'tutorial pdf', 'guide technique pdf'],
-    'science': ['science pdf', 'research paper pdf', 'scientific pdf'],
-    'all': ['book pdf', 'livre pdf', 'ebook pdf']
-}
-
-BACC_SERIES = ['A', 'C', 'D', 'OSE', 'S', 'L']
-BACC_MATIERES = {
-    'mathematiques': ['maths', 'math', 'mathematiques'],
-    'physique': ['physique', 'physique-chimie', 'pc'],
-    'chimie': ['chimie', 'sciences physiques'],
-    'svt': ['svt', 'biologie', 'sciences naturelles'],
-    'philosophie': ['philosophie', 'philo'],
-    'francais': ['francais', 'français', 'dissertation'],
-    'anglais': ['anglais', 'english'],
-    'histoire-geo': ['histoire', 'geographie', 'histoire-geo', 'hg'],
-    'malagasy': ['malagasy', 'malgache'],
-    'economie': ['economie', 'eco', 'economique']
-}
-
-EDUCMAD_COURSES = {
-    'mathematiques': {'A': 817, 'C': 129, 'D': 816},
-    'physique': {'C': 130, 'D': 818},
-    'svt': {'D': 819},
-    'philosophie': {'A': 820, 'C': 821, 'D': 822}
-}
-
-
-def extract_real_url(href):
-    """Extrait l'URL reelle depuis un lien DuckDuckGo"""
-    if 'uddg=' in href:
-        try:
-            match = re.search(r'uddg=([^&]+)', href)
-            if match:
-                return urllib.parse.unquote(match.group(1))
-        except:
-            pass
-    if href.startswith('//'):
-        return 'https:' + href
-    return href
-
-
-def extract_filename(url):
-    """Extrait le nom du fichier PDF depuis l'URL"""
-    try:
-        path = urllib.parse.urlparse(url).path
-        filename = path.split('/')[-1]
-        if filename:
-            filename = urllib.parse.unquote(filename)
-            if not filename.lower().endswith('.pdf'):
-                filename = filename + '.pdf'
-            return filename
-    except:
-        pass
-    return "document.pdf"
-
-
-def search_duckduckgo(query, num_results=30):
-    """Recherche via DuckDuckGo HTML"""
-    search_query = f"{query} filetype:pdf"
-    encoded_query = urllib.parse.quote(search_query)
-    url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
+function extractVideoUrls(metadata) {
+  try {
+    if (!metadata || !metadata.qualities) {
+      return { url_360p: null, url_720p: null };
+    }
     
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        results = []
-        for result in soup.find_all('div', class_='result'):
-            link_tag = result.find('a', class_='result__a')
-            if link_tag:
-                href = link_tag.get('href', '')
-                title = link_tag.get_text()
-                
-                snippet_tag = result.find('a', class_='result__snippet')
-                description = snippet_tag.get_text() if snippet_tag else ''
-                
-                real_url = extract_real_url(href)
-                
-                if '.pdf' in real_url.lower() or 'pdf' in title.lower():
-                    results.append({
-                        "titre": title.replace('PDF ', '').strip(),
-                        "nom_fichier": extract_filename(real_url),
-                        "lien_pdf": real_url,
-                        "url_image": None,
-                        "description": description[:300],
-                        "source": "duckduckgo"
-                    })
-                    
-                    if len(results) >= num_results:
-                        break
-        
-        return results
-        
-    except Exception as e:
-        return []
-
-
-def search_archive_org(query, num_results=20):
-    """Recherche sur Archive.org pour des livres gratuits"""
-    encoded_query = urllib.parse.quote(query)
-    url = f"https://archive.org/advancedsearch.php?q={encoded_query}+mediatype:texts&fl[]=identifier,title,description,format&rows={num_results}&output=json"
+    const qualities = metadata.qualities;
+    let url_360p = null;
+    let url_720p = null;
     
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        data = response.json()
-        
-        results = []
-        for doc in data.get('response', {}).get('docs', []):
-            identifier = doc.get('identifier', '')
-            title = doc.get('title', 'Sans titre')
-            description = doc.get('description', '')
-            
-            if isinstance(description, list):
-                description = ' '.join(description)
-            
-            pdf_url = f"https://archive.org/download/{identifier}/{identifier}.pdf"
-            image_url = f"https://archive.org/services/img/{identifier}"
-            
-            results.append({
-                "titre": title,
-                "nom_fichier": f"{identifier}.pdf",
-                "lien_pdf": pdf_url,
-                "url_image": image_url,
-                "description": str(description)[:300] if description else '',
-                "source": "archive.org"
-            })
-        
-        return results
-        
-    except Exception as e:
-        return []
-
-
-def search_openlibrary(query, num_results=20):
-    """Recherche sur Open Library"""
-    encoded_query = urllib.parse.quote(query)
-    url = f"https://openlibrary.org/search.json?q={encoded_query}&limit={num_results}"
-    
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        data = response.json()
-        
-        results = []
-        for doc in data.get('docs', []):
-            title = doc.get('title', 'Sans titre')
-            author = doc.get('author_name', ['Inconnu'])[0] if doc.get('author_name') else 'Inconnu'
-            key = doc.get('key', '')
-            
-            ia_id = doc.get('ia', [''])[0] if doc.get('ia') else ''
-            cover_i = doc.get('cover_i')
-            isbn_list = doc.get('isbn', [])
-            olid = key.replace('/works/', '') if key else ''
-            edition_key = doc.get('edition_key', [''])[0] if doc.get('edition_key') else ''
-            
-            image_url = None
-            if cover_i:
-                image_url = f"https://covers.openlibrary.org/b/id/{cover_i}-L.jpg"
-            elif isbn_list:
-                image_url = f"https://covers.openlibrary.org/b/isbn/{isbn_list[0]}-L.jpg"
-            elif edition_key:
-                image_url = f"https://covers.openlibrary.org/b/olid/{edition_key}-L.jpg"
-            elif ia_id:
-                image_url = f"https://archive.org/services/img/{ia_id}"
-            
-            if ia_id:
-                pdf_url = f"https://archive.org/download/{ia_id}/{ia_id}.pdf"
-                nom_fichier = f"{ia_id}.pdf"
-            else:
-                pdf_url = f"https://openlibrary.org{key}"
-                nom_fichier = f"{title.replace(' ', '_')[:50]}.pdf"
-            
-            results.append({
-                "titre": f"{title} - {author}",
-                "nom_fichier": nom_fichier,
-                "lien_pdf": pdf_url,
-                "url_image": image_url,
-                "description": f"Auteur: {author}. Annee: {doc.get('first_publish_year', 'N/A')}",
-                "source": "openlibrary"
-            })
-        
-        return results
-        
-    except Exception as e:
-        return []
-
-
-def search_gutenberg(query, num_results=15):
-    """Recherche sur Project Gutenberg"""
-    encoded_query = urllib.parse.quote(query)
-    url = f"https://gutendex.com/books/?search={encoded_query}"
-    
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        data = response.json()
-        
-        results = []
-        for book in data.get('results', [])[:num_results]:
-            title = book.get('title', 'Sans titre')
-            authors = book.get('authors', [])
-            author = authors[0].get('name', 'Inconnu') if authors else 'Inconnu'
-            
-            formats = book.get('formats', {})
-            pdf_url = formats.get('application/pdf', '')
-            if not pdf_url:
-                pdf_url = formats.get('text/html', '')
-            if not pdf_url:
-                pdf_url = formats.get('text/plain; charset=utf-8', '')
-            
-            image_url = formats.get('image/jpeg')
-            
-            if pdf_url:
-                results.append({
-                    "titre": f"{title} - {author}",
-                    "nom_fichier": extract_filename(pdf_url),
-                    "lien_pdf": pdf_url,
-                    "url_image": image_url,
-                    "description": f"Auteur: {author}. Livre classique du domaine public.",
-                    "source": "gutenberg"
-                })
-        
-        return results
-        
-    except Exception as e:
-        return []
-
-
-def search_all_sources(query, book_type='all', limite=50):
-    """Recherche sur toutes les sources en parallele"""
-    all_results = []
-    
-    search_queries = [query]
-    if book_type in BOOK_TYPES:
-        for suffix in BOOK_TYPES[book_type][:2]:
-            search_queries.append(f"{query} {suffix}")
-    
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = []
-        
-        for q in search_queries[:2]:
-            futures.append(executor.submit(search_duckduckgo, q, limite // 2))
-        
-        futures.append(executor.submit(search_archive_org, query, limite // 3))
-        futures.append(executor.submit(search_openlibrary, query, limite // 3))
-        futures.append(executor.submit(search_gutenberg, query, limite // 4))
-        
-        for future in as_completed(futures):
-            try:
-                results = future.result()
-                all_results.extend(results)
-            except:
-                pass
-    
-    seen_urls = set()
-    unique_results = []
-    for r in all_results:
-        url = r.get('lien_pdf', '')
-        if url and url not in seen_urls:
-            seen_urls.add(url)
-            unique_results.append(r)
-    
-    return unique_results[:limite]
-
-
-search_cache = {}
-bacc_cache = {}
-
-
-def search_educmad(matiere, serie, annee_debut=1999, annee_fin=2025):
-    """Scrape EDUCMAD pour les sujets Bacc Madagascar - extrait les vrais liens PDF"""
-    results = []
-    
-    if matiere not in EDUCMAD_COURSES:
-        return results
-    
-    series_courses = EDUCMAD_COURSES.get(matiere, {})
-    if serie and serie.upper() in series_courses:
-        course_ids = {serie.upper(): series_courses[serie.upper()]}
-    else:
-        course_ids = series_courses
-    
-    for serie_name, course_id in course_ids.items():
-        for section in [1, 2]:
-            url = f"http://mediatheque.accesmad.org/educmad/course/view.php?id={course_id}&section={section}"
-            is_corrige_section = (section == 2)
-            
-            try:
-                response = requests.get(url, headers=HEADERS, timeout=15)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                for activity in soup.find_all('div', {'data-activityname': True}):
-                    activity_name = activity.get('data-activityname', '')
-                    
-                    link = activity.find('a', class_='aalink')
-                    if link and link.get('href'):
-                        href = link.get('href', '')
-                        
-                        if '/mod/resource/view.php' in href:
-                            pdf_url = href + ('&redirect=1' if '?' in href else '?redirect=1')
-                            
-                            for year in range(annee_debut, annee_fin + 1):
-                                if str(year) in activity_name:
-                                    is_corrige = 'corrig' in activity_name.lower() or is_corrige_section
-                                    
-                                    results.append({
-                                        "titre": activity_name.strip(),
-                                        "url_image": "http://mediatheque.accesmad.org/educmad/theme/image.php/academi/core/1759829907/f/pdf",
-                                        "lien_pdf": pdf_url,
-                                        "annee": year,
-                                        "serie": serie_name,
-                                        "matiere": matiere,
-                                        "type": "corrige" if is_corrige else "enonce",
-                                        "source": "educmad"
-                                    })
-                                    break
-            except Exception as e:
-                pass
-    
-    return results
-
-
-def search_exocorriges(matiere, serie, annee_debut=1999, annee_fin=2025):
-    """Recherche sur ExoCorreiges pour les sujets Bacc Madagascar"""
-    results = []
-    
-    query = f"bacc madagascar {matiere} serie {serie}" if serie else f"bacc madagascar {matiere}"
-    encoded_query = urllib.parse.quote(query)
-    url = f"https://exocorriges.com/ssearch.php?id_search={encoded_query}"
-    
-    try:
-        search_url = f"https://html.duckduckgo.com/html/?q=site:exocorriges.com+{encoded_query}+pdf"
-        response = requests.get(search_url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for result in soup.find_all('div', class_='result'):
-            link_tag = result.find('a', class_='result__a')
-            if link_tag:
-                href = link_tag.get('href', '')
-                title = link_tag.get_text()
-                real_url = extract_real_url(href)
-                
-                for year in range(annee_debut, annee_fin + 1):
-                    if str(year) in title or str(year) in real_url:
-                        is_corrige = 'corrig' in title.lower()
-                        detected_serie = serie or 'C'
-                        for s in BACC_SERIES:
-                            if f'serie {s.lower()}' in title.lower() or f'série {s.lower()}' in title.lower():
-                                detected_serie = s
-                                break
-                        
-                        results.append({
-                            "titre": title.strip(),
-                            "url_image": None,
-                            "lien_pdf": real_url,
-                            "annee": year,
-                            "serie": detected_serie,
-                            "matiere": matiere,
-                            "type": "corrige" if is_corrige else "enonce",
-                            "source": "exocorriges"
-                        })
-                        break
-    except Exception as e:
-        pass
-    
-    return results
-
-
-def search_bac_madagascar(matiere, serie, annee_debut=1999, annee_fin=2025):
-    """Recherche sur bac-madagascar.net"""
-    results = []
-    
-    query = f"site:bac-madagascar.net bacc {matiere} serie {serie} pdf" if serie else f"site:bac-madagascar.net bacc {matiere} pdf"
-    encoded_query = urllib.parse.quote(query)
-    
-    try:
-        search_url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
-        response = requests.get(search_url, headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for result in soup.find_all('div', class_='result'):
-            link_tag = result.find('a', class_='result__a')
-            if link_tag:
-                href = link_tag.get('href', '')
-                title = link_tag.get_text()
-                real_url = extract_real_url(href)
-                
-                for year in range(annee_debut, annee_fin + 1):
-                    if str(year) in title or str(year) in real_url:
-                        is_corrige = 'corrig' in title.lower()
-                        detected_serie = serie or ''
-                        for s in BACC_SERIES:
-                            if f'serie {s.lower()}' in title.lower() or f'série {s.lower()}' in title.lower():
-                                detected_serie = s
-                                break
-                        
-                        results.append({
-                            "titre": title.strip(),
-                            "url_image": None,
-                            "lien_pdf": real_url,
-                            "annee": year,
-                            "serie": detected_serie,
-                            "matiere": matiere,
-                            "type": "corrige" if is_corrige else "enonce",
-                            "source": "bac-madagascar"
-                        })
-                        break
-    except Exception as e:
-        pass
-    
-    return results
-
-
-def generate_bacc_results(matiere=None, serie=None, annee=None):
-    """Ne génère plus de résultats placeholder - on utilise uniquement les vrais liens scrapés"""
-    return []
-
-
-def search_all_bacc_sources(matiere=None, serie=None, annee=None, limite=100):
-    """Recherche sur toutes les sources Bacc en parallèle"""
-    all_results = []
-    annee_debut = annee if annee else 1999
-    annee_fin = annee if annee else 2025
-    
-    mat = matiere.lower() if matiere else 'mathematiques'
-    ser = serie.upper() if serie else None
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [
-            executor.submit(search_educmad, mat, ser, annee_debut, annee_fin),
-            executor.submit(search_exocorriges, mat, ser, annee_debut, annee_fin),
-            executor.submit(search_bac_madagascar, mat, ser, annee_debut, annee_fin),
-        ]
-        
-        for future in as_completed(futures):
-            try:
-                results = future.result()
-                all_results.extend(results)
-            except:
-                pass
-    
-    if len(all_results) < limite:
-        generated = generate_bacc_results(mat, ser, annee)
-        all_results.extend(generated)
-    
-    seen = set()
-    unique_results = []
-    for r in all_results:
-        key = f"{r.get('annee')}_{r.get('serie')}_{r.get('matiere')}_{r.get('type')}"
-        if key not in seen:
-            seen.add(key)
-            unique_results.append(r)
-    
-    unique_results.sort(key=lambda x: (x.get('annee', 0), x.get('serie', '')), reverse=True)
-    
-    return unique_results[:limite]
-
-
-@app.route('/sujets', methods=['GET'])
-def sujets():
-    """Endpoint pour les sujets Bacc Madagascar"""
-    matiere = request.args.get('matiere', request.args.get('sujet', ''))
-    serie = request.args.get('serie', '')
-    annee = request.args.get('annee', '')
-    type_doc = request.args.get('type', '').lower()
-    page = request.args.get('page', '1')
-    par_page = request.args.get('par_page', '50')
-    
-    try:
-        page = max(1, int(page))
-    except:
-        page = 1
-    
-    try:
-        par_page = min(max(1, int(par_page)), 200)
-    except:
-        par_page = 50
-    
-    try:
-        annee = int(annee) if annee else None
-    except:
-        annee = None
-    
-    cache_key = f"bacc_{matiere}_{serie}_{annee}"
-    
-    if cache_key in bacc_cache:
-        all_results = bacc_cache[cache_key]
-    else:
-        all_results = search_all_bacc_sources(
-            matiere=matiere if matiere else None,
-            serie=serie if serie else None,
-            annee=annee,
-            limite=500
-        )
-        bacc_cache[cache_key] = all_results
-        if len(bacc_cache) > 30:
-            oldest_key = list(bacc_cache.keys())[0]
-            del bacc_cache[oldest_key]
-    
-    if type_doc:
-        if type_doc in ['sujet', 'enonce', 'énoncé']:
-            all_results = [r for r in all_results if r.get('type') == 'enonce']
-        elif type_doc in ['correction', 'corrige', 'corrigé']:
-            all_results = [r for r in all_results if r.get('type') == 'corrige']
-    
-    total_resultats = len(all_results)
-    total_pages = (total_resultats + par_page - 1) // par_page if total_resultats > 0 else 1
-    
-    start_index = (page - 1) * par_page
-    end_index = start_index + par_page
-    page_results = all_results[start_index:end_index]
-    
-    return jsonify({
-        "recherche": {
-            "matiere": matiere or "toutes",
-            "serie": serie or "toutes",
-            "annee": annee or "1999-2025",
-            "type": type_doc or "tous"
-        },
-        "pagination": {
-            "page_actuelle": page,
-            "par_page": par_page,
-            "total_pages": total_pages,
-            "total_resultats": total_resultats
-        },
-        "nombre_resultats": len(page_results),
-        "sujets": page_results,
-        "series_disponibles": BACC_SERIES,
-        "matieres_disponibles": list(BACC_MATIERES.keys()),
-        "types_disponibles": ["sujet", "correction"]
-    })
-
-
-@app.route('/recherche', methods=['GET'])
-def recherche():
-    livre = request.args.get('livre', '')
-    book_type = request.args.get('type', 'all')
-    page = request.args.get('page', '1')
-    par_page = request.args.get('par_page', '100')
-    
-    try:
-        page = max(1, int(page))
-    except:
-        page = 1
-    
-    try:
-        par_page = min(max(1, int(par_page)), 200)
-    except:
-        par_page = 100
-    
-    if not livre:
-        return jsonify({
-            "error": "Parametre 'livre' requis",
-            "exemple": "/recherche?livre=python&page=1&par_page=100"
-        }), 400
-    
-    cache_key = f"{livre}_{book_type}"
-    
-    if cache_key in search_cache:
-        all_results = search_cache[cache_key]
-    else:
-        all_results = search_all_sources(livre, book_type, limite=500)
-        search_cache[cache_key] = all_results
-        if len(search_cache) > 50:
-            oldest_key = list(search_cache.keys())[0]
-            del search_cache[oldest_key]
-    
-    total_resultats = len(all_results)
-    total_pages = (total_resultats + par_page - 1) // par_page if total_resultats > 0 else 1
-    
-    start_index = (page - 1) * par_page
-    end_index = start_index + par_page
-    page_results = all_results[start_index:end_index]
-    
-    return jsonify({
-        "recherche": livre,
-        "type": book_type,
-        "pagination": {
-            "page_actuelle": page,
-            "par_page": par_page,
-            "total_pages": total_pages,
-            "total_resultats": total_resultats,
-            "page_precedente": f"/recherche?livre={livre}&type={book_type}&page={page-1}&par_page={par_page}" if page > 1 else None,
-            "page_suivante": f"/recherche?livre={livre}&type={book_type}&page={page+1}&par_page={par_page}" if page < total_pages else None
-        },
-        "nombre_resultats": len(page_results),
-        "livres": page_results
-    })
-
-
-@app.route('/', methods=['GET'])
-def index():
-    return jsonify({
-        "api": "MeoBook PDF Search API",
-        "description": "Recherche dynamique de livres PDF et sujets Bacc Madagascar",
-        "endpoints": {
-            "/recherche": {
-                "methode": "GET",
-                "description": "Recherche de livres PDF",
-                "parametres": {
-                    "livre": "Nom du livre a rechercher (requis)",
-                    "type": "Type: roman, educatif, technique, science, all (defaut: all)",
-                    "page": "Numero de page (defaut: 1)",
-                    "par_page": "Resultats par page (defaut: 100, max: 200)"
-                },
-                "exemples": [
-                    "/recherche?livre=python",
-                    "/recherche?livre=harry potter&type=roman&page=1&par_page=50"
-                ]
-            },
-            "/sujets": {
-                "methode": "GET",
-                "description": "Sujets et corrections Bacc Madagascar (1999-2025)",
-                "parametres": {
-                    "matiere": "Matiere: mathematiques, physique, svt, philosophie, francais, anglais, etc.",
-                    "serie": "Serie: A, C, D, OSE, S, L",
-                    "annee": "Annee specifique (ex: 2023)",
-                    "page": "Numero de page (defaut: 1)",
-                    "par_page": "Resultats par page (defaut: 50)"
-                },
-                "exemples": [
-                    "/sujets?matiere=mathematiques&serie=C",
-                    "/sujets?matiere=physique&serie=D&annee=2023",
-                    "/sujets?serie=A",
-                    "/sujets"
-                ],
-                "series_disponibles": BACC_SERIES,
-                "matieres_disponibles": list(BACC_MATIERES.keys())
-            }
-        },
-        "sources": {
-            "livres": ["DuckDuckGo", "Archive.org", "Open Library", "Project Gutenberg"],
-            "bacc": ["EDUCMAD/ACCESMAD", "bac-madagascar.net", "ExoCorreiges"]
+    if (qualities['360'] && qualities['360'].length > 0) {
+      for (const q of qualities['360']) {
+        if (q.type === 'video/mp4' || q.url) {
+          url_360p = q.url;
+          break;
         }
-    })
+      }
+    }
+    
+    if (qualities['720'] && qualities['720'].length > 0) {
+      for (const q of qualities['720']) {
+        if (q.type === 'video/mp4' || q.url) {
+          url_720p = q.url;
+          break;
+        }
+      }
+    }
+    
+    if (!url_360p && qualities['240'] && qualities['240'].length > 0) {
+      for (const q of qualities['240']) {
+        if (q.type === 'video/mp4' || q.url) {
+          url_360p = q.url;
+          break;
+        }
+      }
+    }
+    
+    if (!url_720p && qualities['480'] && qualities['480'].length > 0) {
+      for (const q of qualities['480']) {
+        if (q.type === 'video/mp4' || q.url) {
+          url_720p = q.url;
+          break;
+        }
+      }
+    }
+    
+    if (!url_360p && !url_720p && qualities['auto'] && qualities['auto'].length > 0) {
+      url_360p = qualities['auto'][0].url;
+      url_720p = qualities['auto'][0].url;
+    }
+    
+    return { url_360p, url_720p };
+  } catch (error) {
+    return { url_360p: null, url_720p: null };
+  }
+}
 
+function formatDuration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (hours > 0) {
+    return `${hours}h${minutes.toString().padStart(2, '0')}m${secs.toString().padStart(2, '0')}s`;
+  }
+  return `${minutes}m${secs.toString().padStart(2, '0')}s`;
+}
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+async function searchVideos(query, page = 1, minResults = 15, minDurationMinutes = 60) {
+  const minDurationSeconds = minDurationMinutes * 60;
+  const results = [];
+  const seenIds = new Set();
+  
+  console.log(`\n=== Recherche: "${query}" - Page: ${page} - Durée min: ${minDurationMinutes}min ===`);
+  
+  // Stratégies de recherche multiples pour trouver plus de résultats
+  const searchStrategies = [
+    { sort: 'relevance', longer: 1 },
+    { sort: 'visited', longer: 1 },
+    { sort: 'recent', longer: 1 },
+    { sort: 'relevance', longer: 0 }
+  ];
+  
+  let currentApiPage = (page - 1) * 3 + 1;
+  let maxApiPages = currentApiPage + 15;
+  let hasMore = true;
+  let totalAvailable = 0;
+  let strategyIndex = 0;
+  
+  while (results.length < minResults && currentApiPage <= maxApiPages && (hasMore || strategyIndex < searchStrategies.length)) {
+    const strategy = searchStrategies[strategyIndex % searchStrategies.length];
+    
+    try {
+      // Utilisation de l'API avec paramètre longer_than pour les films
+      const apiUrl = `https://api.dailymotion.com/videos?search=${encodeURIComponent(query)}&fields=id,title,thumbnail_720_url,thumbnail_480_url,thumbnail_url,duration,owner.screenname,views_total&page=${currentApiPage}&limit=100&sort=${strategy.sort}${strategy.longer ? '&longer_than=20' : ''}`;
+      
+      console.log(`Fetching API page ${currentApiPage} (${strategy.sort})...`);
+      
+      const response = await axios.get(apiUrl, {
+        headers: { 'User-Agent': headers['User-Agent'] },
+        timeout: 20000
+      });
+      
+      if (response.data && response.data.list) {
+        const allVideos = response.data.list;
+        totalAvailable = Math.max(totalAvailable, response.data.total || 0);
+        hasMore = response.data.has_more || false;
+        
+        console.log(`Page ${currentApiPage}: ${allVideos.length} videos, total available: ${totalAvailable}`);
+        
+        // Filtrer les vidéos selon la durée minimum demandée
+        const longVideos = allVideos.filter(v => v.duration >= minDurationSeconds && !seenIds.has(v.id));
+        console.log(`Videos >= ${minDurationMinutes}min on this page: ${longVideos.length}`);
+        
+        // Trier par durée décroissante pour prioriser les films complets
+        longVideos.sort((a, b) => b.duration - a.duration);
+        
+        for (const video of longVideos) {
+          if (results.length >= minResults) break;
+          if (seenIds.has(video.id)) continue;
+          seenIds.add(video.id);
+          
+          try {
+            const metadata = await getVideoMetadata(video.id);
+            const { url_360p, url_720p } = extractVideoUrls(metadata);
+            
+            results.push({
+              titre: video.title || 'Sans titre',
+              image_url: video.thumbnail_720_url || video.thumbnail_480_url || video.thumbnail_url || `https://www.dailymotion.com/thumbnail/video/${video.id}`,
+              video_url_360p: url_360p || null,
+              video_url_720p: url_720p || null,
+              video_id: video.id,
+              duree: formatDuration(video.duration),
+              duree_secondes: video.duration,
+              qualites_disponibles: [url_360p ? '360p' : null, url_720p ? '720p' : null].filter(Boolean),
+              chaine: video['owner.screenname'] || '',
+              vues: video.views_total || 0,
+              page_url: `https://www.dailymotion.com/video/${video.id}`
+            });
+            
+            console.log(`+ [${results.length}] ${video.title?.substring(0, 50)}... (${formatDuration(video.duration)})`);
+          } catch (err) {
+            console.log('Erreur video:', video.id);
+          }
+        }
+      } else {
+        hasMore = false;
+      }
+      
+      currentApiPage++;
+      
+      // Si pas assez de résultats et plus de pages, essayer une autre stratégie
+      if (!hasMore && results.length < minResults) {
+        strategyIndex++;
+        currentApiPage = 1;
+        hasMore = true;
+      }
+      
+    } catch (error) {
+      console.error('API error:', error.message);
+      strategyIndex++;
+      currentApiPage = 1;
+      hasMore = true;
+    }
+  }
+  
+  // Trier les résultats finaux par durée décroissante
+  results.sort((a, b) => b.duree_secondes - a.duree_secondes);
+  
+  console.log(`\nTotal résultats: ${results.length} vidéos >= ${minDurationMinutes}min trouvées`);
+  
+  return {
+    videos: results,
+    hasNextPage: hasMore || results.length >= minResults,
+    totalCount: totalAvailable,
+    page: page,
+    minDuration: minDurationMinutes
+  };
+}
+
+async function getVideoInfo(videoId) {
+  try {
+    const metadata = await getVideoMetadata(videoId);
+    
+    if (!metadata) {
+      throw new Error('Impossible de récupérer les métadonnées de la vidéo');
+    }
+    
+    const { url_360p, url_720p } = extractVideoUrls(metadata);
+    
+    return {
+      titre: metadata.title || 'Sans titre',
+      image_url: metadata.poster_url || metadata.thumbnail_url || `https://www.dailymotion.com/thumbnail/video/${videoId}`,
+      video_url_360p: url_360p || null,
+      video_url_720p: url_720p || null,
+      video_id: videoId,
+      duree: formatDuration(metadata.duration || 0),
+      duree_secondes: metadata.duration || 0,
+      qualites_disponibles: [url_360p ? '360p' : null, url_720p ? '720p' : null].filter(Boolean),
+      page_url: `https://www.dailymotion.com/video/${videoId}`,
+      description: metadata.description || ''
+    };
+  } catch (error) {
+    console.error('Erreur video info:', error.message);
+    throw error;
+  }
+}
+
+async function proxyStream(url, res, videoId, quality) {
+  try {
+    console.log('Proxying stream:', url);
+    
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': headers['User-Agent'],
+        'Referer': 'https://www.dailymotion.com/',
+        'Origin': 'https://www.dailymotion.com',
+      },
+      responseType: 'text',
+      timeout: 30000
+    });
+    
+    let m3u8Content = response.data;
+    
+    const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+    
+    const lines = m3u8Content.split('\n');
+    const modifiedLines = lines.map(line => {
+      if (line && !line.startsWith('#') && line.trim() !== '') {
+        if (line.startsWith('http')) {
+          return `/proxy?url=${encodeURIComponent(line.trim())}`;
+        } else {
+          return `/proxy?url=${encodeURIComponent(baseUrl + line.trim())}`;
+        }
+      }
+      return line;
+    });
+    
+    m3u8Content = modifiedLines.join('\n');
+    
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Content-Disposition', `attachment; filename="${videoId}_${quality}p.m3u8"`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    return res.send(m3u8Content);
+    
+  } catch (error) {
+    console.error('Proxy stream error:', error.message);
+    throw error;
+  }
+}
+
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Dailymotion Scraper API',
+    description: 'API pour rechercher des vidéos Dailymotion de longue durée (films) en qualité 360p ou 720p',
+    endpoints: {
+      recherche: {
+        url: 'GET /recherche?video=QUERY&page=1&duree_min=60&limit=15',
+        description: 'Recherche des vidéos par mot-clé avec pagination et filtrage par durée',
+        parametres: {
+          video: 'Terme de recherche (obligatoire)',
+          page: 'Numéro de page (défaut: 1)',
+          duree_min: 'Durée minimum en minutes (défaut: 60)',
+          limit: 'Nombre de résultats max (défaut: 15, max: 30)'
+        }
+      },
+      video: {
+        url: 'GET /video/:id',
+        description: 'Récupère les informations d\'une vidéo spécifique'
+      },
+      telecharger: {
+        url: 'GET /telecharger/:videoId?quality=720',
+        description: 'TELECHARGE LE FILM COMPLET EN MP4 (peut prendre plusieurs minutes)',
+        exemple: '/telecharger/x8fme0n?quality=360',
+        qualites: ['360 = basse qualité, fichier plus petit', '720 = haute qualité, fichier plus gros']
+      },
+      stream: {
+        url: 'GET /stream/:videoId?quality=720',
+        description: 'Stream HLS pour lecteurs vidéo (VLC, MX Player)',
+        exemple: '/stream/x8fme0n?quality=360'
+      },
+      health: {
+        url: 'GET /health',
+        description: 'Vérification de l\'état de l\'API (utilisé pour le keep-alive)'
+      }
+    },
+    exemples: [
+      '/recherche?video=Film gasy&page=1',
+      '/recherche?video=Film gasy&duree_min=60',
+      '/recherche?video=Jackie chan film&duree_min=90&limit=20'
+    ],
+    filtres: {
+      duree_minimum: '60 minutes (configurable avec duree_min)',
+      qualites: ['360p (basse qualité)', '720p (haute qualité)']
+    }
+  });
+});
+
+app.get('/recherche', async (req, res) => {
+  try {
+    const { video, page = 1, duree_min = 60, limit = 15 } = req.query;
+    
+    if (!video) {
+      return res.status(400).json({
+        erreur: 'Le paramètre video est requis',
+        exemple: '/recherche?video=Film gasy&page=1&duree_min=60',
+        parametres: {
+          video: 'Terme de recherche (obligatoire)',
+          page: 'Numéro de page (défaut: 1)',
+          duree_min: 'Durée minimum en minutes (défaut: 60)',
+          limit: 'Nombre de résultats max (défaut: 15)'
+        }
+      });
+    }
+    
+    const pageNum = parseInt(page) || 1;
+    const minDuration = parseInt(duree_min) || 60;
+    const maxResults = Math.min(parseInt(limit) || 15, 30);
+    
+    const result = await searchVideos(video, pageNum, maxResults, minDuration);
+    
+    res.json({
+      recherche: video,
+      page: pageNum,
+      total_resultats: result.videos.length,
+      total_disponible: result.totalCount,
+      page_suivante: result.hasNextPage,
+      filtre: `Durée minimum ${minDuration} minutes`,
+      qualites: ['360p', '720p'],
+      resultats: result.videos
+    });
+    
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({
+      erreur: 'Erreur lors de la recherche',
+      message: error.message
+    });
+  }
+});
+
+app.get('/video/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({
+        erreur: 'ID de vidéo requis'
+      });
+    }
+    
+    const videoInfo = await getVideoInfo(id);
+    
+    res.json({
+      succes: true,
+      video: videoInfo
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      erreur: 'Erreur lors de la récupération de la vidéo',
+      message: error.message
+    });
+  }
+});
+
+app.get('/proxy', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ erreur: 'URL requise' });
+    }
+    
+    const targetUrl = decodeURIComponent(url);
+    console.log('Proxying:', targetUrl.substring(0, 80) + '...');
+    
+    if (targetUrl.includes('.m3u8')) {
+      const response = await axios.get(targetUrl, {
+        headers: {
+          'User-Agent': headers['User-Agent'],
+          'Referer': 'https://www.dailymotion.com/',
+          'Origin': 'https://www.dailymotion.com',
+        },
+        responseType: 'text',
+        timeout: 30000
+      });
+      
+      let m3u8Content = response.data;
+      const baseUrl = targetUrl.substring(0, targetUrl.lastIndexOf('/') + 1);
+      
+      const lines = m3u8Content.split('\n');
+      const modifiedLines = lines.map(line => {
+        if (line && !line.startsWith('#') && line.trim() !== '') {
+          let absoluteUrl;
+          if (line.startsWith('http')) {
+            absoluteUrl = line.trim();
+          } else if (line.startsWith('../')) {
+            const urlParts = baseUrl.split('/');
+            let relativeParts = line.trim().split('/');
+            let upCount = 0;
+            while (relativeParts[0] === '..') {
+              upCount++;
+              relativeParts.shift();
+            }
+            const newBase = urlParts.slice(0, -1 - upCount).join('/') + '/';
+            absoluteUrl = newBase + relativeParts.join('/');
+          } else {
+            absoluteUrl = baseUrl + line.trim();
+          }
+          return `/proxy?url=${encodeURIComponent(absoluteUrl)}`;
+        }
+        return line;
+      });
+      
+      m3u8Content = modifiedLines.join('\n');
+      
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(m3u8Content);
+    }
+    
+    const response = await axios.get(targetUrl, {
+      headers: {
+        'User-Agent': headers['User-Agent'],
+        'Referer': 'https://www.dailymotion.com/',
+        'Origin': 'https://www.dailymotion.com',
+      },
+      responseType: 'stream',
+      timeout: 120000
+    });
+    
+    res.setHeader('Content-Type', response.headers['content-type'] || 'video/MP2T');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    response.data.pipe(res);
+    
+  } catch (error) {
+    console.error('Proxy error:', error.message);
+    res.status(500).json({
+      erreur: 'Erreur proxy',
+      message: error.message
+    });
+  }
+});
+
+app.get('/download', async (req, res) => {
+  try {
+    const { video } = req.query;
+    
+    if (!video) {
+      return res.status(400).json({
+        erreur: 'Le paramètre video (URL) est requis',
+        exemple: '/download?video=URL_VIDEO_360p_ou_720p',
+        note: 'Utilisez l\'URL video_url_360p ou video_url_720p obtenue depuis /recherche'
+      });
+    }
+    
+    const videoUrl = decodeURIComponent(video);
+    console.log('Download request for:', videoUrl);
+    
+    const videoIdMatch = videoUrl.match(/video\/([a-zA-Z0-9]+)/);
+    const videoId = videoIdMatch ? videoIdMatch[1] : 'video';
+    
+    const response = await axios.get(videoUrl, {
+      headers: {
+        'User-Agent': headers['User-Agent'],
+        'Referer': 'https://www.dailymotion.com/',
+        'Origin': 'https://www.dailymotion.com',
+      },
+      responseType: 'text',
+      timeout: 30000
+    });
+    
+    let m3u8Content = response.data;
+    const baseUrl = videoUrl.substring(0, videoUrl.lastIndexOf('/') + 1);
+    
+    const lines = m3u8Content.split('\n');
+    const modifiedLines = lines.map(line => {
+      if (line && !line.startsWith('#') && line.trim() !== '') {
+        if (line.startsWith('http')) {
+          return `/proxy?url=${encodeURIComponent(line.trim())}`;
+        } else {
+          return `/proxy?url=${encodeURIComponent(baseUrl + line.trim())}`;
+        }
+      }
+      return line;
+    });
+    
+    m3u8Content = modifiedLines.join('\n');
+    
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m3u8"`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
+    return res.send(m3u8Content);
+    
+  } catch (error) {
+    console.error('Download error:', error.message);
+    res.status(500).json({
+      erreur: 'Erreur lors du téléchargement',
+      message: error.message
+    });
+  }
+});
+
+app.get('/stream/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { quality = '720' } = req.query;
+    
+    if (!videoId) {
+      return res.status(400).json({
+        erreur: 'ID de vidéo requis'
+      });
+    }
+    
+    console.log(`Stream request for video ${videoId} at quality ${quality}p`);
+    
+    const metadata = await getVideoMetadata(videoId);
+    if (!metadata) {
+      return res.status(404).json({
+        erreur: 'Vidéo non trouvée'
+      });
+    }
+    
+    const { url_360p, url_720p } = extractVideoUrls(metadata);
+    
+    let streamUrl = quality === '360' ? url_360p : url_720p;
+    if (!streamUrl) {
+      streamUrl = url_720p || url_360p;
+    }
+    
+    if (!streamUrl) {
+      return res.status(404).json({
+        erreur: 'Aucun flux vidéo disponible'
+      });
+    }
+    
+    await proxyStream(streamUrl, res, videoId, quality);
+    
+  } catch (error) {
+    console.error('Stream error:', error.message);
+    res.status(500).json({
+      erreur: 'Erreur lors du streaming',
+      message: error.message
+    });
+  }
+});
+
+const downloadProgress = new Map();
+
+app.get('/telecharger/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { quality = '720' } = req.query;
+    
+    if (!videoId) {
+      return res.status(400).json({
+        erreur: 'ID de vidéo requis',
+        exemple: '/telecharger/x8fme0n?quality=360'
+      });
+    }
+    
+    console.log(`\n=== Téléchargement MP4: ${videoId} (${quality}p) ===`);
+    
+    const metadata = await getVideoMetadata(videoId);
+    if (!metadata) {
+      return res.status(404).json({
+        erreur: 'Vidéo non trouvée'
+      });
+    }
+    
+    const { url_360p, url_720p } = extractVideoUrls(metadata);
+    
+    let streamUrl = quality === '360' ? url_360p : url_720p;
+    if (!streamUrl) {
+      streamUrl = url_720p || url_360p;
+    }
+    
+    if (!streamUrl) {
+      return res.status(404).json({
+        erreur: 'Aucun flux vidéo disponible'
+      });
+    }
+    
+    const title = metadata.title ? metadata.title.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 50) : videoId;
+    const filename = `${title}_${quality}p.mp4`;
+    
+    console.log('Stream URL:', streamUrl.substring(0, 80) + '...');
+    console.log('Filename:', filename);
+    
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    const ffmpegArgs = [
+      '-headers', `User-Agent: ${headers['User-Agent']}\r\nReferer: https://www.dailymotion.com/\r\nOrigin: https://www.dailymotion.com`,
+      '-i', streamUrl,
+      '-c', 'copy',
+      '-bsf:a', 'aac_adtstoasc',
+      '-movflags', 'frag_keyframe+empty_moov+faststart',
+      '-f', 'mp4',
+      'pipe:1'
+    ];
+    
+    console.log('Starting ffmpeg...');
+    
+    const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    let totalBytes = 0;
+    
+    ffmpeg.stdout.on('data', (data) => {
+      totalBytes += data.length;
+      if (totalBytes % (1024 * 1024) < 65536) {
+        console.log(`Downloaded: ${(totalBytes / (1024 * 1024)).toFixed(1)} MB`);
+      }
+      res.write(data);
+    });
+    
+    ffmpeg.stderr.on('data', (data) => {
+      const msg = data.toString();
+      if (msg.includes('time=')) {
+        const timeMatch = msg.match(/time=(\d{2}:\d{2}:\d{2})/);
+        if (timeMatch) {
+          console.log(`Progress: ${timeMatch[1]}`);
+        }
+      }
+    });
+    
+    ffmpeg.on('close', (code) => {
+      console.log(`ffmpeg finished with code ${code}, total: ${(totalBytes / (1024 * 1024)).toFixed(1)} MB`);
+      res.end();
+    });
+    
+    ffmpeg.on('error', (err) => {
+      console.error('ffmpeg error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ erreur: 'Erreur ffmpeg', message: err.message });
+      }
+    });
+    
+    req.on('close', () => {
+      console.log('Client disconnected, killing ffmpeg');
+      ffmpeg.kill('SIGTERM');
+    });
+    
+  } catch (error) {
+    console.error('Download error:', error.message);
+    if (!res.headersSent) {
+      res.status(500).json({
+        erreur: 'Erreur lors du téléchargement',
+        message: error.message
+      });
+    }
+  }
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    message: 'API Dailymotion Scraper est en ligne'
+  });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Serveur démarré sur le port ${PORT}`);
+  console.log(`API disponible sur http://0.0.0.0:${PORT}`);
+  
+  if (RENDER_URL) {
+    console.log(`Auto-ping activé pour: ${RENDER_URL}`);
+    cron.schedule('*/14 * * * *', async () => {
+      try {
+        const response = await axios.get(`${RENDER_URL}/health`);
+        console.log(`[Auto-ping] ${new Date().toISOString()} - Status: ${response.status}`);
+      } catch (error) {
+        console.error(`[Auto-ping] Erreur: ${error.message}`);
+      }
+    });
+  } else {
+    console.log('Auto-ping désactivé (définir RENDER_EXTERNAL_URL ou API_URL pour activer)');
+  }
+});
+
+module.exports = app;
