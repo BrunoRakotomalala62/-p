@@ -294,7 +294,7 @@ ${generateProgressBar(30)} 30%
 ⏳ Connexion au serveur de films...
         `.trim());
         
-        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&page=${page}`;
+        const searchUrl = `${API_BASE}/recherche?video=${encodeURIComponent(query)}&page=${page}&duree_min=40&limit=30`;
         console.log('Appel API Film:', searchUrl);
         
         const response = await axiosWithRetry(searchUrl);
@@ -330,7 +330,7 @@ ${border}
 🔎 𝗥𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 : ${query}
 📄 𝗣𝗮𝗴𝗲 : ${currentPage}${totalPages > 1 ? ` / ${totalPages}` : ''}
 📊 ${totalResults} film(s) trouvé(s)
-🎞️ 𝗙𝗶𝗹𝘁𝗿𝗲 : Films longue durée (1h30+)
+🎞️ 𝗙𝗶𝗹𝘁𝗿𝗲 : Films longue durée (40min+)
 ⏰ ${generateTimestamp()}
 
 ${border}
