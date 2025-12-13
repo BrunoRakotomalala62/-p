@@ -64,11 +64,11 @@ const userSessions = new Map();
 
 const QUALITY_OPTIONS = ['360p', '720p'];
 
-async function axiosWithRetry(url, options = {}, retries = 5) {
+async function axiosWithRetry(url, options = {}, retries = 3) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             const response = await axios.get(url, {
-                timeout: 120000,
+                timeout: 30000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 },
@@ -84,8 +84,8 @@ async function axiosWithRetry(url, options = {}, retries = 5) {
             
             const status = error.response?.status;
             if (status === 404 || status === 502 || status === 503 || status === 504 || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
-                const waitTime = attempt * 5000;
-                console.log(`Attente ${waitTime}ms avant nouvelle tentative (serveur en réveil)...`);
+                const waitTime = attempt * 2000;
+                console.log(`Attente ${waitTime}ms avant nouvelle tentative...`);
                 await new Promise(resolve => setTimeout(resolve, waitTime));
             } else {
                 throw error;
@@ -375,7 +375,7 @@ ${border}
                     }
                 }
                 
-                await new Promise(resolve => setTimeout(resolve, 400));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
             
             let paginationInfo = '';
@@ -485,22 +485,10 @@ ${generateProgressBar(25)} 25%
 ⏳ Génération du lien en cours...
         `.trim());
 
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        await sendMessage(senderId, `
-${getRandomEmoji('loading')} 𝗧𝗥𝗔𝗜𝗧𝗘𝗠𝗘𝗡𝗧...
-${border}
-
-${generateProgressBar(60)} 60%
-🔗 Préparation du lien de téléchargement...
-        `.trim());
-
         const qualityNum = quality.replace('p', '');
         const downloadUrl = `${API_BASE}/telecharger/${film.video_id}?quality=${qualityNum}`;
         
         console.log('URL de téléchargement:', downloadUrl);
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
         
         const successEmoji = getRandomEmoji('success');
         const downloadEmoji = getRandomEmoji('download');
