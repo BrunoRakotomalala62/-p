@@ -138,14 +138,14 @@ const sendImageAttachment = async (senderId, imageUrl) => {
 const fetchSongList = async (artistName, senderId, page = 1) => {
     const apiUrl = `https://tononkira-malagasy.vercel.app/tononkira?mpanakanto=${encodeURIComponent(artistName)}&uid=${senderId}&page=${page}`;
     console.log(`Appel API liste chansons: ${apiUrl}`);
-    const response = await axios.get(apiUrl, { timeout: 30000 });
+    const response = await axios.get(apiUrl, { timeout: 60000 });
     return response.data;
 };
 
 const fetchLyrics = async (artistName, songTitle) => {
     const apiUrl = `https://tononkira-malagasy.vercel.app/hira?artiste=${encodeURIComponent(artistName)}&titre=${encodeURIComponent(songTitle)}`;
     console.log(`Appel API paroles: ${apiUrl}`);
-    const response = await axios.get(apiUrl, { timeout: 30000 });
+    const response = await axios.get(apiUrl, { timeout: 60000 });
     return response.data;
 };
 
