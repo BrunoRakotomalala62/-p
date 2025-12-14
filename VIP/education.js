@@ -1,7 +1,7 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://pdf-0r0j.onrender.com';
+const API_BASE = 'https://pdf-tdnk.onrender.com/';
 const MAX_MESSAGE_LENGTH = 1900;
 const RESULTS_PER_PAGE = 5;
 
