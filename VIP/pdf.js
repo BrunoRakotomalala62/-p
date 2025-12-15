@@ -1,9 +1,12 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const { Readable } = require('stream');
+const fs = require('fs');
+const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://meo-book.vercel.app';
+const LOCAL_PDF_DIR = path.join(__dirname, '..', 'pdf_exercice_bacc');
 const RESULTS_PER_PAGE = 10;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
@@ -64,6 +67,78 @@ function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function searchLocalPdfs(query) {
+    try {
+        if (!fs.existsSync(LOCAL_PDF_DIR)) {
+            return [];
+        }
+        
+        const files = fs.readdirSync(LOCAL_PDF_DIR)
+            .filter(file => file.toLowerCase().endsWith('.pdf'))
+            .filter(file => file.toLowerCase().includes(query.toLowerCase()))
+            .map(file => {
+                const filePath = path.join(LOCAL_PDF_DIR, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    titre: file.replace('.pdf', '').replace(/_/g, ' '),
+                    source: 'Local (pdf_exercice_bacc)',
+                    isLocal: true,
+                    localPath: filePath,
+                    fileName: file,
+                    size: stats.size
+                };
+            });
+        
+        return files;
+    } catch (error) {
+        console.error('Erreur recherche locale:', error.message);
+        return [];
+    }
+}
+
+async function sendLocalPdfToMessenger(recipientId, filePath, filename) {
+    try {
+        const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+        if (!PAGE_ACCESS_TOKEN) {
+            throw new Error('PAGE_ACCESS_TOKEN non défini');
+        }
+
+        const buffer = fs.readFileSync(filePath);
+        const stream = Readable.from(buffer);
+        
+        const form = new FormData();
+        form.append('recipient', JSON.stringify({ id: recipientId }));
+        form.append('message', JSON.stringify({
+            attachment: {
+                type: 'file',
+                payload: {
+                    is_reusable: false
+                }
+            }
+        }));
+        form.append('filedata', stream, {
+            filename: filename,
+            contentType: 'application/pdf'
+        });
+
+        const response = await axios.post(
+            `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            form,
+            {
+                headers: form.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                timeout: 180000
+            }
+        );
+
+        return { success: true, data: response.data };
+    } catch (error) {
+        const errorData = error.response ? error.response.data : error.message;
+        return { success: false, error: errorData };
+    }
 }
 
 async function getFileSize(url) {
@@ -442,6 +517,46 @@ ${DECORATIONS.subDivider}
 
 async function handleDownload(senderId, doc, mode) {
     const titre = doc.titre || 'document';
+    
+    if (doc.isLocal) {
+        await sendMessage(senderId, `
+⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
+${DECORATIONS.divider}
+📖 ${titre}
+📂 Source: ${doc.source || 'Local'}
+
+⏳ Préparation du fichier PDF...
+        `.trim());
+
+        try {
+            const result = await sendLocalPdfToMessenger(senderId, doc.localPath, doc.fileName);
+            
+            if (result.success) {
+                await sendMessage(senderId, `
+✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦
+${DECORATIONS.header}
+📖 ${titre}
+📊 Taille: ${formatFileSize(doc.size)}
+${DECORATIONS.footer}
+
+💡 Le PDF a été envoyé en pièce jointe
+📱 Tu peux le sauvegarder sur ton téléphone
+
+🔄 Tape "pdf" pour voir le guide
+                `.trim());
+            } else {
+                await sendMessage(senderId, `
+❌ Erreur lors de l'envoi du PDF local.
+🔄 Réessaie plus tard.
+                `.trim());
+            }
+        } catch (error) {
+            console.error('Erreur envoi PDF local:', error.message);
+            await sendMessage(senderId, `❌ Erreur lors de l'envoi du fichier.`);
+        }
+        return;
+    }
+
     const pdfUrl = doc.lien_pdf || doc.url_pdf;
     
     if (mode === 'bacc') {
@@ -775,9 +890,23 @@ Aucun sujet Bacc trouvé pour:
             await displayBaccResults(senderId, results, 1, total, searchInfo);
         } else {
             const query = searchParams.bookQuery || input;
-            const { results, pagination, total } = await searchBooks(query, searchParams.bookType);
+            
+            const localResults = searchLocalPdfs(query);
+            
+            let apiResults = [];
+            let total = 0;
+            try {
+                const apiData = await searchBooks(query, searchParams.bookType);
+                apiResults = apiData.results || [];
+                total = apiData.total || 0;
+            } catch (apiError) {
+                console.log('Erreur API, utilisation des résultats locaux:', apiError.message);
+            }
+            
+            const combinedResults = [...localResults, ...apiResults];
+            const combinedTotal = localResults.length + total;
 
-            if (results.length === 0) {
+            if (combinedResults.length === 0) {
                 await sendMessage(senderId, `
 😔 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧
 ${DECORATIONS.divider}
@@ -793,7 +922,7 @@ Aucun livre PDF trouvé pour:
                 return;
             }
 
-            await displayBookResults(senderId, results, 1, total, query);
+            await displayBookResults(senderId, combinedResults, 1, combinedTotal, query);
         }
 
     } catch (error) {

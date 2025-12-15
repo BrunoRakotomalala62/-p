@@ -1,7 +1,12 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const FormData = require('form-data');
+const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://pdf-tdnk.onrender.com/';
+const LOCAL_PDF_DIR = path.join(__dirname, '..', 'pdf_exercice_bacc');
 const MAX_MESSAGE_LENGTH = 1900;
 const RESULTS_PER_PAGE = 5;
 
@@ -50,6 +55,87 @@ const DECORATIONS = {
 
 function getRandomMessage(messages) {
     return messages[Math.floor(Math.random() * messages.length)];
+}
+
+function searchLocalPdfs(query) {
+    try {
+        if (!fs.existsSync(LOCAL_PDF_DIR)) {
+            return [];
+        }
+        
+        const files = fs.readdirSync(LOCAL_PDF_DIR)
+            .filter(file => file.toLowerCase().endsWith('.pdf'))
+            .filter(file => file.toLowerCase().includes(query.toLowerCase()))
+            .map(file => {
+                const filePath = path.join(LOCAL_PDF_DIR, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    titre: file.replace('.pdf', '').replace(/_/g, ' '),
+                    matiere: 'Local',
+                    type_doc: 'sujet',
+                    annee: 'N/A',
+                    serie: 'N/A',
+                    isLocal: true,
+                    localPath: filePath,
+                    fileName: file,
+                    size: stats.size
+                };
+            });
+        
+        return files;
+    } catch (error) {
+        console.error('Erreur recherche locale:', error.message);
+        return [];
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+async function sendLocalPdfToMessenger(recipientId, filePath, filename) {
+    try {
+        const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+        if (!PAGE_ACCESS_TOKEN) {
+            throw new Error('PAGE_ACCESS_TOKEN non défini');
+        }
+
+        const buffer = fs.readFileSync(filePath);
+        const stream = Readable.from(buffer);
+        
+        const form = new FormData();
+        form.append('recipient', JSON.stringify({ id: recipientId }));
+        form.append('message', JSON.stringify({
+            attachment: {
+                type: 'file',
+                payload: {
+                    is_reusable: false
+                }
+            }
+        }));
+        form.append('filedata', stream, {
+            filename: filename,
+            contentType: 'application/pdf'
+        });
+
+        const response = await axios.post(
+            `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            form,
+            {
+                headers: form.getHeaders(),
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                timeout: 180000
+            }
+        );
+
+        return { success: true, data: response.data };
+    } catch (error) {
+        const errorData = error.response ? error.response.data : error.message;
+        return { success: false, error: errorData };
+    }
 }
 
 function getMatiereKey(input) {
@@ -291,6 +377,8 @@ ${loadingMsg}
 
     const params = parseSearchQuery(query);
     
+    const localResults = searchLocalPdfs(query);
+    
     try {
         let url = `${API_BASE}/recherche?`;
         const queryParams = [];
@@ -304,18 +392,26 @@ ${loadingMsg}
         
         console.log('API Education URL:', url);
         
-        const response = await axios.get(url, { timeout: 30000 });
+        let apiResults = [];
+        try {
+            const response = await axios.get(url, { timeout: 30000 });
+            if (response.data && response.data.resultats) {
+                apiResults = response.data.resultats;
+            }
+        } catch (apiError) {
+            console.log('Erreur API, utilisation des résultats locaux:', apiError.message);
+        }
         
-        if (response.data && response.data.resultats && response.data.resultats.length > 0) {
-            const results = response.data.resultats;
-            
+        const combinedResults = [...localResults, ...apiResults];
+        
+        if (combinedResults.length > 0) {
             userSessions.set(senderId, {
-                results: results,
+                results: combinedResults,
                 currentPage: 1,
                 searchQuery: query
             });
             
-            await displayResults(senderId, results, 1, query);
+            await displayResults(senderId, combinedResults, 1, query);
         } else {
             await sendMessage(senderId, `
 😔 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧
@@ -331,12 +427,22 @@ Aucun document trouvé pour:
         }
     } catch (error) {
         console.error('Erreur recherche education:', error.message);
-        await sendMessage(senderId, `
+        
+        if (localResults.length > 0) {
+            userSessions.set(senderId, {
+                results: localResults,
+                currentPage: 1,
+                searchQuery: query
+            });
+            await displayResults(senderId, localResults, 1, query);
+        } else {
+            await sendMessage(senderId, `
 ❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗰𝗼𝗻𝗻𝗲𝘅𝗶𝗼𝗻
 ${DECORATIONS.divider}
 Impossible de contacter le serveur.
 Réessaie dans quelques instants.
-        `.trim());
+            `.trim());
+        }
     }
 }
 
@@ -435,6 +541,45 @@ async function handleDownload(senderId, doc) {
     const matiereInfo = MATIERES[doc.matiere?.toLowerCase()] || { emoji: '📘', name: doc.matiere || 'Document' };
     const typeEmoji = doc.type_doc === 'correction' ? '✅' : '📄';
     const typeLabel = doc.type_doc === 'correction' ? 'Correction' : 'Sujet';
+
+    if (doc.isLocal) {
+        await sendMessage(senderId, `
+⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
+${DECORATIONS.divider}
+📄 ${doc.titre}
+📂 Source: Local
+
+⏳ Préparation du fichier PDF...
+        `.trim());
+
+        try {
+            const result = await sendLocalPdfToMessenger(senderId, doc.localPath, doc.fileName);
+            
+            if (result.success) {
+                await sendMessage(senderId, `
+✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦
+${DECORATIONS.header}
+📄 ${doc.titre}
+📊 Taille: ${formatFileSize(doc.size)}
+${DECORATIONS.footer}
+
+💡 Le PDF a été envoyé en pièce jointe
+📱 Tu peux le sauvegarder sur ton téléphone
+
+🔄 Tape "education" pour continuer
+                `.trim());
+            } else {
+                await sendMessage(senderId, `
+❌ Erreur lors de l'envoi du PDF local.
+🔄 Réessaie plus tard.
+                `.trim());
+            }
+        } catch (error) {
+            console.error('Erreur envoi PDF local:', error.message);
+            await sendMessage(senderId, `❌ Erreur lors de l'envoi du fichier.`);
+        }
+        return;
+    }
 
     await sendMessage(senderId, `
 ⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
