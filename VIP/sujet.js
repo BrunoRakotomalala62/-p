@@ -7,13 +7,6 @@ const sendMessage = require('../handles/sendMessage');
 
 const PDF_DIR = path.join(__dirname, '..', 'pdf_exercice_bacc');
 
-const DECORATIONS = {
-    header: '╔══════════════════════════════╗',
-    footer: '╚══════════════════════════════╝',
-    divider: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    subDivider: '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈'
-};
-
 const userSessions = new Map();
 
 function formatFileSize(bytes) {
@@ -94,7 +87,7 @@ async function sendPdfToMessenger(recipientId, buffer, filename) {
 module.exports = async (senderId, prompt, api) => {
     try {
         const userSession = userSessions.get(senderId) || {};
-        const input = (typeof prompt === 'string') ? prompt.trim().toLowerCase() : '';
+        const input = (typeof prompt === 'string') ? prompt.trim() : '';
 
         if (/^\d+$/.test(input) && userSession.files && userSession.files.length > 0) {
             const index = parseInt(input) - 1;
@@ -102,112 +95,49 @@ module.exports = async (senderId, prompt, api) => {
             if (index >= 0 && index < userSession.files.length) {
                 await handleDownload(senderId, userSession.files[index]);
             } else {
-                await sendMessage(senderId, `
-❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲
-${DECORATIONS.divider}
-Choisis un numéro entre 1 et ${userSession.files.length}
-                `.trim());
+                await sendMessage(senderId, `❌ Numéro invalide. Choisis entre 1 et ${userSession.files.length}`);
             }
             return;
         }
 
-        if (!input || input === 'help' || input === 'aide' || input === 'list' || input === 'liste') {
-            await showPdfList(senderId);
+        if (!input) {
+            await sendMessage(senderId, `📚 𝗦𝗨𝗝𝗘𝗧 - 𝗘𝘅𝗲𝗿𝗰𝗶𝗰𝗲𝘀 𝗕𝗮𝗰𝗰
+
+Tape un mot-clé pour chercher un PDF.
+Exemple: sujet math`);
             return;
         }
 
         const files = getPdfFiles();
         const searchResults = files.filter(file => 
-            file.name.toLowerCase().includes(input) || 
-            file.title.toLowerCase().includes(input)
+            file.name.toLowerCase().includes(input.toLowerCase()) || 
+            file.title.toLowerCase().includes(input.toLowerCase())
         );
 
         if (searchResults.length > 0) {
             userSessions.set(senderId, { files: searchResults });
-            await displayFiles(senderId, searchResults, input);
+            
+            let message = `📚 𝗥𝗲́𝘀𝘂𝗹𝘁𝗮𝘁𝘀 𝗽𝗼𝘂𝗿 "${input}":\n\n`;
+            
+            for (let i = 0; i < searchResults.length; i++) {
+                message += `${i + 1} - ${searchResults[i].title}\n`;
+            }
+            
+            message += `\n📥 Envoie le numéro pour recevoir le PDF`;
+            
+            await sendMessage(senderId, message);
         } else {
-            await sendMessage(senderId, `
-😔 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧
-${DECORATIONS.divider}
-Aucun PDF trouvé pour: "${input}"
-
-💡 Tape "sujet" pour voir tous les PDFs disponibles
-            `.trim());
+            await sendMessage(senderId, `😔 Aucun PDF trouvé pour "${input}"`);
         }
 
     } catch (error) {
         console.error('Erreur commande sujet:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗶𝗻𝗮𝘁𝘁𝗲𝗻𝗱𝘂𝗲
-${DECORATIONS.divider}
-Une erreur est survenue.
-Réessaie dans quelques instants.
-        `.trim());
+        await sendMessage(senderId, `❌ Une erreur est survenue. Réessaie.`);
     }
 };
 
-async function showPdfList(senderId) {
-    const files = getPdfFiles();
-
-    if (files.length === 0) {
-        await sendMessage(senderId, `
-📂 𝗦𝗨𝗝𝗘𝗧𝗦 𝗗'𝗘𝗫𝗘𝗥𝗖𝗜𝗖𝗘𝗦 𝗕𝗔𝗖𝗖
-${DECORATIONS.header}
-Aucun PDF disponible pour le moment.
-${DECORATIONS.footer}
-        `.trim());
-        return;
-    }
-
-    userSessions.set(senderId, { files: files });
-    await displayFiles(senderId, files, null);
-}
-
-async function displayFiles(senderId, files, searchQuery) {
-    const header = `
-📂 𝗦𝗨𝗝𝗘𝗧𝗦 𝗗'𝗘𝗫𝗘𝗥𝗖𝗜𝗖𝗘𝗦 𝗕𝗔𝗖𝗖
-${DECORATIONS.header}
-${searchQuery ? `🔍 Recherche: "${searchQuery}"` : '📚 Tous les PDFs disponibles'}
-📊 Total: ${files.length} document(s)
-${DECORATIONS.footer}`.trim();
-
-    await sendMessage(senderId, header);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        
-        const card = `
-┏━━━━━━━━━━━━━━━━━━━━━
-┃ ${i + 1}️⃣ 📄 PDF
-┣━━━━━━━━━━━━━━━━━━━━━
-┃ 📝 ${file.title}
-┃ 📊 Taille: ${formatFileSize(file.size)}
-┗━━━━━━━━━━━━━━━━━━━━━`.trim();
-
-        await sendMessage(senderId, card);
-        await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    const footer = `
-${DECORATIONS.divider}
-📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗥:
-Envoie le numéro (1-${files.length}) pour télécharger
-${DECORATIONS.subDivider}
-🔍 Recherche: sujet <terme>`.trim();
-
-    await sendMessage(senderId, footer);
-}
-
 async function handleDownload(senderId, file) {
-    await sendMessage(senderId, `
-⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
-${DECORATIONS.divider}
-📄 ${file.title}
-📊 Taille: ${formatFileSize(file.size)}
-
-⏳ Préparation du fichier PDF...
-    `.trim());
+    await sendMessage(senderId, `⏳ Envoi du PDF en cours...`);
 
     try {
         const buffer = fs.readFileSync(file.path);
@@ -215,37 +145,14 @@ ${DECORATIONS.divider}
         const result = await sendPdfToMessenger(senderId, buffer, file.name);
         
         if (result.success) {
-            await sendMessage(senderId, `
-✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦
-${DECORATIONS.header}
-📄 ${file.title}
-📊 Taille: ${formatFileSize(file.size)}
-${DECORATIONS.footer}
-
-💡 Le PDF a été envoyé en pièce jointe
-📱 Tu peux le sauvegarder sur ton téléphone
-
-🔄 Tape "sujet" pour voir d'autres PDFs
-            `.trim());
+            await sendMessage(senderId, `✅ PDF envoyé avec succès!\n📄 ${file.title}`);
         } else {
             console.log('Erreur envoi PDF:', result.error);
-            await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱'𝗲𝗻𝘃𝗼𝗶
-${DECORATIONS.divider}
-Impossible d'envoyer le PDF.
-Le fichier est peut-être trop volumineux.
-
-🔄 Tape "sujet" pour réessayer
-            `.trim());
+            await sendMessage(senderId, `❌ Impossible d'envoyer le PDF. Réessaie plus tard.`);
         }
         
     } catch (error) {
         console.error('Erreur téléchargement:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁
-${DECORATIONS.divider}
-Impossible de lire le fichier.
-Réessaie dans quelques instants.
-        `.trim());
+        await sendMessage(senderId, `❌ Erreur lors de l'envoi du fichier.`);
     }
 }
