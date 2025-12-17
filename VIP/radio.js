@@ -111,7 +111,9 @@ ${border}
         const response = await axios.get(`${API_BASE}/radios`, { timeout: 30000 });
         
         let radios = [];
-        if (response.data && response.data.radios) {
+        if (response.data && response.data.radios_disponibles) {
+            radios = response.data.radios_disponibles;
+        } else if (response.data && response.data.radios) {
             radios = response.data.radios;
         } else if (Array.isArray(response.data)) {
             radios = response.data;
@@ -221,39 +223,40 @@ ${generateDynamicBorder()}
     }
 }
 
-async function handleRadioSelection(senderId, radioName) {
+async function handleRadioSelection(senderId, radioInput) {
     try {
         const border = generateDynamicBorder();
         const loadingEmoji = getRandomEmoji('loading');
         
-        const displayRadioName = typeof radioName === 'string' ? radioName : (radioName.nom || radioName.name || radioName);
+        const radioId = typeof radioInput === 'string' ? radioInput : (radioInput.id || radioInput.nom || radioInput.name || radioInput);
+        const displayRadioName = typeof radioInput === 'string' ? radioInput : (radioInput.nom || radioInput.name || radioInput);
         
         await sendMessage(senderId, `
 ${loadingEmoji} 𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧...
 ${border}
 
-📻 Radio : ${displayRadioName.toUpperCase()}
+📻 Radio : ${displayRadioName}
 🔍 Récupération des informations...
 
 ⏳ Veuillez patienter...
         `.trim());
         
-        const response = await axios.get(`${API_BASE}/player?radio=${encodeURIComponent(displayRadioName)}`, { timeout: 30000 });
+        const response = await axios.get(`${API_BASE}/player?radio=${encodeURIComponent(radioId)}`, { timeout: 30000 });
         
-        const radioData = response.data;
+        const radioInfo = response.data;
         
-        if (radioData && radioData.stream_url) {
+        if (radioInfo && radioInfo.stream_url) {
             const radioEmoji = getRandomEmoji('radio');
             const successEmoji = getRandomEmoji('success');
             const playEmoji = getRandomEmoji('play');
             const musicEmoji = getRandomEmoji('music');
             
-            const nom = radioData.nom || displayRadioName.toUpperCase();
-            const frequence = radioData.frequence || 'En ligne';
-            const format = radioData.format || 'audio/mpeg';
-            const statut = radioData.statut || 'en_ligne';
-            const streamUrl = radioData.stream_url;
-            const siteSource = radioData.site_source || '';
+            const nom = radioInfo.nom || displayRadioName.toUpperCase();
+            const frequence = radioInfo.frequence || 'En ligne';
+            const format = radioInfo.format || 'audio/mpeg';
+            const statut = radioInfo.statut || 'en_ligne';
+            const streamUrl = radioInfo.stream_url;
+            const siteSource = radioInfo.site_source || '';
             
             let statutEmoji = '🟢';
             let statutText = 'En ligne';
@@ -262,13 +265,13 @@ ${border}
                 statutText = 'Hors ligne';
             }
             
-            if (radioData.logo) {
+            if (radioInfo.logo) {
                 try {
                     await sendMessage(senderId, {
                         attachment: {
                             type: 'image',
                             payload: {
-                                url: radioData.logo,
+                                url: radioInfo.logo,
                                 is_reusable: true
                             }
                         }
