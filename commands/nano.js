@@ -136,7 +136,8 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 const apiBaseUrl = 'https://rapido.zetsu.xyz/api/nano-v1';
                 const apiKey = process.env.NANO_API_KEY || '';
                 
-                let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}&apikey=${encodeURIComponent(apiKey)}`;
+                // Construire l'URL avec l'ordre correct: prompt -> url -> apikey
+                let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}`;
                 
                 // Ajouter toutes les images à l'URL dans l'ordre
                 if (numberOfImages === 1) {
@@ -151,6 +152,9 @@ module.exports = async (senderId, prompt, api, attachments) => {
                     console.log(`Appel API Nano avec ${numberOfImages} images (transformation ${state.transformCount})`);
                     console.log(`Ordre des images: 1ère, 2ème${numberOfImages > 2 ? ', 3ème' : ''}${numberOfImages > 3 ? ', 4ème...' : ''}`);
                 }
+                
+                // Ajouter la clé API à la fin
+                apiUrl += `&apikey=${encodeURIComponent(apiKey)}`;
                 
                 console.log(`URL de l'API: ${apiUrl}`);
                 
