@@ -132,9 +132,9 @@ module.exports = async (senderId, prompt, api, attachments) => {
             }
 
             try {
-                // Utiliser l'API Rapido
+                // Utiliser l'API Rapido avec clé API intégrée
                 const apiBaseUrl = 'https://rapido.zetsu.xyz/api/nano-v1';
-                const apiKey = process.env.NANO_API_KEY || '';
+                const apiKey = 'rapi_4806a41790cd4a83921d56b667ab3f16';
                 
                 // Construire l'URL avec l'ordre correct: prompt -> url -> apikey
                 let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}`;
