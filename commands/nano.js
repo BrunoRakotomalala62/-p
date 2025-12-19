@@ -134,14 +134,9 @@ module.exports = async (senderId, prompt, api, attachments) => {
             try {
                 // Utiliser l'URL de l'API depuis les variables d'environnement
                 const apiBaseUrl = process.env.NANO_API_URL || 'https://norch-project.gleeze.com/api/gemini/nano-banana';
-                const apiKey = process.env.NANO_API_KEY;
+                const apiKey = process.env.NANO_API_KEY || '';
                 
-                let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}`;
-                
-                // Ajouter la clé API si elle existe
-                if (apiKey) {
-                    apiUrl += `&apikey=${encodeURIComponent(apiKey)}`;
-                }
+                let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}&apikey=${encodeURIComponent(apiKey)}`;
                 
                 // Ajouter toutes les images à l'URL dans l'ordre
                 if (numberOfImages === 1) {
