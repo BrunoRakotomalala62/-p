@@ -132,19 +132,28 @@ module.exports = async (senderId, prompt, api, attachments) => {
             }
 
             try {
-                let apiUrl = `https://norch-project.gleeze.com/api/gemini/nano-banana?prompt=${encodeURIComponent(transformPrompt)}`;
+                // Utiliser l'URL de l'API depuis les variables d'environnement
+                const apiBaseUrl = process.env.NANO_API_URL || 'https://norch-project.gleeze.com/api/gemini/nano-banana';
+                const apiKey = process.env.NANO_API_KEY;
+                
+                let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}`;
+                
+                // Ajouter la clé API si elle existe
+                if (apiKey) {
+                    apiUrl += `&apikey=${encodeURIComponent(apiKey)}`;
+                }
                 
                 // Ajouter toutes les images à l'URL dans l'ordre
                 if (numberOfImages === 1) {
-                    apiUrl += `&imageurl=${encodeURIComponent(state.images[0])}`;
-                    console.log(`Appel API Nano Banana avec 1 image (transformation ${state.transformCount})`);
+                    apiUrl += `&url=${encodeURIComponent(state.images[0])}`;
+                    console.log(`Appel API Nano avec 1 image (transformation ${state.transformCount})`);
                 } else {
-                    // Première image avec imageurl, les suivantes avec imageurl2, imageurl3, etc.
-                    apiUrl += `&imageurl=${encodeURIComponent(state.images[0])}`;
+                    // Première image avec url, les suivantes avec url2, url3, etc.
+                    apiUrl += `&url=${encodeURIComponent(state.images[0])}`;
                     for (let i = 1; i < state.images.length; i++) {
-                        apiUrl += `&imageurl${i + 1}=${encodeURIComponent(state.images[i])}`;
+                        apiUrl += `&url${i + 1}=${encodeURIComponent(state.images[i])}`;
                     }
-                    console.log(`Appel API Nano Banana avec ${numberOfImages} images (transformation ${state.transformCount})`);
+                    console.log(`Appel API Nano avec ${numberOfImages} images (transformation ${state.transformCount})`);
                     console.log(`Ordre des images: 1ère, 2ème${numberOfImages > 2 ? ', 3ème' : ''}${numberOfImages > 3 ? ', 4ème...' : ''}`);
                 }
                 
