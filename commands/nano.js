@@ -162,9 +162,25 @@ module.exports = async (senderId, prompt, api, attachments) => {
                     timeout: 60000 // 60 secondes de timeout
                 });
 
+                // L'API Rapido retourne directement l'image ou un JSON avec le résultat
+                let resultImageUrl = null;
+                
                 if (response.data && response.data.result) {
-                    const resultImageUrl = response.data.result;
-                    
+                    // Format JSON avec result
+                    resultImageUrl = response.data.result;
+                } else if (typeof response.data === 'object' && response.data.image_url) {
+                    // Format JSON avec image_url
+                    resultImageUrl = response.data.image_url;
+                } else if (response.status === 200 && response.headers['content-type'].includes('image')) {
+                    // L'API retourne directement l'image binaire - la stocker temporairement
+                    // On va retourner l'même URL car c'est déjà accessible
+                    resultImageUrl = apiUrl; // L'URL elle-même sert de source d'image
+                } else if (typeof response.data === 'string' && response.data.startsWith('http')) {
+                    // L'API retourne une URL d'image
+                    resultImageUrl = response.data;
+                }
+                
+                if (resultImageUrl) {
                     // Mettre à jour l'image courante avec le résultat
                     state.currentImageUrl = resultImageUrl;
                     state.step = 'ready_for_next';
@@ -190,11 +206,17 @@ module.exports = async (senderId, prompt, api, attachments) => {
                     );
 
                 } else {
+                    console.error('Response data type:', typeof response.data);
+                    console.error('Response headers:', response.headers);
                     throw new Error("L'API n'a pas retourné de résultat valide");
                 }
 
             } catch (error) {
                 console.error('Erreur lors de la transformation d\'image:', error.message);
+                if (error.response) {
+                    console.error('API Response Status:', error.response.status);
+                    console.error('API Response Data:', JSON.stringify(error.response.data));
+                }
                 
                 // Déterminer le type d'erreur pour un message plus précis
                 let errorMessage = "🚨 Désolé, une erreur s'est produite lors de la transformation de votre image.\n\n";
@@ -203,6 +225,8 @@ module.exports = async (senderId, prompt, api, attachments) => {
                     errorMessage = "⏱️ La transformation a pris trop de temps et a expiré.\n\n";
                 } else if (error.response && error.response.status === 429) {
                     errorMessage = "🚫 Trop de requêtes ont été envoyées. Veuillez patienter un moment.\n\n";
+                } else if (error.response && error.response.status === 404) {
+                    errorMessage = "❌ L'API n'a pas trouvé l'endpoint. Veuillez vérifier la configuration.\n\n";
                 }
                 
                 await sendMessage(senderId, 
