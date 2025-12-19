@@ -132,8 +132,8 @@ module.exports = async (senderId, prompt, api, attachments) => {
             }
 
             try {
-                // Utiliser l'URL de l'API depuis les variables d'environnement
-                const apiBaseUrl = process.env.NANO_API_URL || 'https://norch-project.gleeze.com/api/gemini/nano-banana';
+                // Utiliser l'API Rapido
+                const apiBaseUrl = 'https://rapido.zetsu.xyz/api/nano-v1';
                 const apiKey = process.env.NANO_API_KEY || '';
                 
                 let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}&apikey=${encodeURIComponent(apiKey)}`;
