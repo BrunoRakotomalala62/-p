@@ -1,8 +1,35 @@
 const sendMessage = require('../handles/sendMessage');
 const axios = require('axios');
+const FormData = require('form-data');
 
 // État pour chaque utilisateur
 const userStates = {};
+
+// Fonction pour uploader l'image sur catbox
+async function uploadImageToCatbox(imageBuffer) {
+    try {
+        const formData = new FormData();
+        formData.append('reqtype', 'fileupload');
+        formData.append('fileToUpload', imageBuffer, {
+            filename: 'transformed.jpg',
+            contentType: 'image/jpeg'
+        });
+
+        const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
+            headers: formData.getHeaders(),
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
+        });
+
+        const publicUrl = uploadResponse.data.trim();
+        console.log('✅ Image uploadée sur catbox:', publicUrl);
+        return publicUrl;
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'upload catbox:', error.message);
+        throw error;
+    }
+}
 
 // Délai minimum entre deux requêtes (en millisecondes)
 const MIN_REQUEST_DELAY = 3000; // 3 secondes
@@ -158,20 +185,25 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 
                 console.log(`URL de l'API: ${apiUrl}`);
                 
-                // Vérifier que la requête réussit
+                // Télécharger l'image binaire de l'API Rapido
                 const response = await axios.get(apiUrl, {
-                    timeout: 60000 // 60 secondes de timeout
+                    responseType: 'arraybuffer',
+                    timeout: 120000 // 120 secondes de timeout pour les transformations longues
                 });
 
-                // L'API Rapido retourne directement l'image binaire avec un status 200
-                // L'URL elle-même peut être utilisée comme source d'image
-                const resultImageUrl = apiUrl;
+                console.log('✅ Image reçue de Rapido, taille:', response.data.length, 'bytes');
+
+                // Uploader l'image sur catbox pour que Facebook puisse y accéder
+                const imageBuffer = Buffer.from(response.data);
+                const resultImageUrl = await uploadImageToCatbox(imageBuffer);
                 
-                if (resultImageUrl) {
+                if (resultImageUrl && resultImageUrl.startsWith('https://')) {
                     // Mettre à jour l'image courante avec le résultat
                     state.currentImageUrl = resultImageUrl;
                     state.step = 'ready_for_next';
                     state.isProcessing = false;
+                    
+                    console.log('✅ Transformation réussie, image disponible sur:', resultImageUrl);
                     
                     // Envoyer l'image transformée
                     await sendMessage(senderId, {
