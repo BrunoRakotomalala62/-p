@@ -158,27 +158,14 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 
                 console.log(`URL de l'API: ${apiUrl}`);
                 
+                // Vérifier que la requête réussit
                 const response = await axios.get(apiUrl, {
                     timeout: 60000 // 60 secondes de timeout
                 });
 
-                // L'API Rapido retourne directement l'image ou un JSON avec le résultat
-                let resultImageUrl = null;
-                
-                if (response.data && response.data.result) {
-                    // Format JSON avec result
-                    resultImageUrl = response.data.result;
-                } else if (typeof response.data === 'object' && response.data.image_url) {
-                    // Format JSON avec image_url
-                    resultImageUrl = response.data.image_url;
-                } else if (response.status === 200 && response.headers['content-type'].includes('image')) {
-                    // L'API retourne directement l'image binaire - la stocker temporairement
-                    // On va retourner l'même URL car c'est déjà accessible
-                    resultImageUrl = apiUrl; // L'URL elle-même sert de source d'image
-                } else if (typeof response.data === 'string' && response.data.startsWith('http')) {
-                    // L'API retourne une URL d'image
-                    resultImageUrl = response.data;
-                }
+                // L'API Rapido retourne directement l'image binaire avec un status 200
+                // L'URL elle-même peut être utilisée comme source d'image
+                const resultImageUrl = apiUrl;
                 
                 if (resultImageUrl) {
                     // Mettre à jour l'image courante avec le résultat
