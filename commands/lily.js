@@ -10,6 +10,16 @@ const BOLD_DECORATORS = {
     sparkle: '✨'
 };
 
+// Décorateurs pour le mode romantic
+const ROMANTIC_DECORATORS = {
+    title: '💕 𝗟𝗜𝗟𝗬 𝗥𝗼𝗺𝗮𝗻𝘁𝗶𝗾𝘶𝗲 💕',
+    separator: '❤️━━━━━━━━━━━━━━━━━━━━━━━━━━❤️',
+    rose: '🌹',
+    kiss: '💋',
+    cupid: '💘',
+    love: '❤️'
+};
+
 // Fonction pour diviser le texte en chunks de max 2000 caractères
 const splitMessage = (text, maxLength = 1950) => {
     const chunks = [];
@@ -55,23 +65,42 @@ const splitMessage = (text, maxLength = 1950) => {
 
 module.exports = async (senderId, userText) => {
     // Extraire le prompt en retirant le préfixe 'lily' et en supprimant les espaces superflus
-    const prompt = userText.slice(5).trim();
+    let prompt = userText.slice(5).trim();
+
+    // Déterminer le mode (romantic ou standard)
+    let isRomanticMode = false;
+    const romanticKeywords = ['romantic', 'romantiqu', 'amour', 'amoureux', 'séduction', 'passionné'];
+    
+    for (const keyword of romanticKeywords) {
+        if (prompt.toLowerCase().includes(keyword)) {
+            isRomanticMode = true;
+            // Supprimer le mot-clé du prompt
+            prompt = prompt.toLowerCase().replace(keyword, '').trim();
+            break;
+        }
+    }
 
     // Vérifier si le prompt est vide
     if (!prompt) {
-        await sendMessage(senderId, `${BOLD_DECORATORS.sparkle} Veuillez fournir une question ou un sujet pour que je puisse vous aider. ${BOLD_DECORATORS.sparkle}`);
+        const decorators = isRomanticMode ? ROMANTIC_DECORATORS : BOLD_DECORATORS;
+        await sendMessage(senderId, `${decorators.sparkle || decorators.cupid} Veuillez fournir une question ou un sujet pour que je puisse vous aider. ${decorators.sparkle || decorators.cupid}`);
         return;
     }
 
     try {
         // Envoyer un message de confirmation que la requête est en cours de traitement
-        await sendMessage(senderId, "📲💫 Patientez, la réponse arrive… 💫📲");
+        const loadingMsg = isRomanticMode ? "💕✨ Patientez, mon amour... votre réponse arrive… 💕✨" : "📲💫 Patientez, la réponse arrive… 💫📲";
+        await sendMessage(senderId, loadingMsg);
 
         // Générer un UID unique
         const uid = Date.now().toString();
 
-        // Appeler l'API avec le prompt fourni
-        const apiUrl = `https://api-lily.vercel.app/lily?prompt=${encodeURIComponent(prompt)}&uid=${uid}`;
+        // Construire l'URL de l'API avec le mode approprié
+        let apiUrl = `https://api-lily.vercel.app/lily?prompt=${encodeURIComponent(prompt)}&uid=${uid}`;
+        if (isRomanticMode) {
+            apiUrl += '&mode=romantic';
+        }
+
         const response = await axios.get(apiUrl);
 
         // Récupérer la réponse de l'API
@@ -80,8 +109,12 @@ module.exports = async (senderId, userText) => {
         // Attendre 2 secondes avant d'envoyer la réponse pour un délai naturel
         await new Promise(resolve => setTimeout(resolve, 2000));
 
+        // Sélectionner les décorateurs appropriés
+        const decorators = isRomanticMode ? ROMANTIC_DECORATORS : BOLD_DECORATORS;
+        const closingMsg = isRomanticMode ? `${decorators.rose} Avec tout mon amour... 🌹` : `${decorators.heart} À bientôt! ${decorators.heart}`;
+
         // Créer la réponse formatée avec décorateurs
-        const formattedReply = `${BOLD_DECORATORS.title}\n${BOLD_DECORATORS.separator}\n\n${BOLD_DECORATORS.sparkle} ${reply} ${BOLD_DECORATORS.sparkle}\n\n${BOLD_DECORATORS.separator}\n${BOLD_DECORATORS.heart} À bientôt! ${BOLD_DECORATORS.heart}`;
+        const formattedReply = `${decorators.title}\n${decorators.separator}\n\n${decorators.sparkle || decorators.cupid} ${reply} ${decorators.sparkle || decorators.cupid}\n\n${decorators.separator}\n${closingMsg}`;
 
         // Diviser le message si trop long
         const messages = splitMessage(formattedReply);
@@ -96,7 +129,8 @@ module.exports = async (senderId, userText) => {
         }
     } catch (error) {
         console.error('Erreur lors de l\'appel à l\'API Lily:', error);
-        await sendMessage(senderId, `${BOLD_DECORATORS.sparkle} Désolé, une erreur s'est produite lors du traitement de votre question. ${BOLD_DECORATORS.sparkle}`);
+        const decorators = isRomanticMode ? ROMANTIC_DECORATORS : BOLD_DECORATORS;
+        await sendMessage(senderId, `${decorators.sparkle || decorators.cupid} Désolé, une erreur s'est produite lors du traitement de votre question. ${decorators.sparkle || decorators.cupid}`);
     }
 };
 
