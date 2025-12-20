@@ -65,20 +65,10 @@ const splitMessage = (text, maxLength = 1950) => {
 
 module.exports = async (senderId, userText) => {
     // Extraire le prompt en retirant le préfixe 'lily' et en supprimant les espaces superflus
-    let prompt = userText.slice(5).trim();
+    const prompt = userText.slice(5).trim();
 
-    // Déterminer le mode (romantic ou standard)
-    let isRomanticMode = false;
-    const romanticKeywords = ['romantic', 'romantiqu', 'amour', 'amoureux', 'séduction', 'passionné'];
-    
-    for (const keyword of romanticKeywords) {
-        if (prompt.toLowerCase().includes(keyword)) {
-            isRomanticMode = true;
-            // Supprimer le mot-clé du prompt
-            prompt = prompt.toLowerCase().replace(keyword, '').trim();
-            break;
-        }
-    }
+    // Mode romantique toujours activé par défaut
+    const isRomanticMode = true;
 
     // Vérifier si le prompt est vide
     if (!prompt) {
