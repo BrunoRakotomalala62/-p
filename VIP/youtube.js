@@ -5,7 +5,7 @@ const FormData = require('form-data');
 const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://mutual-terese-tekenespa-31ac883e.koyeb.app';
+const API_BASE = 'https://youtube-api-milay.vercel.app';
 const MP3_API_BASE = 'https://norch-project.gleeze.com/api/ytmp3';
 const MP4_API_BASE = 'https://norch-project.gleeze.com/api/ytdl';
 const DEFAULT_VIDEO_QUALITY = '360';
@@ -382,7 +382,7 @@ async function handleVideoSearch(senderId, query) {
 ⏳ Patiente quelques secondes...
         `.trim());
         
-        const searchUrl = `${API_BASE}/recherche?audio=${encodeURIComponent(query)}&limit=20`;
+        const searchUrl = `${API_BASE}/recherche?titre=${encodeURIComponent(query)}`;
         console.log('Appel API YouTube:', searchUrl);
         
         const response = await axiosWithRetry(searchUrl);

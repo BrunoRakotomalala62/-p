@@ -1,0 +1,65 @@
+Voici l'API URL youtube download vidéo:
+https://norch-project.gleeze.com/api/ytdl?url=https%3A%2F%2Fyoutu.be%2FMU_mcM4viuM&format=360
+
+
+Voici sa réponse Json :
+
+
+{
+  "success": true,
+  "result": {
+    "title": "The Script - Breakeven (Lyrics)",
+    "type": "video",
+    "format": "360",
+    "quality": "360",
+    "duration": "04:22",
+    "cover": "https://i.ytimg.com/vi/MU_mcM4viuM/maxresdefault.jpg",
+    "downloadUrl": "https://cdn403.savetube.vip/media/MU_mcM4viuM/the-script-breakeven-lyrics-360-ytshorts.savetube.me.mp4"
+  },
+  "timestamp": "2025-12-23T18:08:19.712Z",
+  "responseTime": "15435ms",
+  "author": "April Manalo"
+}
+
+
+
+
+Voici l'API URL pour le download MP3 :
+
+https://norch-project.gleeze.com/api/ytmp3?url=https%3A%2F%2Fyoutu.be%2FMU_mcM4viuM
+
+
+Voici sa réponse Json :
+{
+  "success": true,
+  "result": {
+    "title": "The Script - Breakeven (Lyrics)",
+    "type": "audio",
+    "format": "mp3",
+    "quality": "128",
+    "duration": "04:22",
+    "cover": "https://i.ytimg.com/vi/MU_mcM4viuM/maxresdefault.jpg",
+    "downloadUrl": "https://cdn401.savetube.vip/media/MU_mcM4viuM/the-script-breakeven-lyrics-128-ytshorts.savetube.me.mp3"
+  },
+  "timestamp": "2025-12-23T18:09:46.975Z",
+  "responseTime": "859ms",
+  "author": "April Manalo"
+}
+
+
+Voici l'API URL pour la recherche titre vidéo :
+
+https://youtube-api-milay.vercel.app/recherche?titre=delphin
+
+
+Voici sa réponse Json :
+{"nextPageToken":"CAoQAA","prevPageToken":null,"videos":[{"title":"Delphin  Sipa Tsisy Tanjona","url":"https://www.youtube.com/watch?v=KA4GUJ7xEzs","videoId":"KA4GUJ7xEzs"},{"title":"delphin &quot;vady natao tohatra&quot;","url":"https://www.youtube.com/watch?v=frR7CJgSAak","videoId":"frR7CJgSAak"},{"title":"delphin &quot;trandrak&#39;iranto&quot;","url":"https://www.youtube.com/watch?v=SFjPGD87Vfk","videoId":"SFjPGD87Vfk"},{"title":"Youd\u00e8ne Delphin - Si je parlais ( Salvation Church of God)","url":"https://www.youtube.com/watch?v=AHLygR5hJVQ","videoId":"AHLygR5hJVQ"},{"title":"Delphin Pecto raiky (Ti Nimerao )","url":"https://www.youtube.com/watch?v=iz7_u_e5IbY","videoId":"iz7_u_e5IbY"},{"title":"Delphin Pecto Raiky - Fialonana","url":"https://www.youtube.com/watch?v=3tXZWLH-ors","videoId":"3tXZWLH-ors"},{"title":"Magic of The Great Delphin will always check out if you are happy ;)  #delphinhotels","url":"https://www.youtube.com/watch?v=se4Hr7EFzGQ","videoId":"se4Hr7EFzGQ"},{"title":"DELPHIN  -  AMOUR  A  JETER   (Nouveaut\u00e9 Gasy 2025)","url":"https://www.youtube.com/watch?v=Pku1ihYJhaE","videoId":"Pku1ihYJhaE"},{"title":"DELPHIN Fitia modely","url":"https://www.youtube.com/watch?v=W0h8tdahWrM","videoId":"W0h8tdahWrM"},{"title":"DELPHIN MUKENDI DANS YESU KI CHAMPION, SHOWBUZZ 2025 tout le monde bouge et en parle","url":"https://www.youtube.com/watch?v=jeYYaDsPszU","videoId":"jeYYaDsPszU"}]}
+
+
+
+Changer l'API URL du commande youtube.js du répertoire VIP/ 
+
+Par les trois api url précédents
+
+Sans modifier la logique existant 
+
