@@ -158,19 +158,23 @@ async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
             const response = await axios.get(url, {
                 timeout: 120000,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json'
                 },
                 ...options
             });
             return response;
         } catch (error) {
-            console.log(`Tentative ${attempt}/${retries} échouée:`, error.message);
+            const statusCode = error.response ? error.response.status : 'N/A';
+            const errorMsg = error.response ? error.response.data : error.message;
+            console.log(`Tentative ${attempt}/${retries} échouée (Status: ${statusCode}):`, error.message);
+            console.log('Détails erreur:', errorMsg);
             
             if (attempt === retries) {
                 throw error;
             }
             
-            if (error.response && (error.response.status === 502 || error.response.status === 503 || error.response.status === 504)) {
+            if (error.response && (error.response.status === 500 || error.response.status === 502 || error.response.status === 503 || error.response.status === 504)) {
                 console.log(`Attente ${RETRY_DELAY}ms avant nouvelle tentative...`);
                 await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
             } else {
@@ -426,7 +430,9 @@ Aucune vidéo pour "${query}" 😕
         }
 
     } catch (error) {
-        console.error('Erreur recherche YouTube:', error.message);
+        const statusCode = error.response ? error.response.status : 'N/A';
+        const errorBody = error.response ? JSON.stringify(error.response.data) : error.message;
+        console.error('Erreur recherche YouTube:', { statusCode, errorBody, message: error.message });
         await sendMessage(senderId, `
 ❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 ❌
 ━━━━━━━━━━━━━━━━━━━
