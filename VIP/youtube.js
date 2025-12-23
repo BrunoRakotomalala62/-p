@@ -389,8 +389,15 @@ async function handleVideoSearch(senderId, query) {
         
         console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
         
-        if (response.data && response.data.resultats && response.data.resultats.length > 0) {
-            const allVideos = response.data.resultats;
+        if (response.data && response.data.videos && response.data.videos.length > 0) {
+            const allVideos = response.data.videos.map(video => ({
+                video_id: video.videoId,
+                titre: video.title,
+                duree: 'N/A',
+                taille_mp3: 'N/A',
+                taille_mp4: 'N/A',
+                image_url: null
+            }));
             
             userSessions.set(senderId, {
                 allVideos: allVideos,
