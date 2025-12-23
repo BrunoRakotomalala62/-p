@@ -96,11 +96,11 @@ function formatSearchResults(results, page = 1) {
     });
 
     let footer = `💡 *Commandes disponibles:*\n`;
-    footer += `  • *!github <numéro>* → Voir détails\n`;
-    footer += `  • *!github next* → Page suivante\n`;
-    footer += `  • *!github prev* → Page précédente\n`;
-    footer += `  • *!github top* → Trier par stars\n`;
-    footer += `  • *!github new* → Nouvelle recherche\n`;
+    footer += `  • *github <numéro>* → Voir détails\n`;
+    footer += `  • *github next* → Page suivante\n`;
+    footer += `  • *github prev* → Page précédente\n`;
+    footer += `  • *github top* → Trier par stars\n`;
+    footer += `  • *github new* → Nouvelle recherche\n`;
     
     if (totalPages > 1) {
         footer += `\n📍 Page ${page}/${totalPages}`;
@@ -141,7 +141,7 @@ function formatRepoDetails(repo, index) {
     message += `${repo.url}\n\n`;
     
     message += `${LINE_DIVIDER}\n`;
-    message += `💬 Tapez un autre numéro ou *!github* pour continuer!`;
+    message += `💬 Tapez un autre numéro ou *github* pour continuer!`;
     
     return message;
 }
@@ -165,138 +165,124 @@ function sortByStars(results) {
     return [...results].sort((a, b) => b.stars - a.stars);
 }
 
-module.exports = {
-    name: 'github',
-    author: 'Developer',
-    description: 'Recherche des dépôts GitHub avec pagination et détails',
-    usage: 'github <query|next|prev|top|numéro>',
-    category: 'VIP',
+module.exports = async (senderId, prompt) => {
+    try {
+        const input = prompt.trim().toLowerCase();
 
-    async execute(message, args, api, event) {
-        try {
-            const senderId = event.senderID;
-            const input = args.join(' ').trim().toLowerCase();
-
-            if (!input) {
-                return sendMessage(
-                    senderId,
-                    createHeader('Utilisation') + 
-                    `\n\n*Commandes disponibles:*\n` +
-                    `  • *!github <terme>* → Chercher un repo\n` +
-                    `  • *!github <numéro>* → Voir détails\n` +
-                    `  • *!github next* → Page suivante\n` +
-                    `  • *!github prev* → Page précédente\n` +
-                    `  • *!github top* → Trier par popularité\n\n` +
-                    `*Exemple:* !github api rest`,
-                    api,
-                    event
-                );
-            }
-
-            // Gestion des commandes de navigation
-            if (input === 'next') {
-                if (!userSessions.has(senderId)) {
-                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
-                }
-                const session = userSessions.get(senderId);
-                const nextPage = Math.min(session.page + 1, getTotalPages(session.results.length));
-                
-                if (nextPage === session.page) {
-                    return sendMessage(senderId, '⚠️ Tu es déjà à la dernière page!', api, event);
-                }
-                
-                session.page = nextPage;
-                const resultMessage = formatSearchResults(session.results, nextPage);
-                return sendMessage(senderId, resultMessage, api, event);
-            }
-
-            if (input === 'prev') {
-                if (!userSessions.has(senderId)) {
-                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
-                }
-                const session = userSessions.get(senderId);
-                const prevPage = Math.max(session.page - 1, 1);
-                
-                if (prevPage === session.page) {
-                    return sendMessage(senderId, '⚠️ Tu es déjà à la première page!', api, event);
-                }
-                
-                session.page = prevPage;
-                const resultMessage = formatSearchResults(session.results, prevPage);
-                return sendMessage(senderId, resultMessage, api, event);
-            }
-
-            if (input === 'top') {
-                if (!userSessions.has(senderId)) {
-                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
-                }
-                const session = userSessions.get(senderId);
-                session.results = sortByStars(session.results);
-                session.page = 1;
-                const resultMessage = formatSearchResults(session.results, 1);
-                return sendMessage(senderId, resultMessage, api, event);
-            }
-
-            // Vérifier si c'est une sélection de numéro
-            const numberInput = parseInt(input);
-            if (!isNaN(numberInput) && numberInput > 0) {
-                if (!userSessions.has(senderId)) {
-                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
-                }
-                
-                const session = userSessions.get(senderId);
-                const selectedIndex = numberInput - 1;
-
-                if (selectedIndex >= 0 && selectedIndex < session.results.length) {
-                    const selectedRepo = session.results[selectedIndex];
-                    const detailMessage = formatRepoDetails(selectedRepo, numberInput);
-                    
-                    return sendMessage(senderId, detailMessage, api, event);
-                } else {
-                    return sendMessage(
-                        senderId,
-                        `❌ *Numéro invalide!*\nChoisissez entre 1 et ${session.results.length}`,
-                        api,
-                        event
-                    );
-                }
-            }
-
-            // Nouvelle recherche
-            const typingIndicator = sendMessage(senderId, '⏳ Recherche en cours... Patience! 🔍', api, event);
-            
-            const results = await searchGithub(input);
-            
-            if (results.length === 0) {
-                return sendMessage(
-                    senderId,
-                    createHeader('Résultat') +
-                    `\n\n❌ *Aucun résultat* pour "${input}"\n\nEssaie un autre terme!`,
-                    api,
-                    event
-                );
-            }
-
-            // Sauvegarder les résultats dans la session
-            userSessions.set(senderId, {
-                results: results,
-                query: input,
-                page: 1,
-                timestamp: Date.now()
-            });
-
-            const formattedMessage = formatSearchResults(results, 1);
-            return sendMessage(senderId, formattedMessage, api, event);
-
-        } catch (error) {
-            console.error('Erreur commande github:', error);
-            return sendMessage(
-                event.senderID,
-                `❌ *Erreur lors de la recherche*\n${error.message}`,
-                api,
-                event
+        if (!input) {
+            await sendMessage(senderId, createHeader('Utilisation') + 
+                `\n\n*Commandes disponibles:*\n` +
+                `  • *github <terme>* → Chercher un repo\n` +
+                `  • *github <numéro>* → Voir détails\n` +
+                `  • *github next* → Page suivante\n` +
+                `  • *github prev* → Page précédente\n` +
+                `  • *github top* → Trier par popularité\n\n` +
+                `*Exemple:* github api rest`
             );
+            return;
         }
+
+        // Gestion des commandes de navigation
+        if (input === 'next') {
+            if (!userSessions.has(senderId)) {
+                await sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!');
+                return;
+            }
+            const session = userSessions.get(senderId);
+            const nextPage = Math.min(session.page + 1, getTotalPages(session.results.length));
+            
+            if (nextPage === session.page) {
+                await sendMessage(senderId, '⚠️ Tu es déjà à la dernière page!');
+                return;
+            }
+            
+            session.page = nextPage;
+            const resultMessage = formatSearchResults(session.results, nextPage);
+            await sendMessage(senderId, resultMessage);
+            return;
+        }
+
+        if (input === 'prev') {
+            if (!userSessions.has(senderId)) {
+                await sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!');
+                return;
+            }
+            const session = userSessions.get(senderId);
+            const prevPage = Math.max(session.page - 1, 1);
+            
+            if (prevPage === session.page) {
+                await sendMessage(senderId, '⚠️ Tu es déjà à la première page!');
+                return;
+            }
+            
+            session.page = prevPage;
+            const resultMessage = formatSearchResults(session.results, prevPage);
+            await sendMessage(senderId, resultMessage);
+            return;
+        }
+
+        if (input === 'top') {
+            if (!userSessions.has(senderId)) {
+                await sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!');
+                return;
+            }
+            const session = userSessions.get(senderId);
+            session.results = sortByStars(session.results);
+            session.page = 1;
+            const resultMessage = formatSearchResults(session.results, 1);
+            await sendMessage(senderId, resultMessage);
+            return;
+        }
+
+        // Vérifier si c'est une sélection de numéro
+        const numberInput = parseInt(input);
+        if (!isNaN(numberInput) && numberInput > 0) {
+            if (!userSessions.has(senderId)) {
+                await sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!');
+                return;
+            }
+            
+            const session = userSessions.get(senderId);
+            const selectedIndex = numberInput - 1;
+
+            if (selectedIndex >= 0 && selectedIndex < session.results.length) {
+                const selectedRepo = session.results[selectedIndex];
+                const detailMessage = formatRepoDetails(selectedRepo, numberInput);
+                
+                await sendMessage(senderId, detailMessage);
+                return;
+            } else {
+                await sendMessage(senderId, `❌ *Numéro invalide!*\nChoisissez entre 1 et ${session.results.length}`);
+                return;
+            }
+        }
+
+        // Nouvelle recherche
+        await sendMessage(senderId, '⏳ Recherche en cours... Patience! 🔍');
+        
+        const results = await searchGithub(input);
+        
+        if (results.length === 0) {
+            await sendMessage(senderId, createHeader('Résultat') +
+                `\n\n❌ *Aucun résultat* pour "${input}"\n\nEssaie un autre terme!`
+            );
+            return;
+        }
+
+        // Sauvegarder les résultats dans la session
+        userSessions.set(senderId, {
+            results: results,
+            query: input,
+            page: 1,
+            timestamp: Date.now()
+        });
+
+        const formattedMessage = formatSearchResults(results, 1);
+        await sendMessage(senderId, formattedMessage);
+
+    } catch (error) {
+        console.error('Erreur commande github:', error);
+        await sendMessage(senderId, `❌ *Erreur lors de la recherche*\n${error.message}`);
     }
 };
 
