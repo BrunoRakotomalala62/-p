@@ -6,24 +6,30 @@ const API_KEY = 'rapi_4806a41790cd4a83921d56b667ab3f16';
 
 const userSessions = new Map();
 
+const ITEMS_PER_PAGE = 5;
+
 const SEARCH_MESSAGES = [
     "🔍 Voici les dépôts que j'ai trouvés pour toi",
     "⭐ Découvre ces repos GitHub incroyables",
-    "📚 J'ai dénichné ces merveilles pour toi",
+    "📚 J'ai dénichés ces merveilles pour toi",
     "🚀 Voilà mes meilleures trouvailles",
-    "💎 Regarde ces pépites GitHub"
+    "💎 Regarde ces pépites GitHub",
+    "🎯 J'ai trouvé exactement ce qu'il te faut"
 ];
 
 const DETAIL_MESSAGES = [
-    "📌 Voici les détails du repo",
+    "📌 Voici les détails complets du repo",
     "🔗 Tu veux la démo ? La voilà",
     "✨ Accès direct au repo",
-    "🎯 C'est par là"
+    "🎯 C'est par là",
+    "🌟 Tous les détails du projet"
 ];
 
 const EMOJI_DECORATIONS = [
-    "✨", "🌟", "⭐", "💫", "🔥", "🎯", "🚀", "💎", "🏆", "👑"
+    "✨", "🌟", "⭐", "💫", "🔥", "🎯", "🚀", "💎", "🏆", "👑", "🎨", "⚡", "🔮", "🌈"
 ];
+
+const LINE_DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
 
 function getRandomMessage(messages) {
     return messages[Math.floor(Math.random() * messages.length)];
@@ -31,6 +37,15 @@ function getRandomMessage(messages) {
 
 function getRandomEmoji() {
     return EMOJI_DECORATIONS[Math.floor(Math.random() * EMOJI_DECORATIONS.length)];
+}
+
+function createHeader(title) {
+    const emoji = getRandomEmoji();
+    return `\n${emoji}${emoji}${emoji} *${title.toUpperCase()}* ${emoji}${emoji}${emoji}\n${LINE_DIVIDER}`;
+}
+
+function createFooter(text) {
+    return `${LINE_DIVIDER}\n${text}`;
 }
 
 async function searchGithub(query) {
@@ -49,63 +64,186 @@ async function searchGithub(query) {
     }
 }
 
-function formatSearchResults(results) {
+function getPaginatedResults(results, page) {
+    const startIndex = (page - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return results.slice(startIndex, endIndex);
+}
+
+function getTotalPages(totalResults) {
+    return Math.ceil(totalResults / ITEMS_PER_PAGE);
+}
+
+function formatSearchResults(results, page = 1) {
     if (results.length === 0) {
-        return "❌ Aucun résultat trouvé pour cette recherche";
+        return `❌ *Aucun résultat trouvé*\nEssaie avec une autre recherche!`;
     }
 
-    let message = `${getRandomMessage(SEARCH_MESSAGES)}\n\n`;
+    const totalPages = getTotalPages(results.length);
+    const paginatedResults = getPaginatedResults(results, page);
+
+    let message = createHeader(`Résultats - Page ${page}/${totalPages}`);
+    message += `\n${getRandomMessage(SEARCH_MESSAGES)}\n\n`;
     
-    results.forEach((repo, index) => {
+    paginatedResults.forEach((repo, index) => {
+        const globalIndex = (page - 1) * ITEMS_PER_PAGE + index + 1;
         const emoji = getRandomEmoji();
-        const number = index + 1;
-        message += `${emoji} *${number}. ${repo.name}*\n`;
-        message += `📝 ${repo.description}\n`;
-        message += `⭐ Stars: ${repo.stars.toLocaleString()} | 🔀 Forks: ${repo.forks.toLocaleString()}\n\n`;
+        
+        message += `${emoji} *${globalIndex}. ${repo.name}*\n`;
+        message += `   📝 ${repo.description}\n`;
+        message += `   ⭐ ${formatNumber(repo.stars)} stars | 🔀 ${formatNumber(repo.forks)} forks\n`;
+        message += `   📊 Ratio: ${(repo.stars / Math.max(repo.forks, 1)).toFixed(2)}⭐/fork\n\n`;
     });
 
-    message += `\n💡 *Réponds avec le numéro* (1, 2, 3...) pour voir le lien GitHub complet !`;
+    let footer = `💡 *Commandes disponibles:*\n`;
+    footer += `  • *!github <numéro>* → Voir détails\n`;
+    footer += `  • *!github next* → Page suivante\n`;
+    footer += `  • *!github prev* → Page précédente\n`;
+    footer += `  • *!github top* → Trier par stars\n`;
+    footer += `  • *!github new* → Nouvelle recherche\n`;
+    
+    if (totalPages > 1) {
+        footer += `\n📍 Page ${page}/${totalPages}`;
+    }
+
+    message += createFooter(footer);
     
     return message;
 }
 
-function formatRepoDetails(repo, number) {
-    const emoji = getRandomEmoji();
-    let message = `${getRandomMessage(DETAIL_MESSAGES)}\n\n`;
-    message += `${emoji} *${repo.name}*\n`;
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
+function formatRepoDetails(repo, index) {
+    let message = createHeader(`Détails du Repo #${index}`);
+    
+    message += `\n${getRandomMessage(DETAIL_MESSAGES)}\n\n`;
+    
+    message += `*📦 ${repo.name}*\n`;
+    message += `${LINE_DIVIDER}\n\n`;
+    
     message += `📝 *Description:*\n${repo.description}\n\n`;
-    message += `⭐ *Stars:* ${repo.stars.toLocaleString()}\n`;
-    message += `🔀 *Forks:* ${repo.forks.toLocaleString()}\n\n`;
-    message += `🔗 *Lien GitHub:*\n${repo.url}\n\n`;
-    message += `💬 Tapez une nouvelle recherche ou un autre numéro pour continuer !`;
+    
+    message += `📊 *Statistiques:*\n`;
+    message += `  ⭐ Stars: ${formatNumber(repo.stars)} (${repo.stars.toLocaleString()})\n`;
+    message += `  🔀 Forks: ${formatNumber(repo.forks)} (${repo.forks.toLocaleString()})\n`;
+    message += `  📈 Popularité: ${getPopularityLevel(repo.stars)}\n`;
+    message += `  💪 Santé du projet: ${getHealthStatus(repo)}\n\n`;
+    
+    message += `🔗 *Accès Direct:*\n`;
+    message += `${repo.url}\n\n`;
+    
+    message += `${LINE_DIVIDER}\n`;
+    message += `💬 Tapez un autre numéro ou *!github* pour continuer!`;
     
     return message;
+}
+
+function getPopularityLevel(stars) {
+    if (stars >= 30000) return '⭐⭐⭐⭐⭐ Très populaire';
+    if (stars >= 10000) return '⭐⭐⭐⭐ Populaire';
+    if (stars >= 5000) return '⭐⭐⭐ Bien connu';
+    if (stars >= 1000) return '⭐⭐ Reconnu';
+    return '⭐ Émergent';
+}
+
+function getHealthStatus(repo) {
+    const forksRatio = repo.forks / Math.max(repo.stars, 1);
+    if (forksRatio > 0.3) return '🟢 Excellent';
+    if (forksRatio > 0.1) return '🟡 Bon';
+    return '🔵 Stable';
+}
+
+function sortByStars(results) {
+    return [...results].sort((a, b) => b.stars - a.stars);
 }
 
 module.exports = {
     name: 'github',
     author: 'Developer',
-    description: 'Recherche des dépôts GitHub',
-    usage: 'github <query>',
+    description: 'Recherche des dépôts GitHub avec pagination et détails',
+    usage: 'github <query|next|prev|top|numéro>',
     category: 'VIP',
 
     async execute(message, args, api, event) {
         try {
             const senderId = event.senderID;
-            const input = args.join(' ').trim();
+            const input = args.join(' ').trim().toLowerCase();
 
             if (!input) {
                 return sendMessage(
                     senderId,
-                    '❌ Utilise la commande ainsi:\n*!github <terme de recherche>*\n\nExemple: *!github api rest*',
+                    createHeader('Utilisation') + 
+                    `\n\n*Commandes disponibles:*\n` +
+                    `  • *!github <terme>* → Chercher un repo\n` +
+                    `  • *!github <numéro>* → Voir détails\n` +
+                    `  • *!github next* → Page suivante\n` +
+                    `  • *!github prev* → Page précédente\n` +
+                    `  • *!github top* → Trier par popularité\n\n` +
+                    `*Exemple:* !github api rest`,
                     api,
                     event
                 );
             }
 
+            // Gestion des commandes de navigation
+            if (input === 'next') {
+                if (!userSessions.has(senderId)) {
+                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
+                }
+                const session = userSessions.get(senderId);
+                const nextPage = Math.min(session.page + 1, getTotalPages(session.results.length));
+                
+                if (nextPage === session.page) {
+                    return sendMessage(senderId, '⚠️ Tu es déjà à la dernière page!', api, event);
+                }
+                
+                session.page = nextPage;
+                const resultMessage = formatSearchResults(session.results, nextPage);
+                return sendMessage(senderId, resultMessage, api, event);
+            }
+
+            if (input === 'prev') {
+                if (!userSessions.has(senderId)) {
+                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
+                }
+                const session = userSessions.get(senderId);
+                const prevPage = Math.max(session.page - 1, 1);
+                
+                if (prevPage === session.page) {
+                    return sendMessage(senderId, '⚠️ Tu es déjà à la première page!', api, event);
+                }
+                
+                session.page = prevPage;
+                const resultMessage = formatSearchResults(session.results, prevPage);
+                return sendMessage(senderId, resultMessage, api, event);
+            }
+
+            if (input === 'top') {
+                if (!userSessions.has(senderId)) {
+                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
+                }
+                const session = userSessions.get(senderId);
+                session.results = sortByStars(session.results);
+                session.page = 1;
+                const resultMessage = formatSearchResults(session.results, 1);
+                return sendMessage(senderId, resultMessage, api, event);
+            }
+
             // Vérifier si c'est une sélection de numéro
             const numberInput = parseInt(input);
-            if (!isNaN(numberInput) && userSessions.has(senderId)) {
+            if (!isNaN(numberInput) && numberInput > 0) {
+                if (!userSessions.has(senderId)) {
+                    return sendMessage(senderId, '❌ Aucune recherche active. Fais une recherche d\'abord!', api, event);
+                }
+                
                 const session = userSessions.get(senderId);
                 const selectedIndex = numberInput - 1;
 
@@ -117,7 +255,7 @@ module.exports = {
                 } else {
                     return sendMessage(
                         senderId,
-                        `❌ Numéro invalide ! Choisissez entre 1 et ${session.results.length}`,
+                        `❌ *Numéro invalide!*\nChoisissez entre 1 et ${session.results.length}`,
                         api,
                         event
                     );
@@ -125,25 +263,36 @@ module.exports = {
             }
 
             // Nouvelle recherche
-            const typingIndicator = sendMessage(senderId, '🔄 Recherche en cours...', api, event);
+            const typingIndicator = sendMessage(senderId, '⏳ Recherche en cours... Patience! 🔍', api, event);
             
             const results = await searchGithub(input);
             
+            if (results.length === 0) {
+                return sendMessage(
+                    senderId,
+                    createHeader('Résultat') +
+                    `\n\n❌ *Aucun résultat* pour "${input}"\n\nEssaie un autre terme!`,
+                    api,
+                    event
+                );
+            }
+
             // Sauvegarder les résultats dans la session
             userSessions.set(senderId, {
                 results: results,
                 query: input,
+                page: 1,
                 timestamp: Date.now()
             });
 
-            const formattedMessage = formatSearchResults(results);
+            const formattedMessage = formatSearchResults(results, 1);
             return sendMessage(senderId, formattedMessage, api, event);
 
         } catch (error) {
             console.error('Erreur commande github:', error);
             return sendMessage(
                 event.senderID,
-                `❌ Erreur : ${error.message}`,
+                `❌ *Erreur lors de la recherche*\n${error.message}`,
                 api,
                 event
             );
@@ -151,11 +300,11 @@ module.exports = {
     }
 };
 
-// Nettoyer les vieilles sessions (plus de 1 heure)
+// Nettoyer les vieilles sessions (plus de 2 heures)
 setInterval(() => {
     const now = Date.now();
     for (const [userId, session] of userSessions.entries()) {
-        if (now - session.timestamp > 3600000) {
+        if (now - session.timestamp > 7200000) {
             userSessions.delete(userId);
         }
     }
