@@ -33,15 +33,26 @@ module.exports = async (senderId, prompt, api) => {
         const input = (typeof prompt === 'string') ? prompt.trim() : '';
         const session = userSessions.get(senderId) || {};
 
+        // Gestion de la réponse Oui/Non pour le lien de téléchargement
+        if (session.pendingDownloadLink) {
+            const answer = input.toLowerCase();
+            if (answer === 'oui' || answer === 'yes') {
+                await sendMessage(senderId, `🔗 Voici votre lien de téléchargement direct :\n${session.lastDownloadUrl}`);
+                userSessions.delete(senderId);
+            } else if (answer === 'non' || answer === 'no') {
+                await sendMessage(senderId, "D'accord ! N'hésitez pas si vous avez besoin d'autre chose. 😊");
+                userSessions.delete(senderId);
+            }
+            return;
+        }
+
         // Gestion de la sélection du format (-v, -a, -i) après avoir choisi un numéro
         if (session.pendingFormat && session.selectedVideo) {
             const format = input.toLowerCase();
             if (format === '-v' || format === 'video') {
                 await handleVideoDownload(senderId, session.selectedVideo, 'MP4');
-                userSessions.delete(senderId);
             } else if (format === '-a' || format === 'audio') {
                 await handleVideoDownload(senderId, session.selectedVideo, 'MP3');
-                userSessions.delete(senderId);
             } else if (format === '-i' || format === 'info') {
                 await handleInfoDisplay(senderId, session.selectedVideo);
                 userSessions.delete(senderId);
@@ -160,17 +171,30 @@ async function handleVideoDownload(senderId, video, format) {
     try {
         const dlRes = await axios.get(downloadUrl);
         if (dlRes.data && dlRes.data.success && dlRes.data.result) {
+            const directUrl = dlRes.data.result.downloadUrl;
             await sendMessage(senderId, {
                 attachment: {
                     type: format === 'MP3' ? 'audio' : 'video',
-                    payload: { url: dlRes.data.result.downloadUrl, is_reusable: true }
+                    payload: { url: directUrl, is_reusable: true }
                 }
             });
+
+            // Demander si l'utilisateur veut le lien direct
+            userSessions.set(senderId, { 
+                pendingDownloadLink: true, 
+                lastDownloadUrl: directUrl 
+            });
+            
+            setTimeout(async () => {
+                await sendMessage(senderId, "✅ Fichier envoyé ! Souhaitez-vous également recevoir le lien de téléchargement direct ? (Répondez par Oui ou Non)");
+            }, 2000);
+
         } else {
             throw new Error();
         }
     } catch (e) {
         await sendMessage(senderId, "❌ Erreur lors du téléchargement. Le fichier est peut-être trop lourd.");
+        userSessions.delete(senderId);
     }
 }
 
