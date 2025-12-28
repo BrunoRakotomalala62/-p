@@ -16,10 +16,10 @@ const ITEMS_PER_PAGE = 10;
 const userSessions = new Map();
 
 module.exports = async (senderId, prompt) => {
-    // Admin check logic - Only allow if user is NOT an admin
+    // Admin check logic - Only allow if user IS an admin
     const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : [];
-    if (adminIds.includes(senderId)) {
-        return; // Ignore if user is an admin
+    if (!adminIds.includes(senderId)) {
+        return; // Ignore if user is NOT an admin
     }
 
     const input = prompt.trim();
