@@ -38,7 +38,7 @@ module.exports = async (senderId, prompt) => {
 
     // Category search
     for (const category in IMAGE_DATA) {
-        if (inputLower === category.toLowerCase()) {
+        if (inputLower.includes(category.toLowerCase())) {
             userSessions.set(senderId, { category });
             await displayCategory(senderId, category, 1);
             return;
