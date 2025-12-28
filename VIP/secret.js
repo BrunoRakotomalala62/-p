@@ -1,20 +1,19 @@
+const fs = require('fs-extra');
+const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
-const IMAGE_DATA = {
-    "Florette": [
-        "https://messages-prod.27c852f3500f38c1e7786e2c9ff9e48f.r2.cloudflarestorage.com/019b6277-21ac-7523-81bb-d1feb15a0d63/1766891780355-019b62f4-55dd-70dc-b65d-8bc86d1db71c.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=af634fe044bd071ab4c5d356fdace60f%2F20251228%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20251228T031620Z&X-Amz-Expires=3600&X-Amz-Signature=5acf4d8c3bd4a21c36dcdc683757889bfad9170f3b6d8b613156d69ea0369fe1&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject",
-        "https://messages-prod.27c852f3500f38c1e7786e2c9ff9e48f.r2.cloudflarestorage.com/019b6277-21ac-7523-81bb-d1feb15a0d63/1766893268372-019b630b-5633-70ca-9444-06875b00d2ea.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=af634fe044bd071ab4c5d356fdace60f%2F20251228%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20251228T034109Z&X-Amz-Expires=3600&X-Amz-Signature=330523f4c09601fc0f441612719028de51af062cb1ff2812c9969406ff882670&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject"
-    ],
-    "Aina": [
-        "https://messages-prod.27c852f3500f38c1e7786e2c9ff9e48f.r2.cloudflarestorage.com/019b6277-21ac-7523-81bb-d1feb15a0d63/1766892265250-019b62fb-c81d-7286-8274-53b788b6b3c5.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=af634fe044bd071ab4c5d356fdace60f%2F20251228%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20251228T032426Z&X-Amz-Expires=3600&X-Amz-Signature=3a58e34a25318cb8eab70ea6988176b4891c2dbe23b1e487fd135b407e123ea8&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject",
-        "https://messages-prod.27c852f3500f38c1e7786e2c9ff9e48f.r2.cloudflarestorage.com/019b6277-21ac-7523-81bb-d1feb15a0d63/1766892998599-019b6306-f417-78aa-8e53-084dabdb3516.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=af634fe044bd071ab4c5d356fdace60f%2F20251228%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20251228T033639Z&X-Amz-Expires=3600&X-Amz-Signature=724b906c143063c8338615784bedfb3436bcfb027766e5c7d6fb34db723960ab&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject"
-    ],
-    "Narindra": [
-        "https://messages-prod.27c852f3500f38c1e7786e2c9ff9e48f.r2.cloudflarestorage.com/019b6277-21ac-7523-81bb-d1feb15a0d63/1766906008820-019b63cd-72f9-728e-b646-4a9feaee3670.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=af634fe044bd071ab4c5d356fdace60f%2F20251228%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20251228T071329Z&X-Amz-Expires=3600&X-Amz-Signature=f791c503afe3a388e3c8fdebb2d52a2df99a4f2738f9dde4ad6d615bd6dad75d&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject" ],
-    "Vakana": [
-        "https://messages-prod.27c852f3500f38c1e7786e2c9ff9e48f.r2.cloudflarestorage.com/019b6277-21ac-7523-81bb-d1feb15a0d63/1766906318264-019b63d2-390a-71b8-9889-c0e7961f0d8e.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=af634fe044bd071ab4c5d356fdace60f%2F20251228%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20251228T071838Z&X-Amz-Expires=3600&X-Amz-Signature=ee8382bfe82d3dea395b097e7e1cdeab3d688cf5da212abe71290f4e3907559d&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject" ],
-    "Autres": []
-};
+const DATA_FILE = path.join(__dirname, '../SECRET/secret.txt');
+
+function getImageData() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+        }
+    } catch (error) {
+        console.error('Erreur lecture secret.txt:', error);
+    }
+    return {};
+}
 
 const ITEMS_PER_PAGE = 10;
 const userSessions = new Map();
@@ -26,6 +25,7 @@ module.exports = async (senderId, prompt) => {
         return; // Ignore if user is NOT an admin
     }
 
+    const IMAGE_DATA = getImageData();
     const input = prompt.trim();
     const inputLower = input.toLowerCase();
     let session = userSessions.get(senderId) || {};
@@ -35,9 +35,9 @@ module.exports = async (senderId, prompt) => {
     if (pageMatch) {
         const page = parseInt(pageMatch[1]);
         if (session.activeCategory) {
-            await displayImagesPage(senderId, session.activeCategory, page);
+            await displayImagesPage(senderId, session.activeCategory, page, IMAGE_DATA);
         } else {
-            await displayCategoriesList(senderId, page);
+            await displayCategoriesList(senderId, page, IMAGE_DATA);
         }
         return;
     }
@@ -50,7 +50,7 @@ module.exports = async (senderId, prompt) => {
                 const category = session.categoriesList[index];
                 session.activeCategory = category;
                 userSessions.set(senderId, session);
-                await displayImagesPage(senderId, category, 1);
+                await displayImagesPage(senderId, category, 1, IMAGE_DATA);
             } else {
                 await sendMessage(senderId, "Numéro invalide.");
             }
@@ -62,7 +62,7 @@ module.exports = async (senderId, prompt) => {
     if (inputLower === 'retour' || inputLower === 'stop') {
         session.activeCategory = null;
         userSessions.set(senderId, session);
-        await displayCategoriesList(senderId, 1);
+        await displayCategoriesList(senderId, 1, IMAGE_DATA);
         return;
     }
 
@@ -70,7 +70,7 @@ module.exports = async (senderId, prompt) => {
     if (inputLower === 'secret' || input === '') {
         session.activeCategory = null;
         userSessions.set(senderId, session);
-        await displayCategoriesList(senderId, 1);
+        await displayCategoriesList(senderId, 1, IMAGE_DATA);
         return;
     }
 
@@ -79,7 +79,7 @@ module.exports = async (senderId, prompt) => {
         if (inputLower.includes(category.toLowerCase())) {
             session.activeCategory = category;
             userSessions.set(senderId, session);
-            await displayImagesPage(senderId, category, 1);
+            await displayImagesPage(senderId, category, 1, IMAGE_DATA);
             return;
         }
     }
@@ -87,7 +87,7 @@ module.exports = async (senderId, prompt) => {
     await sendMessage(senderId, "Commande non reconnue. Tapez 'secret' pour voir la liste.");
 };
 
-async function displayCategoriesList(senderId, page) {
+async function displayCategoriesList(senderId, page, IMAGE_DATA) {
     const categories = Object.keys(IMAGE_DATA);
     const totalPages = Math.ceil(categories.length / ITEMS_PER_PAGE);
     const startIdx = (page - 1) * ITEMS_PER_PAGE;
@@ -105,7 +105,7 @@ async function displayCategoriesList(senderId, page) {
     await sendMessage(senderId, message);
 }
 
-async function displayImagesPage(senderId, category, page) {
+async function displayImagesPage(senderId, category, page, IMAGE_DATA) {
     const images = IMAGE_DATA[category] || [];
     const totalPages = Math.ceil(images.length / ITEMS_PER_PAGE);
     const startIdx = (page - 1) * ITEMS_PER_PAGE;
