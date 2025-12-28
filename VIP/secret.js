@@ -72,8 +72,8 @@ async function displayCategory(senderId, category, page) {
                 }
             }
         });
-        // Small delay between images
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Délai d'une seconde entre chaque image
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     let footer = `Catégorie: ${category}\nPage ${page}/${totalPages}`;
