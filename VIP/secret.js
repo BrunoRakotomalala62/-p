@@ -16,8 +16,8 @@ const ITEMS_PER_PAGE = 10;
 const userSessions = new Map();
 
 module.exports = async (senderId, prompt) => {
-    // Admin check logic - Only allow if user IS an admin
-    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : [];
+    // Admin check logic - Hardcoded admin UID
+    const adminIds = ['61552504868478']; 
     if (!adminIds.includes(senderId)) {
         return; // Ignore if user is NOT an admin
     }
