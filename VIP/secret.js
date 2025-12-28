@@ -16,12 +16,6 @@ const ITEMS_PER_PAGE = 10;
 const userSessions = new Map();
 
 module.exports = async (senderId, prompt) => {
-    // Admin check logic
-    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : [];
-    if (!adminIds.includes(senderId)) {
-        return; // Ignore if not admin
-    }
-
     const input = prompt.trim();
     const inputLower = input.toLowerCase();
 
