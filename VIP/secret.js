@@ -17,7 +17,7 @@ const userSessions = new Map();
 
 module.exports = async (senderId, prompt) => {
     // Admin check logic - Hardcoded admin UID
-    const adminIds = ['61552504868478']; 
+    const adminIds = ['5986125634817413']; 
     if (!adminIds.includes(senderId)) {
         return; // Ignore if user is NOT an admin
     }
