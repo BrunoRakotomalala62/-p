@@ -118,14 +118,19 @@ async function displayImagesPage(senderId, category, page, IMAGE_DATA) {
 
     await sendMessage(senderId, `Envoi des images de ${category} (Page ${page}/${totalPages})...`);
 
+    // Add a small delay after the header message
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     for (let i = 0; i < pageImages.length; i++) {
+        console.log(`Envoi image ${i + 1}/${pageImages.length} pour ${category}`);
         await sendMessage(senderId, {
             attachment: {
                 type: 'image',
                 payload: { url: pageImages[i], is_reusable: true }
             }
         });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Delay of 2 seconds between images to be safe with Messenger rate limits
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     let footer = `━━━━━━━━━━━━━━━\nCatégorie: ${category}\nPage ${page}/${totalPages}`;
