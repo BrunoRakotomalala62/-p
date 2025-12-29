@@ -245,11 +245,21 @@ app.get('/health', (req, res) => {
 // Auto-ping toutes les 14 minutes pour garder le bot éveillé sur Render
 cron.schedule('*/14 * * * *', async () => {
     try {
-        const appUrl = process.env.RENDER_URL || 'https://votre-app.onrender.com';
-        const response = await axios.get(`${appUrl}/health`);
-        console.log(`Auto-ping: ${response.status}`);
+        // Render fournit automatiquement l'URL externe dans RENDER_EXTERNAL_URL
+        // Sinon on essaie RENDER_URL ou une URL par défaut
+        const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.RENDER_URL;
+        
+        if (!appUrl) {
+            console.log('Auto-ping: URL non définie (pas sur Render ?)');
+            return;
+        }
+
+        const response = await axios.get(`${appUrl}/health`, {
+            headers: { 'User-Agent': 'Render-Auto-Ping-Bot' }
+        });
+        console.log(`Auto-ping réussi sur ${appUrl}: ${response.status}`);
     } catch (error) {
-        console.error(`Erreur ping: ${error.message}`);
+        console.error(`Erreur auto-ping: ${error.message}`);
     }
 });
 
