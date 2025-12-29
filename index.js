@@ -242,22 +242,18 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Auto-ping toutes les 14 minutes pour garder le bot éveillé sur Render
-cron.schedule('*/14 * * * *', async () => {
+// Auto-ping de 08:00 à 22:00 toutes les 14 minutes pour économiser le quota Render (750h/mois)
+// Cela fait 14 heures d'activité par jour, soit environ 434 heures par mois.
+cron.schedule('*/14 8-22 * * *', async () => {
     try {
-        // Render fournit automatiquement l'URL externe dans RENDER_EXTERNAL_URL
-        // Sinon on essaie RENDER_URL ou une URL par défaut
         const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.RENDER_URL;
         
-        if (!appUrl) {
-            console.log('Auto-ping: URL non définie (pas sur Render ?)');
-            return;
-        }
+        if (!appUrl) return;
 
         const response = await axios.get(`${appUrl}/health`, {
             headers: { 'User-Agent': 'Render-Auto-Ping-Bot' }
         });
-        console.log(`Auto-ping réussi sur ${appUrl}: ${response.status}`);
+        console.log(`Auto-ping économique réussi sur ${appUrl}: ${response.status}`);
     } catch (error) {
         console.error(`Erreur auto-ping: ${error.message}`);
     }
