@@ -242,13 +242,19 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Auto-ping de 06:00 à 22:00 toutes les 14 minutes pour économiser le quota Render (750h/mois)
-// Cela fait 16 heures d'activité par jour, soit environ 496 heures par mois (31 jours).
-// On respecte largement la limite des 750h.
-cron.schedule('*/14 6-22 * * *', async () => {
+// Auto-ping de 06:00 à 23:55 toutes les 14 minutes pour économiser le quota Render (750h/mois)
+// Cela fait environ 18 heures d'activité par jour, soit environ 558 heures par mois (31 jours).
+// On respecte toujours largement la limite des 750h.
+cron.schedule('*/14 6-23 * * *', async () => {
     try {
+        const now = new Date();
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+
+        // Arrêt à 23h55
+        if (hour === 23 && minute > 55) return;
+
         const appUrl = process.env.RENDER_EXTERNAL_URL || process.env.RENDER_URL;
-        
         if (!appUrl) return;
 
         const response = await axios.get(`${appUrl}/health`, {
