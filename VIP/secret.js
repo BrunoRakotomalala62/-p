@@ -66,7 +66,7 @@ module.exports = async (senderId, prompt) => {
         return;
     }
 
-    // Show category list
+    // Initial command: "secret" or searching for categories
     if (inputLower === 'secret' || input === '') {
         session.activeCategory = null;
         userSessions.set(senderId, session);
@@ -74,8 +74,17 @@ module.exports = async (senderId, prompt) => {
         return;
     }
 
-    // Direct search
-    for (const category in IMAGE_DATA) {
+    // Direct search (exact match first, then include)
+    const categories = Object.keys(IMAGE_DATA);
+    const exactMatch = categories.find(cat => cat.toLowerCase() === inputLower);
+    if (exactMatch) {
+        session.activeCategory = exactMatch;
+        userSessions.set(senderId, session);
+        await displayImagesPage(senderId, exactMatch, 1, IMAGE_DATA);
+        return;
+    }
+
+    for (const category of categories) {
         if (inputLower.includes(category.toLowerCase())) {
             session.activeCategory = category;
             userSessions.set(senderId, session);
