@@ -139,9 +139,9 @@ app.post('/gemini/chat-with-files', upload.array('files', 10), async (req, res) 
             filePaths.push(tempPath);
             
             // Créer l'URL publique
-            const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+            const baseUrl = process.env.RENDER_EXTERNAL_URL || (process.env.REPLIT_DEV_DOMAIN 
                 ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-                : `http://localhost:${process.env.PORT || 5000}`;
+                : `http://localhost:${process.env.PORT || 5000}`);
             const imageUrl = `${baseUrl}/temp/${uniqueName}`;
             imageUrls.push(imageUrl);
         }
