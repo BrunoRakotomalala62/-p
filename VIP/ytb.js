@@ -2,8 +2,8 @@ const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
 const sendMessage = require('../handles/sendMessage');
+const yts = require('yt-search');
 
-const API_BASE = 'https://youtube-api-milay.vercel.app';
 const MP3_API_BASE = 'https://norch-project.gleeze.com/api/ytmp3';
 const MP4_API_BASE = 'https://norch-project.gleeze.com/api/ytdl';
 
@@ -105,19 +105,30 @@ module.exports = async (senderId, prompt, api) => {
 async function handleVideoSearch(senderId, query) {
     await sendMessage(senderId, `🔍 Recherche de "${query}"...`);
     
-    const searchUrl = `${API_BASE}/recherche?titre=${encodeURIComponent(query)}`;
-    const response = await axios.get(searchUrl);
-    
-    if (response.data && response.data.videos && response.data.videos.length > 0) {
-        const allVideos = response.data.videos;
-        userSessions.set(senderId, {
-            allVideos,
-            query,
-            currentPage: 1
-        });
-        await displayPage(senderId, allVideos, 1, query);
-    } else {
-        await sendMessage(senderId, `😔 Aucun résultat trouvé pour "${query}"`);
+    try {
+        const r = await yts(query);
+        const videos = r.videos;
+        
+        if (videos && videos.length > 0) {
+            const allVideos = videos.map(v => ({
+                title: v.title,
+                videoId: v.videoId,
+                url: v.url,
+                thumbnail: v.thumbnail || v.image
+            }));
+
+            userSessions.set(senderId, {
+                allVideos,
+                query,
+                currentPage: 1
+            });
+            await displayPage(senderId, allVideos, 1, query);
+        } else {
+            await sendMessage(senderId, `😔 Aucun résultat trouvé pour "${query}"`);
+        }
+    } catch (error) {
+        console.error('Erreur yt-search:', error);
+        throw error;
     }
 }
 
@@ -138,8 +149,8 @@ async function displayPage(senderId, allVideos, page, query) {
         // Envoi titre + image avec délai
         await sendMessage(senderId, videoMsg);
         
-        // On essaie de deviner l'URL de l'image si elle n'est pas fournie par l'API
-        const imageUrl = `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
+        // On utilise l'image fournie par l'API ou on essaie de deviner
+        const imageUrl = video.thumbnail || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
         await sendMessage(senderId, {
             attachment: {
                 type: 'image',
