@@ -59,6 +59,18 @@ module.exports = async (senderId, prompt) => {
     // Number selection
     if (/^\d+$/.test(input)) {
         const index = parseInt(input) - 1;
+        
+        // Si on est déjà dans une catégorie, on permet de changer directement de catégorie
+        const categories = Object.keys(IMAGE_DATA);
+        if (index >= 0 && index < categories.length) {
+            const category = categories[index];
+            session.activeCategory = category;
+            session.categoriesList = categories; // S'assurer que la liste est à jour
+            userSessions.set(senderId, session);
+            await displayImagesPage(senderId, category, 1);
+            return;
+        }
+
         if (session.categoriesList && !session.activeCategory) {
             if (index >= 0 && index < session.categoriesList.length) {
                 const category = session.categoriesList[index];
