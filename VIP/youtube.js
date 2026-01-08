@@ -1,802 +1,215 @@
 const axios = require('axios');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
-const FormData = require('form-data');
-const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
+const yts = require('yt-search');
 
-const API_BASE = 'https://youtube-api-milay.vercel.app';
 const MP3_API_BASE = 'https://norch-project.gleeze.com/api/ytmp3';
 const MP4_API_BASE = 'https://norch-project.gleeze.com/api/ytdl';
-const DEFAULT_VIDEO_QUALITY = '360';
-const MAX_DIRECT_SEND_SIZE = 25 * 1024 * 1024;
-const PART_SIZE = 25 * 1024 * 1024;
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 3000;
+
 const VIDEOS_PER_PAGE = 10;
-const TEMP_DIR = '/tmp/youtube_downloads';
-
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
-}
-
 const userSessions = new Map();
 
-const FORMAT_OPTIONS = ['MP3', 'MP4'];
-
 const SEARCH_MESSAGES = [
-    "Voici les pépites que j'ai dénichées pour toi",
-    "J'ai trouvé ces merveilles musicales",
-    "Découvre ces trésors YouTube",
-    "Voilà ce que YouTube a de meilleur à t'offrir",
-    "Ces résultats vont te plaire",
-    "Mission accomplie ! Voici tes résultats"
-];
-
-const FORMAT_QUESTIONS = [
-    "Tu préfères le son en MP3 ou la vidéo complète en MP4 ?",
-    "Comment tu veux ton contenu ? MP3 (audio) ou MP4 (vidéo) ?",
-    "Dis-moi : MP3 pour l'audio seul ou MP4 pour la vidéo ?",
-    "MP3 pour écouter ou MP4 pour regarder ? À toi de choisir !",
-    "Quel format te ferait plaisir ? MP3 ou MP4 ?"
+    "✨ Voici les pépites que j'ai dénichées pour toi",
+    "🌟 J'ai trouvé ces merveilles musicales",
+    "💎 Découvre ces trésors YouTube",
+    "🔥 Voilà ce que YouTube a de meilleur à t'offrir"
 ];
 
 const DOWNLOAD_MESSAGES = [
-    "C'est parti ! Je t'envoie ça tout de suite",
-    "Préparation en cours... Ça arrive !",
-    "Je m'occupe de tout, patience...",
-    "Téléchargement lancé ! Reste connecté",
-    "En route vers toi..."
+    "🚀 C'est parti ! Je t'envoie ça tout de suite",
+    "⚡ Préparation en cours... Ça arrive !",
+    "📦 Je m'occupe de tout, patience...",
+    "📥 Téléchargement lancé ! Reste connecté"
 ];
 
 function getRandomMessage(messages) {
     return messages[Math.floor(Math.random() * messages.length)];
 }
 
-function isFormatInput(input) {
-    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
-    return FORMAT_OPTIONS.includes(normalizedInput);
-}
-
-function normalizeFormat(input) {
-    const normalizedInput = input.toUpperCase().replace(/\s/g, '');
-    return FORMAT_OPTIONS.includes(normalizedInput) ? normalizedInput : 'MP4';
-}
-
-function getVideosForPage(allVideos, page) {
-    const startIndex = (page - 1) * VIDEOS_PER_PAGE;
-    const endIndex = startIndex + VIDEOS_PER_PAGE;
-    return allVideos.slice(startIndex, endIndex);
-}
-
-function getTotalPages(totalVideos) {
-    return Math.ceil(totalVideos / VIDEOS_PER_PAGE);
-}
-
-function sanitizeFilename(filename) {
-    return filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100);
-}
-
-// Fonction pour télécharger le fichier en mémoire (buffer)
-async function downloadToBuffer(url) {
-    try {
-        console.log('Téléchargement en mémoire:', url);
-        const response = await axios({
-            method: 'GET',
-            url: url,
-            responseType: 'arraybuffer',
-            timeout: 180000,
-            maxRedirects: 5,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-        
-        const buffer = Buffer.from(response.data);
-        console.log(`Fichier téléchargé en mémoire: ${(buffer.length / (1024 * 1024)).toFixed(2)} MB`);
-        return { buffer, size: buffer.length };
-    } catch (error) {
-        console.error('Erreur téléchargement en mémoire:', error.message);
-        throw error;
-    }
-}
-
-// Fonction pour envoyer un buffer directement à Facebook Messenger
-async function sendBufferToMessenger(recipientId, buffer, fileType, filename) {
-    try {
-        const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-        if (!PAGE_ACCESS_TOKEN) {
-            throw new Error('PAGE_ACCESS_TOKEN non défini');
-        }
-
-        const stream = Readable.from(buffer);
-        
-        const form = new FormData();
-        form.append('recipient', JSON.stringify({ id: recipientId }));
-        form.append('message', JSON.stringify({
-            attachment: {
-                type: fileType,
-                payload: {
-                    is_reusable: false
-                }
-            }
-        }));
-        form.append('filedata', stream, {
-            filename: filename,
-            contentType: fileType === 'audio' ? 'audio/mpeg' : 'video/mp4'
-        });
-
-        const response = await axios.post(
-            `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-            form,
-            {
-                headers: form.getHeaders(),
-                maxContentLength: Infinity,
-                maxBodyLength: Infinity,
-                timeout: 180000
-            }
-        );
-
-        console.log('Fichier envoyé via FormData:', response.data);
-        return { success: true, data: response.data };
-    } catch (error) {
-        const errorData = error.response ? error.response.data : error.message;
-        console.error('Erreur envoi FormData:', errorData);
-        return { success: false, error: errorData };
-    }
-}
-
-function formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-}
-
-async function axiosWithRetry(url, options = {}, retries = MAX_RETRIES) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const response = await axios.get(url, {
-                timeout: 120000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json'
-                },
-                ...options
-            });
-            return response;
-        } catch (error) {
-            const statusCode = error.response ? error.response.status : 'N/A';
-            const errorMsg = error.response ? error.response.data : error.message;
-            console.log(`Tentative ${attempt}/${retries} échouée (Status: ${statusCode}):`, error.message);
-            console.log('Détails erreur:', errorMsg);
-            
-            if (attempt === retries) {
-                throw error;
-            }
-            
-            if (error.response && (error.response.status === 500 || error.response.status === 502 || error.response.status === 503 || error.response.status === 504)) {
-                console.log(`Attente ${RETRY_DELAY}ms avant nouvelle tentative...`);
-                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            } else {
-                throw error;
-            }
-        }
-    }
-}
-
-async function downloadFile(url, outputPath) {
-    const response = await axios({
-        method: 'GET',
-        url: url,
-        responseType: 'stream',
-        timeout: 300000,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-    });
-    
-    const writer = fs.createWriteStream(outputPath);
-    response.data.pipe(writer);
-    
-    return new Promise((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-    });
-}
-
-function splitFile(inputPath, partSize) {
-    const parts = [];
-    const fileSize = fs.statSync(inputPath).size;
-    const numParts = Math.ceil(fileSize / partSize);
-    const buffer = fs.readFileSync(inputPath);
-    
-    for (let i = 0; i < numParts; i++) {
-        const start = i * partSize;
-        const end = Math.min(start + partSize, fileSize);
-        const partBuffer = buffer.slice(start, end);
-        const partPath = `${inputPath}.partie${i + 1}`;
-        
-        fs.writeFileSync(partPath, partBuffer);
-        parts.push({
-            path: partPath,
-            size: end - start,
-            partNumber: i + 1,
-            totalParts: numParts
-        });
-    }
-    
-    return parts;
-}
-
-function cleanupFiles(files) {
-    for (const file of files) {
-        try {
-            if (fs.existsSync(file)) {
-                fs.unlinkSync(file);
-            }
-        } catch (e) {
-            console.log('Erreur nettoyage fichier:', e.message);
-        }
-    }
-}
-
 module.exports = async (senderId, prompt, api) => {
     try {
-        const userSession = userSessions.get(senderId) || {};
         const input = (typeof prompt === 'string') ? prompt.trim() : '';
-        
-        if (input && input.length > 0) {
-            if (userSession.pendingFormat && userSession.selectedVideo) {
-                if (isFormatInput(input)) {
-                    const format = normalizeFormat(input);
-                    await handleVideoDownload(senderId, userSession.selectedVideo, format);
-                } else {
-                    await sendMessage(senderId, `
-❌ 𝗙𝗼𝗿𝗺𝗮𝘁 𝗻𝗼𝗻 𝗿𝗲𝗰𝗼𝗻𝗻𝘂 ❌
-━━━━━━━━━━━━━━━━━━━
+        const session = userSessions.get(senderId) || {};
 
-🎵 MP3 - Pour écouter l'audio uniquement
-🎬 MP4 - Pour regarder la vidéo complète
-
-💡 Tape simplement : MP3 ou MP4
-                    `.trim());
-                }
-            } else if (/^\d+$/.test(input) && userSession.allVideos && userSession.allVideos.length > 0) {
-                const globalIndex = parseInt(input) - 1;
-                const currentPage = userSession.currentPage || 1;
-                const pageVideos = getVideosForPage(userSession.allVideos, currentPage);
-                const localIndex = globalIndex;
-                
-                if (localIndex >= 0 && localIndex < pageVideos.length) {
-                    const selectedVideo = pageVideos[localIndex];
-                    
-                    userSessions.set(senderId, {
-                        ...userSession,
-                        selectedVideo: selectedVideo,
-                        pendingFormat: true
-                    });
-                    
-                    const formatQuestion = getRandomMessage(FORMAT_QUESTIONS);
-                    
-                    await sendMessage(senderId, `
-🎯 𝗩𝗜𝗗𝗘́𝗢 𝗦𝗘́𝗟𝗘𝗖𝗧𝗜𝗢𝗡𝗡𝗘́𝗘 🎯
-━━━━━━━━━━━━━━━━━━━
-📹 ${selectedVideo.titre}
-
-🎵 ${formatQuestion}
-
-🎵 𝗠𝗣𝟯 ➜ Audio uniquement (${selectedVideo.taille_mp3})
-🎬 𝗠𝗣𝟰 ➜ Vidéo complète (${selectedVideo.taille_mp4})
-
-💡 Envoie : MP3 ou MP4
-                    `.trim());
-                } else {
-                    const pageVideosCount = pageVideos.length;
-                    await sendMessage(senderId, `
-❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗵𝗼𝗿𝘀 𝗹𝗶𝗺𝗶𝘁𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-📄 Page actuelle : ${currentPage}
-📊 Vidéos sur cette page : ${pageVideosCount}
-
-Choisis un numéro entre 1 et ${pageVideosCount} 🔢
-                    `.trim());
-                }
-            } else if (input.toLowerCase().startsWith('page ') || input.toLowerCase() === 'suivant' || input.toLowerCase() === 'precedent') {
-                if (userSession.allVideos && userSession.allVideos.length > 0) {
-                    let newPage;
-                    const totalPages = getTotalPages(userSession.allVideos.length);
-                    const currentPage = userSession.currentPage || 1;
-                    
-                    if (input.toLowerCase() === 'suivant') {
-                        newPage = Math.min(currentPage + 1, totalPages);
-                    } else if (input.toLowerCase() === 'precedent') {
-                        newPage = Math.max(currentPage - 1, 1);
-                    } else {
-                        newPage = parseInt(input.replace(/^page\s+/i, ''));
-                    }
-                    
-                    if (!isNaN(newPage) && newPage >= 1 && newPage <= totalPages) {
-                        await displayPage(senderId, userSession.allVideos, newPage, userSession.query);
-                    } else {
-                        await sendMessage(senderId, `
-❌ 𝗣𝗮𝗴𝗲 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-📄 Pages disponibles : 1 à ${totalPages}
-📍 Page actuelle : ${currentPage}
-
-💡 Utilise : youtube page <numéro>
-Exemple : youtube page 2
-                        `.trim());
-                    }
-                } else {
-                    await sendMessage(senderId, `
-❌ 𝗔𝘂𝗰𝘂𝗻𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 𝗮𝗰𝘁𝗶𝘃𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Fais d'abord une recherche !
-
-💡 Exemple : youtube Melky
-                    `.trim());
-                }
-            } else {
-                await handleVideoSearch(senderId, input);
+        // Gestion de la réponse Oui/Non pour le lien de téléchargement
+        if (session.pendingDownloadLink) {
+            const answer = input.toLowerCase();
+            if (answer === 'oui' || answer === 'yes') {
+                await sendMessage(senderId, `🔗 Voici votre lien de téléchargement direct :\n${session.lastDownloadUrl}`);
+                userSessions.delete(senderId);
+            } else if (answer === 'non' || answer === 'no') {
+                await sendMessage(senderId, "D'accord ! N'hésitez pas si vous avez besoin d'autre chose. 😊");
+                userSessions.delete(senderId);
             }
+            return;
+        }
+
+        // Gestion de la sélection du format (-v, -a, -i) après avoir choisi un numéro
+        if (session.pendingFormat && session.selectedVideo) {
+            const format = input.toLowerCase();
+            if (format === '-v' || format === 'video') {
+                await handleVideoDownload(senderId, session.selectedVideo, 'MP4');
+            } else if (format === '-a' || format === 'audio') {
+                await handleVideoDownload(senderId, session.selectedVideo, 'MP3');
+            } else if (format === '-i' || format === 'info') {
+                await handleInfoDisplay(senderId, session.selectedVideo);
+                userSessions.delete(senderId);
+            } else {
+                await sendMessage(senderId, "❌ Format invalide. Choisis : -v (vidéo), -a (audio) ou -i (infos)");
+            }
+            return;
+        }
+
+        // Gestion du choix du numéro
+        if (/^\d+$/.test(input) && session.allVideos) {
+            const index = parseInt(input) - 1;
+            const pageVideos = getVideosForPage(session.allVideos, session.currentPage || 1);
+            
+            if (index >= 0 && index < pageVideos.length) {
+                const selectedVideo = pageVideos[index];
+                userSessions.set(senderId, { ...session, selectedVideo, pendingFormat: true });
+                await sendMessage(senderId, `🎯 Tu as choisi : ${selectedVideo.title}\n\nQue veux-tu faire ?\n▶️ Tape -v pour la vidéo\n🎵 Tape -a pour l'audio\nℹ️ Tape -i pour les infos`);
+            } else {
+                await sendMessage(senderId, `❌ Numéro invalide. Choisis entre 1 et ${pageVideos.length}`);
+            }
+            return;
+        }
+
+        // Gestion de la pagination
+        if (input.toLowerCase().startsWith('page ') && session.allVideos) {
+            const page = parseInt(input.replace('page ', ''));
+            const totalPages = Math.ceil(session.allVideos.length / VIDEOS_PER_PAGE);
+            if (page >= 1 && page <= totalPages) {
+                await displayPage(senderId, session.allVideos, page, session.query);
+            } else {
+                await sendMessage(senderId, `❌ Page invalide (1-${totalPages})`);
+            }
+            return;
+        }
+
+        // Recherche par défaut
+        if (input) {
+            await handleVideoSearch(senderId, input);
         } else {
-            await sendMessage(senderId, `
-🎬 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗𝗘𝗥 🎬
-━━━━━━━━━━━━━━━━━━━
-Télécharge tes vidéos YouTube préférées !
-
-📝 𝗖𝗼𝗺𝗺𝗲𝗻𝘁 𝘂𝘁𝗶𝗹𝗶𝘀𝗲𝗿 :
-youtube <artiste ou titre>
-
-💡 𝗘𝘅𝗲𝗺𝗽𝗹𝗲𝘀 :
-• youtube Melky
-• youtube Ambondrona 
-• youtube Mix Gasy 2024
-
-🔄 𝗘́𝘁𝗮𝗽𝗲𝘀 :
-1️⃣ Cherche ta vidéo
-2️⃣ Choisis le numéro
-3️⃣ Sélectionne MP3 ou MP4
-4️⃣ Reçois ton fichier !
-
-📄 𝗡𝗮𝘃𝗶𝗴𝗮𝘁𝗶𝗼𝗻 :
-• youtube page 2 - Aller à la page 2
-• suivant / precedent - Changer de page
-            `.trim());
+            await sendMessage(senderId, "🎬 𝗬𝗢𝗨𝗧𝗨Ｂ𝗘 𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗𝗘𝗥 🎬\n━━━━━━━━━━━━━━━━━━━\nUtilisation : ytb <titre>");
         }
 
     } catch (error) {
-        console.error('Erreur commande youtube:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗢𝗼𝗽𝘀 ! 𝗨𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝗲𝘀𝘁 𝘀𝘂𝗿𝘃𝗲𝗻𝘂𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Pas de panique ! Réessaie dans quelques instants.
-Si le problème persiste, contacte l'admin. 🔧
-        `.trim());
+        console.error('Erreur ytb:', error.message);
+        await sendMessage(senderId, `❌ Une erreur est survenue.`);
     }
 };
 
 async function handleVideoSearch(senderId, query) {
+    await sendMessage(senderId, `🔍 Recherche de "${query}"...`);
+    
     try {
-        await sendMessage(senderId, `
-🔍 𝗥𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...
-━━━━━━━━━━━━━━━━━━━
-🎵 "${query}"
-⏳ Patiente quelques secondes...
-        `.trim());
+        const r = await yts(query);
+        const videos = r.videos;
         
-        const searchUrl = `${API_BASE}/recherche?titre=${encodeURIComponent(query)}`;
-        console.log('Appel API YouTube:', searchUrl);
-        
-        const response = await axiosWithRetry(searchUrl);
-        
-        console.log('Réponse API reçue:', response.data ? 'OK' : 'Vide');
-        
-        if (response.data && response.data.videos && response.data.videos.length > 0) {
-            const allVideos = response.data.videos.map(video => ({
-                video_id: video.videoId,
-                titre: video.title,
-                duree: 'N/A',
-                taille_mp3: 'N/A',
-                taille_mp4: 'N/A',
-                image_url: null
+        if (videos && videos.length > 0) {
+            const allVideos = videos.map(v => ({
+                title: v.title,
+                videoId: v.videoId,
+                url: v.url,
+                thumbnail: v.thumbnail || v.image
             }));
-            
+
             userSessions.set(senderId, {
-                allVideos: allVideos,
-                query: query,
-                currentPage: 1,
-                totalPages: getTotalPages(allVideos.length),
-                pendingFormat: false,
-                selectedVideo: null
+                allVideos,
+                query,
+                currentPage: 1
             });
-            
             await displayPage(senderId, allVideos, 1, query);
-
         } else {
-            await sendMessage(senderId, `
-😔 𝗔𝘂𝗰𝘂𝗻 𝗿𝗲́𝘀𝘂𝗹𝘁𝗮𝘁 𝘁𝗿𝗼𝘂𝘃𝗲́
-━━━━━━━━━━━━━━━━━━━
-Aucune vidéo pour "${query}" 😕
-
-💡 𝗖𝗼𝗻𝘀𝗲𝗶𝗹𝘀 :
-• Vérifie l'orthographe
-• Essaie avec d'autres mots-clés
-• Utilise le nom de l'artiste
-
-🔄 Exemple : youtube Melky
-            `.trim());
+            await sendMessage(senderId, `😔 Aucun résultat trouvé pour "${query}"`);
         }
-
     } catch (error) {
-        const statusCode = error.response ? error.response.status : 'N/A';
-        const errorBody = error.response ? JSON.stringify(error.response.data) : error.message;
-        console.error('Erreur recherche YouTube:', { statusCode, errorBody, message: error.message });
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 ❌
-━━━━━━━━━━━━━━━━━━━
-Impossible de contacter l'API.
-Erreur: ${error.message}
-
-🔄 Réessaie dans quelques instants !
-        `.trim());
+        console.error('Erreur yt-search:', error);
+        throw error;
     }
 }
 
 async function displayPage(senderId, allVideos, page, query) {
-    const totalPages = getTotalPages(allVideos.length);
+    const totalPages = Math.ceil(allVideos.length / VIDEOS_PER_PAGE);
     const pageVideos = getVideosForPage(allVideos, page);
     const startIndex = (page - 1) * VIDEOS_PER_PAGE;
     
-    userSessions.set(senderId, {
-        ...userSessions.get(senderId),
-        currentPage: page
-    });
+    userSessions.set(senderId, { ...userSessions.get(senderId), currentPage: page });
     
-    const searchMessage = getRandomMessage(SEARCH_MESSAGES);
-    
-    let headerText = `
-🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 🎬
-━━━━━━━━━━━━━━━━━━━
-🔎 Recherche : "${query}"
-✨ ${searchMessage} !
+    await sendMessage(senderId, `🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗬𝗢𝗨𝗧𝗨𝗕𝗘 🎬\n━━━━━━━━━━━━━━━━━━━\n🔎 "${query}"\n📄 Page ${page}/${totalPages}\n✨ ${getRandomMessage(SEARCH_MESSAGES)}`);
 
-📄 𝗣𝗮𝗴𝗲 ${page}/${totalPages} 
-📊 Total : ${allVideos.length} vidéo(s)
-🎯 Affichage : ${startIndex + 1}-${startIndex + pageVideos.length}
-━━━━━━━━━━━━━━━━━━━
-    `.trim();
-    
-    await sendMessage(senderId, headerText);
-    
     for (let i = 0; i < pageVideos.length; i++) {
         const video = pageVideos[i];
         const displayNum = i + 1;
-        const title = (video.titre || 'Sans titre').length > 55 
-            ? (video.titre || 'Sans titre').substring(0, 52) + '...' 
-            : (video.titre || 'Sans titre');
-        const duration = video.duree || 'N/A';
-        const sizeMp3 = video.taille_mp3 || 'N/A';
-        const sizeMp4 = video.taille_mp4 || 'N/A';
+        const videoMsg = `┏━━━━━━━━━━━━━━━━━━━\n┃ ${displayNum}️⃣ ${video.title}\n┗━━━━━━━━━━━━━━━━━━━`;
         
-        const videoInfo = `
-┏━━━━━━━━━━━━━━━━━━━
-┃ ${displayNum}️⃣ ${title}
-┣━━━━━━━━━━━━━━━━━━━
-┃ ⏱️ Durée : ${duration}
-┃ 🎵 MP3 : ${sizeMp3}
-┃ 🎬 MP4 : ${sizeMp4}
-┗━━━━━━━━━━━━━━━━━━━
-        `.trim();
+        // Envoi titre + image avec délai
+        await sendMessage(senderId, videoMsg);
         
-        await sendMessage(senderId, videoInfo);
-        
-        const imageUrl = video.image_url;
-        if (imageUrl) {
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: {
-                            url: imageUrl,
-                            is_reusable: true
-                        }
-                    }
-                });
-            } catch (imgError) {
-                console.log(`Image ${i + 1} non disponible:`, imgError.message);
+        // On utilise l'image fournie par l'API ou on essaie de deviner
+        const imageUrl = video.thumbnail || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
+        await sendMessage(senderId, {
+            attachment: {
+                type: 'image',
+                payload: { url: imageUrl, is_reusable: true }
             }
-        }
+        });
         
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
-    let paginationText = '';
-    if (totalPages > 1) {
-        paginationText = `
-━━━━━━━━━━━━━━━━━━━
-📄 𝗡𝗮𝘃𝗶𝗴𝗮𝘁𝗶𝗼𝗻 :`;
-        
-        if (page > 1) {
-            paginationText += `\n◀️ youtube page ${page - 1} (précédent)`;
-        }
-        if (page < totalPages) {
-            paginationText += `\n▶️ youtube page ${page + 1} (suivant)`;
-        }
-        paginationText += `\n📍 Pages : 1 à ${totalPages}`;
-    }
-    
-    let footerText = `
-━━━━━━━━━━━━━━━━━━━
-📥 𝗧𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗿 :
-Envoie le numéro (1-${pageVideos.length})
 
-🔄 𝗡𝗼𝘂𝘃𝗲𝗹𝗹𝗲 𝗿𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 :
-youtube <nouveau terme>${paginationText}
-    `.trim();
+    let footer = `━━━━━━━━━━━━━━━━━━━\n📥 Envoie le numéro (1-${pageVideos.length}) pour choisir.\n`;
+    if (page < totalPages) footer += `➡️ Tape "page ${page + 1}" pour la suite.`;
+    if (page > 1) footer += `\n⬅️ Tape "page ${page - 1}" pour revenir.`;
     
-    await sendMessage(senderId, footerText);
+    await sendMessage(senderId, footer);
+}
+
+function getVideosForPage(allVideos, page) {
+    const start = (page - 1) * VIDEOS_PER_PAGE;
+    return allVideos.slice(start, start + VIDEOS_PER_PAGE);
 }
 
 async function handleVideoDownload(senderId, video, format) {
-    const filesToCleanup = [];
+    await sendMessage(senderId, `${getRandomMessage(DOWNLOAD_MESSAGES)}\nFormat: ${format}`);
+    
+    const downloadApi = format === 'MP3' ? MP3_API_BASE : MP4_API_BASE;
+    const downloadUrl = `${downloadApi}?url=${encodeURIComponent(video.url)}${format === 'MP4' ? '&format=360' : ''}`;
     
     try {
-        const userSession = userSessions.get(senderId) || {};
-        
-        userSessions.set(senderId, {
-            ...userSession,
-            pendingFormat: false,
-            selectedVideo: null
-        });
-        
-        const downloadMessage = getRandomMessage(DOWNLOAD_MESSAGES);
-        const formatEmoji = format === 'MP3' ? '🎵' : '🎬';
-        const formatLabel = format === 'MP3' ? 'Audio MP3' : 'Vidéo MP4';
-        const sizeInfo = format === 'MP3' ? video.taille_mp3 : video.taille_mp4;
-        
-        await sendMessage(senderId, `
-⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦 ⏳
-━━━━━━━━━━━━━━━━━━━
-📹 ${(video.titre || 'Vidéo').substring(0, 40)}...
-${formatEmoji} Format : ${formatLabel}
-📦 Taille estimée : ${sizeInfo}
-
-✨ ${downloadMessage}
-⏳ Récupération du fichier...
-        `.trim());
-
-        const videoId = video.video_id;
-        const extension = format === 'MP3' ? 'mp3' : 'mp4';
-        const safeTitle = sanitizeFilename(video.titre || videoId);
-        
-        let directDownloadUrl = '';
-        let mp3Title = '';
-        let mp3Duration = '';
-        let mp3Cover = '';
-        
-        if (format === 'MP3') {
-            const youtubeUrl = `https://youtu.be/${videoId}`;
-            const mp3ApiUrl = `${MP3_API_BASE}?url=${encodeURIComponent(youtubeUrl)}`;
-            
-            console.log('Appel API MP3:', mp3ApiUrl);
-            
-            await sendMessage(senderId, `
-🔄 Connexion à l'API de téléchargement...
-⏳ Veuillez patienter...
-            `.trim());
-            
-            const mp3Response = await axiosWithRetry(mp3ApiUrl);
-            
-            if (mp3Response.data && mp3Response.data.success && mp3Response.data.result) {
-                const result = mp3Response.data.result;
-                directDownloadUrl = result.downloadUrl;
-                mp3Title = result.title || video.titre;
-                mp3Duration = result.duration || video.duree;
-                mp3Cover = result.cover || '';
-                
-                console.log('API MP3 réponse:', {
-                    title: mp3Title,
-                    duration: mp3Duration,
-                    downloadUrl: directDownloadUrl
-                });
-                
-                await sendMessage(senderId, `
-✅ Lien de téléchargement récupéré !
-🎵 ${mp3Title}
-⏱️ Durée : ${mp3Duration}
-📤 Envoi du fichier audio...
-                `.trim());
-                
-                if (mp3Cover) {
-                    try {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'image',
-                                payload: {
-                                    url: mp3Cover,
-                                    is_reusable: true
-                                }
-                            }
-                        });
-                    } catch (coverError) {
-                        console.log('Erreur envoi cover:', coverError.message);
-                    }
+        const dlRes = await axios.get(downloadUrl);
+        if (dlRes.data && dlRes.data.success && dlRes.data.result) {
+            const directUrl = dlRes.data.result.downloadUrl;
+            await sendMessage(senderId, {
+                attachment: {
+                    type: format === 'MP3' ? 'audio' : 'video',
+                    payload: { url: directUrl, is_reusable: true }
                 }
-                
-                let fileSentSuccessfully = false;
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'audio',
-                            payload: {
-                                url: directDownloadUrl,
-                                is_reusable: true
-                            }
-                        }
-                    });
-                    fileSentSuccessfully = true;
-                    console.log('MP3 envoyé avec succès en pièce jointe');
-                } catch (sendError) {
-                    console.log('Erreur envoi audio:', sendError.message);
-                }
-                
-                await sendMessage(senderId, `
-${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟯 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
-━━━━━━━━━━━━━━━━━━━
-🎵 ${mp3Title}
-⏱️ Durée : ${mp3Duration}
-📊 Format : MP3 (128 kbps)
+            });
 
-${fileSentSuccessfully ? '✅ Fichier audio envoyé ci-dessus !' : '⚠️ Envoi direct impossible'}
-
-📲 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${directDownloadUrl}
-
-💡 Clique sur le lien pour télécharger directement sur ton téléphone !
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
-                
-            } else {
-                throw new Error('Réponse API MP3 invalide ou téléchargement échoué');
-            }
+            // Demander si l'utilisateur veut le lien direct
+            userSessions.set(senderId, { 
+                pendingDownloadLink: true, 
+                lastDownloadUrl: directUrl 
+            });
             
+            setTimeout(async () => {
+                await sendMessage(senderId, "✅ Fichier envoyé ! Souhaitez-vous également recevoir le lien de téléchargement direct ? (Répondez par Oui ou Non)");
+            }, 2000);
+
         } else {
-            const youtubeUrl = `https://youtu.be/${videoId}`;
-            const mp4ApiUrl = `${MP4_API_BASE}?url=${encodeURIComponent(youtubeUrl)}&format=${DEFAULT_VIDEO_QUALITY}`;
-            
-            console.log('Appel API MP4:', mp4ApiUrl);
-            
-            await sendMessage(senderId, `
-🔄 Connexion à l'API de téléchargement vidéo...
-📺 Qualité : ${DEFAULT_VIDEO_QUALITY}p
-⏳ Veuillez patienter...
-            `.trim());
-            
-            const mp4Response = await axiosWithRetry(mp4ApiUrl);
-            
-            if (mp4Response.data && mp4Response.data.success && mp4Response.data.result) {
-                const result = mp4Response.data.result;
-                const mp4DownloadUrl = result.downloadUrl;
-                const mp4Title = result.title || video.titre;
-                const mp4Duration = result.duration || video.duree;
-                const mp4Cover = result.cover || '';
-                const mp4Quality = result.quality || DEFAULT_VIDEO_QUALITY;
-                
-                console.log('API MP4 réponse:', {
-                    title: mp4Title,
-                    duration: mp4Duration,
-                    quality: mp4Quality,
-                    downloadUrl: mp4DownloadUrl
-                });
-                
-                await sendMessage(senderId, `
-✅ Lien de téléchargement récupéré !
-🎬 ${mp4Title}
-⏱️ Durée : ${mp4Duration}
-📺 Qualité : ${mp4Quality}p
-📤 Envoi de la vidéo...
-                `.trim());
-                
-                if (mp4Cover) {
-                    try {
-                        await sendMessage(senderId, {
-                            attachment: {
-                                type: 'image',
-                                payload: {
-                                    url: mp4Cover,
-                                    is_reusable: true
-                                }
-                            }
-                        });
-                    } catch (coverError) {
-                        console.log('Erreur envoi cover vidéo:', coverError.message);
-                    }
-                }
-                
-                // Télécharger le fichier en mémoire puis envoyer via FormData (comme clip.js)
-                let fileSentSuccessfully = false;
-                let fileSize = 0;
-                const safeTitle = sanitizeFilename(mp4Title).substring(0, 30);
-                const filename = `${safeTitle}_${Date.now()}.mp4`;
-                
-                try {
-                    console.log('Téléchargement MP4 en mémoire:', mp4DownloadUrl);
-                    
-                    await sendMessage(senderId, `
-📥 Téléchargement de la vidéo...
-⏳ Veuillez patienter...
-                    `.trim());
-                    
-                    const fileData = await downloadToBuffer(mp4DownloadUrl);
-                    fileSize = fileData.size;
-                    
-                    console.log(`Fichier MP4 téléchargé: ${formatFileSize(fileSize)}`);
-                    
-                    await sendMessage(senderId, `
-📤 Envoi de la vidéo...
-📊 Taille : ${formatFileSize(fileSize)}
-                    `.trim());
-                    
-                    // Envoyer via FormData comme clip.js
-                    console.log('Envoi du fichier MP4 via FormData...');
-                    const sendResult = await sendBufferToMessenger(senderId, fileData.buffer, 'video', filename);
-                    
-                    if (sendResult && sendResult.success) {
-                        fileSentSuccessfully = true;
-                        console.log('MP4 envoyé avec succès via FormData');
-                        
-                        // Programmer l'envoi du lien de téléchargement direct après 3 minutes
-                        const delayedDownloadUrl = mp4DownloadUrl;
-                        setTimeout(async () => {
-                            try {
-                                await sendMessage(senderId, `
-𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 𝗱𝗶𝗿𝗲𝗰𝘁 :
-${delayedDownloadUrl}
-                                `.trim());
-                                console.log('Lien de téléchargement direct envoyé après 3 minutes');
-                            } catch (delayedError) {
-                                console.error('Erreur envoi lien différé:', delayedError.message);
-                            }
-                        }, 3 * 60 * 1000); // 3 minutes = 180000 ms
-                    } else {
-                        console.log('Échec envoi MP4:', sendResult?.error || 'Erreur inconnue');
-                    }
-                } catch (downloadError) {
-                    console.error('Erreur téléchargement/envoi MP4:', downloadError.message);
-                }
-                
-                await sendMessage(senderId, `
-${fileSentSuccessfully ? '✅' : '⚠️'} 𝗙𝗜𝗖𝗛𝗜𝗘𝗥 𝗠𝗣𝟰 ${fileSentSuccessfully ? '𝗘𝗡𝗩𝗢𝗬𝗘́' : ''}
-━━━━━━━━━━━━━━━━━━━
-🎬 ${mp4Title}
-⏱️ Durée : ${mp4Duration}
-📺 Qualité : ${mp4Quality}p
-📊 Taille : ${formatFileSize(fileSize)}
-
-${fileSentSuccessfully ? '✅ Fichier vidéo envoyé ci-dessus !' : '⚠️ Envoi direct impossible'}
-
-🔄 Tape "youtube" pour une nouvelle recherche
-                `.trim());
-                
-            } else {
-                throw new Error('Réponse API MP4 invalide ou téléchargement échoué');
-            }
+            throw new Error();
         }
-
-    } catch (error) {
-        console.error('Erreur téléchargement:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁 ❌
-━━━━━━━━━━━━━━━━━━━
-Impossible de télécharger cette vidéo.
-Erreur: ${error.message}
-
-🔄 Réessaie ou choisis une autre vidéo !
-        `.trim());
-    } finally {
-        cleanupFiles(filesToCleanup);
+    } catch (e) {
+        await sendMessage(senderId, "❌ Erreur lors du téléchargement. Le fichier est peut-être trop lourd.");
+        userSessions.delete(senderId);
     }
+}
+
+async function handleInfoDisplay(senderId, video) {
+    const info = `💠 𝗜𝗡𝗙𝗢𝗦 𝗩𝗜𝗗𝗘́𝗢 💠\n━━━━━━━━━━━━━━━━━━━\n📝 Titre : ${video.title}\n🆔 ID : ${video.videoId}\n🔗 Lien : ${video.url}`;
+    await sendMessage(senderId, info);
 }
