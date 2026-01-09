@@ -1,53 +1,63 @@
 const axios = require('axios');
-const sendMessage = require('../handles/sendMessage'); // Importer la fonction sendMessage
+const sendMessage = require('../handles/sendMessage');
 
-// Gestion des sessions utilisateur
-const userSessions = {}; 
+// User sessions management for history
+const userSessions = {};
 
 module.exports = async (senderId, prompt) => {
-    try {
-        // Si l'utilisateur envoie "clear", réinitialiser la conversation
-        if (prompt.toLowerCase() === 'clear') {
-            delete userSessions[senderId]; // Supprimer l'historique de la session
-            await sendMessage(senderId, "Vous avez réinitialisé la conversation.");
-            return;
-        }
+    try {
+        const input = prompt.trim();
+        const inputLower = input.toLowerCase();
 
-        // Vérifier si une session existe pour l'utilisateur, sinon en créer une
-        if (!userSessions[senderId]) {
-            userSessions[senderId] = { uid: Math.random().toString(36).substring(7) }; // Générer un UID unique
-        }
+        // Reset conversation
+        if (inputLower === 'supprimer' || inputLower === 'clear') {
+            delete userSessions[senderId];
+            await sendMessage(senderId, "🧹 *SÉANCE RÉINITIALISÉE* 🧹\n━━━━━━━━━━━━━━━\nL'historique de notre discussion a été effacé avec succès.");
+            return;
+        }
 
-        // Récupérer l'UID de la session
-        const uid = userSessions[senderId].uid;
+        // Initialize session history if not exists
+        if (!userSessions[senderId]) {
+            userSessions[senderId] = { history: [] };
+        }
 
-        // Envoyer un message de confirmation que le message a été reçu
-        await sendMessage(senderId, "🛠️📡 Calibrage de la réponse… 📡🛠️");
+        // Add user message to history
+        userSessions[senderId].history.push(`Utilisateur: ${input}`);
+        
+        // Keep only last 10 exchanges to avoid too long queries
+        if (userSessions[senderId].history.length > 10) {
+            userSessions[senderId].history.shift();
+        }
 
-        // Appeler l'API avec le prompt de l'utilisateur et l'UID
-        const apiUrl = `https://y2pheq.me/xaoai?prompt=${encodeURIComponent(prompt)}&uid=${uid}`;
-        const response = await axios.get(apiUrl);
+        // Build full prompt with history context
+        const context = userSessions[senderId].history.join('\n');
+        const fullQuery = `Ceci est une conversation continue. Voici l'historique :\n${context}\n\nRéponds à la dernière question de l'utilisateur de manière concise et naturelle.`;
 
-        // Récupérer la réponse de l'API
-        const reply = response.data.result;
+        // Loading message
+        await sendMessage(senderId, "✨ 𝗫𝗜𝗔𝗢-𝗔𝗜 ✨\n━━━━━━━━━━━━━━━\nAnalyse de votre demande en cours... 🧠⏳");
 
-        // Attendre 2 secondes avant d'envoyer la réponse
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        const apiKey = "rapi_4806a41790cd4a83921d56b667ab3f16";
+        const apiUrl = `https://rapido.zetsu.xyz/api/perplexity?query=${encodeURIComponent(fullQuery)}&websearch=true&apikey=${apiKey}`;
+        
+        const response = await axios.get(apiUrl);
+        const reply = response.data.answer || "Désolé, je ne parviens pas à formuler une réponse pour le moment.";
 
-        // Envoyer la réponse de l'API à l'utilisateur
-        await sendMessage(senderId, reply);
-    } catch (error) {
-        console.error('Erreur lors de l\'appel à l\'API Claude:', error);
+        // Add assistant reply to history
+        userSessions[senderId].history.push(`Xiao: ${reply}`);
 
-        // Envoyer un message d'erreur à l'utilisateur en cas de problème
-        await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre message.");
-    }
+        // Format and send beautiful response
+        const decoratedReply = `✨ 𝗫𝗜𝗔𝗢-𝗔𝗜 ✨\n━━━━━━━━━━━━━━━\n${reply}\n━━━━━━━━━━━━━━━\n💬 _Tapez 'supprimer' pour recommencer._`;
+
+        await sendMessage(senderId, decoratedReply);
+
+    } catch (error) {
+        console.error('Erreur Xiao API:', error.message);
+        await sendMessage(senderId, "⚠️ *ERREUR SYSTÈME* ⚠️\n━━━━━━━━━━━━━━━\nUne erreur s'est produite lors de la communication avec l'IA. Veuillez réessayer plus tard.");
+    }
 };
 
-// Ajouter les informations de la commande
 module.exports.info = {
-    name: "xiao", // Le nom de la commande
-    description: "Discutez avec le bot miora, qui mémorise vos échanges.", // Nouvelle description
-    usage: "Envoyez 'xiao <message>' pour poser une question ou 'clear' pour réinitialiser la conversation." // Nouvelle utilisation
+    name: "xiao",
+    description: "Intelligence Artificielle Perplexity avec mémoire.",
+    usage: "xiao <votre message> (ou 'supprimer' pour effacer la mémoire)"
 };
-
