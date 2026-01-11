@@ -5,7 +5,7 @@ const FormData = require('form-data');
 const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://pdf-tdnk.onrender.com/';
+const API_BASE = 'https://pdf-njqg.onrender.com/';
 const LOCAL_PDF_DIR = path.join(__dirname, '..', 'pdf_exercice_bacc');
 const MAX_MESSAGE_LENGTH = 1900;
 const RESULTS_PER_PAGE = 5;
