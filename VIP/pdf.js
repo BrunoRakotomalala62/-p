@@ -149,21 +149,29 @@ module.exports = async (senderId, prompt) => {
                 const doc = session.pageResults[index];
                 await sendMessage(senderId, `⏳ Préparation de : ${doc.titre}...`);
                 
-                // If it's a direct PDF URL, try to send it as a file first
-                if (doc.url && doc.url.toLowerCase().endsWith('.pdf')) {
-                    try {
-                        const fileSize = await getFileSize(doc.url);
-                        if (fileSize > 0 && fileSize < MAX_FILE_SIZE) {
-                            const { buffer } = await downloadToBuffer(doc.url);
-                            const filename = `${doc.titre.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-                            if ((await sendPdfToMessenger(senderId, buffer, filename)).success) return;
-                        }
-                    } catch (e) { console.error('Direct PDF error:', e.message); }
+                let pdfUrl = doc.url;
+                // If it's not a direct PDF, use the capture URL to get the PDF
+                if (!pdfUrl || !pdfUrl.toLowerCase().endsWith('.pdf')) {
+                    pdfUrl = `${API_BASE}/capturer?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
                 }
 
-                // Use /capturer for pages that contain PDFs but aren't direct links
+                try {
+                    const { buffer } = await downloadToBuffer(pdfUrl);
+                    if (buffer && buffer.length > 0) {
+                        const filename = `${doc.titre.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                        const result = await sendPdfToMessenger(senderId, buffer, filename);
+                        if (result.success) {
+                            await sendMessage(senderId, `✅ Document envoyé : ${doc.titre}`);
+                            return;
+                        }
+                    }
+                } catch (e) { 
+                    console.error('PDF download/send error:', e.message); 
+                }
+
+                // Fallback message if direct send fails
                 const captureUrl = `${API_BASE}/capturer?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
-                await sendMessage(senderId, `🔗 Le document est sur une page web. Vous pouvez le visualiser ou le capturer ici :\n${captureUrl}`);
+                await sendMessage(senderId, `🔗 Désolé, l'envoi direct a échoué. Vous pouvez visualiser le document ici :\n${captureUrl}`);
                 return;
             }
         }
