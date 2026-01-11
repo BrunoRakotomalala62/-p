@@ -296,7 +296,7 @@ function parseSearchQuery(query) {
 
 async function searchBooks(query, bookType = 'all', page = 1) {
     try {
-        const url = `${API_BASE}/recherche?livre=${encodeURIComponent(query)}&type=${bookType}&page=${page}&par_page=50`;
+        const url = `${API_BASE}/recherche?pdf=${encodeURIComponent(query)}&type=${bookType}&page=${page}&par_page=50`;
         console.log('API PDF URL:', url);
         
         const response = await axios.get(url, { timeout: 30000 });
