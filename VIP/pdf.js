@@ -3,7 +3,7 @@ const FormData = require('form-data');
 const { Readable } = require('stream');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://pdf-zpbp.onrender.com';
+const API_BASE = 'https://pdf-njqg.onrender.com';
 const RESULTS_PER_PAGE = 10;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
