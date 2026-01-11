@@ -28,14 +28,6 @@ const MATIERES = {
 const SERIES = ['A', 'C', 'D', 'L', 'S', 'OSE'];
 const DOC_TYPES = ['sujet', 'correction', 'enonce', 'corrige'];
 
-const BOOK_TYPES = {
-    'roman': 'roman',
-    'educatif': 'educatif',
-    'technique': 'technique',
-    'science': 'science',
-    'all': 'all'
-};
-
 const DECORATIONS = {
     header: '╔══════════════════════════════╗',
     footer: '╚══════════════════════════════╝',
@@ -69,884 +61,137 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
-function searchLocalPdfs(query) {
-    try {
-        if (!fs.existsSync(LOCAL_PDF_DIR)) {
-            return [];
-        }
-        
-        const files = fs.readdirSync(LOCAL_PDF_DIR)
-            .filter(file => file.toLowerCase().endsWith('.pdf'))
-            .filter(file => file.toLowerCase().includes(query.toLowerCase()))
-            .map(file => {
-                const filePath = path.join(LOCAL_PDF_DIR, file);
-                const stats = fs.statSync(filePath);
-                return {
-                    titre: file.replace('.pdf', '').replace(/_/g, ' '),
-                    source: 'Local (pdf_exercice_bacc)',
-                    isLocal: true,
-                    localPath: filePath,
-                    fileName: file,
-                    size: stats.size
-                };
-            });
-        
-        return files;
-    } catch (error) {
-        console.error('Erreur recherche locale:', error.message);
-        return [];
-    }
-}
-
-async function sendLocalPdfToMessenger(recipientId, filePath, filename) {
-    try {
-        const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-        if (!PAGE_ACCESS_TOKEN) {
-            throw new Error('PAGE_ACCESS_TOKEN non défini');
-        }
-
-        const buffer = fs.readFileSync(filePath);
-        const stream = Readable.from(buffer);
-        
-        const form = new FormData();
-        form.append('recipient', JSON.stringify({ id: recipientId }));
-        form.append('message', JSON.stringify({
-            attachment: {
-                type: 'file',
-                payload: {
-                    is_reusable: false
-                }
-            }
-        }));
-        form.append('filedata', stream, {
-            filename: filename,
-            contentType: 'application/pdf'
-        });
-
-        const response = await axios.post(
-            `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-            form,
-            {
-                headers: form.getHeaders(),
-                maxContentLength: Infinity,
-                maxBodyLength: Infinity,
-                timeout: 180000
-            }
-        );
-
-        return { success: true, data: response.data };
-    } catch (error) {
-        const errorData = error.response ? error.response.data : error.message;
-        return { success: false, error: errorData };
-    }
-}
-
 async function getFileSize(url) {
     try {
-        const response = await axios.head(url, {
-            timeout: 10000,
-            maxRedirects: 5
-        });
+        const response = await axios.head(url, { timeout: 10000, maxRedirects: 5 });
         return parseInt(response.headers['content-length'] || '0');
-    } catch (error) {
-        return 0;
-    }
+    } catch (error) { return 0; }
 }
 
 async function downloadToBuffer(url) {
-    try {
-        const response = await axios({
-            method: 'GET',
-            url: url,
-            responseType: 'arraybuffer',
-            timeout: 180000,
-            maxRedirects: 5,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-        
-        const buffer = Buffer.from(response.data);
-        return { buffer, size: buffer.length };
-    } catch (error) {
-        throw error;
-    }
+    const response = await axios({
+        method: 'GET', url: url, responseType: 'arraybuffer', timeout: 180000, maxRedirects: 5,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const buffer = Buffer.from(response.data);
+    return { buffer, size: buffer.length };
 }
 
 async function sendPdfToMessenger(recipientId, buffer, filename) {
     try {
         const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
-        if (!PAGE_ACCESS_TOKEN) {
-            throw new Error('PAGE_ACCESS_TOKEN non défini');
-        }
-
-        const stream = Readable.from(buffer);
-        
         const form = new FormData();
         form.append('recipient', JSON.stringify({ id: recipientId }));
         form.append('message', JSON.stringify({
-            attachment: {
-                type: 'file',
-                payload: {
-                    is_reusable: false
-                }
-            }
+            attachment: { type: 'file', payload: { is_reusable: false } }
         }));
-        form.append('filedata', stream, {
-            filename: filename,
-            contentType: 'application/pdf'
+        form.append('filedata', Readable.from(buffer), {
+            filename: filename, contentType: 'application/pdf'
         });
-
         const response = await axios.post(
             `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-            form,
-            {
-                headers: form.getHeaders(),
-                maxContentLength: Infinity,
-                maxBodyLength: Infinity,
-                timeout: 180000
-            }
+            form, { headers: form.getHeaders(), timeout: 180000 }
         );
-
         return { success: true, data: response.data };
-    } catch (error) {
-        const errorData = error.response ? error.response.data : error.message;
-        return { success: false, error: errorData };
-    }
-}
-
-function getMatiereKey(input) {
-    const normalized = input.toLowerCase().trim();
-    for (const [key, value] of Object.entries(MATIERES)) {
-        if (key === normalized || value.aliases.includes(normalized)) {
-            return key;
-        }
-    }
-    return null;
+    } catch (error) { return { success: false, error: error.message }; }
 }
 
 function parseSearchQuery(query) {
     const parts = query.toLowerCase().split(/\s+/);
-    const result = {
-        isBacc: false,
-        matiere: null,
-        serie: null,
-        type: null,
-        annee: null,
-        bookQuery: null,
-        bookType: 'all'
-    };
-
-    const baccKeywords = ['bacc', 'bac', 'sujet', 'correction', 'corrige', 'enonce', 'examen'];
-    for (const part of parts) {
-        if (baccKeywords.includes(part)) {
-            result.isBacc = true;
-            break;
-        }
-        const matiereKey = getMatiereKey(part);
-        if (matiereKey) {
-            result.isBacc = true;
-            break;
-        }
-    }
-
-    if (result.isBacc) {
-        for (const part of parts) {
-            const matiereKey = getMatiereKey(part);
-            if (matiereKey) {
-                result.matiere = matiereKey;
-                continue;
-            }
-
-            const upperPart = part.toUpperCase();
-            if (SERIES.includes(upperPart)) {
-                result.serie = upperPart;
-                continue;
-            }
-
-            if (DOC_TYPES.includes(part)) {
-                if (part === 'sujet' || part === 'enonce') {
-                    result.type = 'sujet';
-                } else {
-                    result.type = 'correction';
-                }
-                continue;
-            }
-
-            const yearMatch = part.match(/^(19\d{2}|20\d{2})$/);
-            if (yearMatch) {
-                result.annee = parseInt(yearMatch[1]);
-            }
-        }
-    } else {
-        const filteredParts = parts.filter(p => !['pdf', 'livre', 'book', 'ebook'].includes(p));
-        result.bookQuery = filteredParts.join(' ');
-        
-        for (const [key, value] of Object.entries(BOOK_TYPES)) {
-            if (parts.includes(key)) {
-                result.bookType = value;
-                result.bookQuery = filteredParts.filter(p => p !== key).join(' ');
-                break;
-            }
-        }
-    }
-
-    return result;
+    const filteredParts = parts.filter(p => !['pdf', 'livre', 'book', 'ebook'].includes(p));
+    return filteredParts.join(' ');
 }
 
-async function searchBooks(query, bookType = 'all', page = 1) {
+async function searchPdfs(query, page = 1) {
     try {
-        const url = `${API_BASE}/recherche?pdf=${encodeURIComponent(query)}&type=${bookType}&page=${page}&par_page=50`;
+        const url = `${API_BASE}/recherche?pdf=${encodeURIComponent(query)}&page=${page}`;
         console.log('API PDF URL:', url);
-        
         const response = await axios.get(url, { timeout: 30000 });
-        
-        if (response.data && response.data.livres) {
-            return {
-                results: response.data.livres,
-                pagination: response.data.pagination,
-                total: response.data.nombre_resultats
-            };
-        }
-        return { results: [], pagination: null, total: 0 };
+        const results = response.data.resultats || response.data.livres || response.data.sujets || [];
+        return { results, total: results.length };
     } catch (error) {
-        console.error('Erreur recherche livres:', error.message);
+        console.error('Erreur recherche PDF:', error.message);
         throw error;
     }
 }
 
-async function searchBacc(matiere, serie, annee, type, page = 1) {
-    try {
-        let url = `${API_BASE}/recherche?page=${page}&par_page=50`;
-        
-        // Build the search query for the API which expects 'pdf' parameter
-        let queryParts = [];
-        if (matiere) queryParts.push(matiere);
-        if (serie) queryParts.push(serie);
-        if (annee) queryParts.push(annee);
-        if (type) queryParts.push(type);
-        
-        const searchQuery = queryParts.join(' ') || 'bacc';
-        url += `&pdf=${encodeURIComponent(searchQuery)}`;
-        
-        console.log('API Sujets URL:', url);
-        
-        const response = await axios.get(url, { timeout: 30000 });
-        
-        // The new API returns results in 'livres' for all searches
-        if (response.data && response.data.livres) {
-            return {
-                results: response.data.livres,
-                pagination: response.data.pagination,
-                total: response.data.nombre_resultats,
-                searchInfo: { matiere, serie, annee, type }
-            };
-        } else if (response.data && response.data.sujets) {
-            return {
-                results: response.data.sujets,
-                pagination: response.data.pagination,
-                total: response.data.nombre_resultats,
-                searchInfo: response.data.recherche
-            };
-        }
-        return { results: [], pagination: null, total: 0 };
-    } catch (error) {
-        console.error('Erreur recherche sujets:', error.message);
-        throw error;
-    }
-}
-
-async function displayBookResults(senderId, results, page, totalResults, query) {
+async function displayResults(senderId, results, page, query) {
     const totalPages = Math.ceil(results.length / RESULTS_PER_PAGE);
     const startIdx = (page - 1) * RESULTS_PER_PAGE;
     const pageResults = results.slice(startIdx, startIdx + RESULTS_PER_PAGE);
 
-    userSessions.set(senderId, {
-        mode: 'book',
-        results: results,
-        currentPage: page,
-        pageResults: pageResults,
-        searchQuery: query
-    });
+    userSessions.set(senderId, { results, currentPage: page, pageResults, searchQuery: query });
 
-    const searchMsg = getRandomMessage(SEARCH_MESSAGES);
-
-    const header = `
-📚 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗣𝗗𝗙
-${DECORATIONS.header}
-🔍 Recherche: "${query}"
-✨ ${searchMsg}
-
-📄 Page ${page}/${totalPages}
-📊 Total: ${totalResults} document(s)
-🎯 Affichage: ${startIdx + 1}-${startIdx + pageResults.length}
-${DECORATIONS.footer}`.trim();
-
+    const header = `📚 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗣𝗗𝗙\n${DECORATIONS.header}\n🔍 Recherche: "${query}"\n📄 Page ${page}/${totalPages}\n${DECORATIONS.footer}`;
     await sendMessage(senderId, header);
-    await new Promise(resolve => setTimeout(resolve, 300));
 
     for (let i = 0; i < pageResults.length; i++) {
         const doc = pageResults[i];
-        const bookNumber = i + 1;
-
-        const bookCard = `
-┏━━━━━━━━━━━━━━━━━━━━━
-┃ ${bookNumber}️⃣ 📖 𝗟𝗜𝗩𝗥𝗘
-┣━━━━━━━━━━━━━━━━━━━━━
-┃ 📝 ${doc.titre || 'Sans titre'}
-┃ 📂 Source: ${doc.source || 'N/A'}
-┗━━━━━━━━━━━━━━━━━━━━━`.trim();
-
-        await sendMessage(senderId, bookCard);
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        if (doc.url_image) {
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: {
-                            url: doc.url_image,
-                            is_reusable: true
-                        }
-                    }
-                });
-            } catch (imgError) {
-                console.log('Erreur envoi image:', imgError.message);
-            }
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        const card = `┏━━━━━━━━━━━━━━━━━━━━━\n┃ ${i + 1}️⃣ 📖 𝗟𝗜𝗩𝗥𝗘\n┣━━━━━━━━━━━━━━━━━━━━━\n┃ 📝 ${doc.titre || 'Sans titre'}\n┗━━━━━━━━━━━━━━━━━━━━━`;
+        await sendMessage(senderId, card);
     }
 
-    let footerParts = [];
-    footerParts.push(`📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗥:`);
-    footerParts.push(`Envoie le numéro (1-${pageResults.length}) pour télécharger`);
-    
-    if (totalPages > 1) {
-        footerParts.push('');
-        footerParts.push(`🧭 𝗡𝗔𝗩𝗜𝗚𝗔𝗧𝗜𝗢𝗡:`);
-        if (page > 1) footerParts.push(`◀️ "precedent" - Page ${page - 1}`);
-        if (page < totalPages) footerParts.push(`▶️ "suivant" - Page ${page + 1}`);
-        footerParts.push(`📍 "page X" - Aller à la page X`);
-    }
-
-    const footer = `
-${DECORATIONS.divider}
-${footerParts.join('\n')}
-${DECORATIONS.subDivider}
-🔄 Nouvelle recherche: pdf <terme>`.trim();
-
+    const footer = `${DECORATIONS.divider}\n📥 Envoyez le numéro (1-${pageResults.length}) pour télécharger.\n🔄 Nouvelle recherche: pdf <terme>`;
     await sendMessage(senderId, footer);
 }
 
-async function displayBaccResults(senderId, results, page, totalResults, searchInfo) {
-    const totalPages = Math.ceil(results.length / RESULTS_PER_PAGE);
-    const startIdx = (page - 1) * RESULTS_PER_PAGE;
-    const pageResults = results.slice(startIdx, startIdx + RESULTS_PER_PAGE);
-
-    userSessions.set(senderId, {
-        mode: 'bacc',
-        results: results,
-        currentPage: page,
-        pageResults: pageResults,
-        searchInfo: searchInfo
-    });
-
-    const searchMsg = getRandomMessage(SEARCH_MESSAGES);
-
-    const header = `
-📚 𝗦𝗨𝗝𝗘𝗧𝗦 𝗕𝗔𝗖𝗖 𝗠𝗔𝗗𝗔𝗚𝗔𝗦𝗖𝗔𝗥
-${DECORATIONS.header}
-🔍 Matière: ${searchInfo?.matiere || 'Toutes'}
-🎓 Série: ${searchInfo?.serie || 'Toutes'}
-📅 Année: ${searchInfo?.annee || '1999-2025'}
-✨ ${searchMsg}
-
-📄 Page ${page}/${totalPages}
-📊 Total: ${totalResults} document(s)
-${DECORATIONS.footer}`.trim();
-
-    await sendMessage(senderId, header);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    for (let i = 0; i < pageResults.length; i++) {
-        const doc = pageResults[i];
-        const docNumber = i + 1;
-        const typeEmoji = doc.type === 'corrige' ? '✅' : '📄';
-        const typeLabel = doc.type === 'corrige' ? 'Correction' : 'Sujet';
-        const matiereInfo = MATIERES[doc.matiere?.toLowerCase()] || { emoji: '📘', name: doc.matiere || 'N/A' };
-
-        const docCard = `
-┏━━━━━━━━━━━━━━━━━━━━━
-┃ ${docNumber}️⃣ ${typeEmoji} ${typeLabel}
-┣━━━━━━━━━━━━━━━━━━━━━
-┃ 📝 ${doc.titre || 'Document'}
-┃ ${matiereInfo.emoji} Matière: ${matiereInfo.name}
-┃ 📅 Année: ${doc.annee || 'N/A'}
-┃ 🎓 Série: ${doc.serie || 'N/A'}
-┗━━━━━━━━━━━━━━━━━━━━━`.trim();
-
-        await sendMessage(senderId, docCard);
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        if (doc.url_image) {
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: {
-                            url: doc.url_image,
-                            is_reusable: true
-                        }
-                    }
-                });
-            } catch (imgError) {
-                console.log('Erreur envoi image:', imgError.message);
-            }
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
-    }
-
-    let footerParts = [];
-    footerParts.push(`📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗥:`);
-    footerParts.push(`Envoie le numéro (1-${pageResults.length}) pour télécharger`);
-    
-    if (totalPages > 1) {
-        footerParts.push('');
-        footerParts.push(`🧭 𝗡𝗔𝗩𝗜𝗚𝗔𝗧𝗜𝗢𝗡:`);
-        if (page > 1) footerParts.push(`◀️ "precedent" - Page ${page - 1}`);
-        if (page < totalPages) footerParts.push(`▶️ "suivant" - Page ${page + 1}`);
-        footerParts.push(`📍 "page X" - Aller à la page X`);
-    }
-
-    const footer = `
-${DECORATIONS.divider}
-${footerParts.join('\n')}
-${DECORATIONS.subDivider}
-🔄 Nouvelle recherche: pdf <terme>`.trim();
-
-    await sendMessage(senderId, footer);
-}
-
-async function handleDownload(senderId, doc, mode) {
-    const titre = doc.titre || 'document';
-    
-    if (doc.isLocal) {
-        await sendMessage(senderId, `
-⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
-${DECORATIONS.divider}
-📖 ${titre}
-📂 Source: ${doc.source || 'Local'}
-
-⏳ Préparation du fichier PDF...
-        `.trim());
-
-        try {
-            const result = await sendLocalPdfToMessenger(senderId, doc.localPath, doc.fileName);
-            
-            if (result.success) {
-                await sendMessage(senderId, `
-✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦
-${DECORATIONS.header}
-📖 ${titre}
-📊 Taille: ${formatFileSize(doc.size)}
-${DECORATIONS.footer}
-
-💡 Le PDF a été envoyé en pièce jointe
-📱 Tu peux le sauvegarder sur ton téléphone
-
-🔄 Tape "pdf" pour voir le guide
-                `.trim());
-            } else {
-                await sendMessage(senderId, `
-❌ Erreur lors de l'envoi du PDF local.
-🔄 Réessaie plus tard.
-                `.trim());
-            }
-        } catch (error) {
-            console.error('Erreur envoi PDF local:', error.message);
-            await sendMessage(senderId, `❌ Erreur lors de l'envoi du fichier.`);
-        }
+async function handleDownload(senderId, doc) {
+    const pdfUrl = doc.url_telechargement || doc.lien_pdf || doc.url_pdf;
+    if (!pdfUrl) {
+        await sendMessage(senderId, "❌ Lien de téléchargement non disponible.");
         return;
     }
 
-    const pdfUrl = doc.lien_pdf || doc.url_pdf;
-    
-    if (mode === 'bacc') {
-        const typeEmoji = doc.type === 'corrige' ? '✅' : '📄';
-        const typeLabel = doc.type === 'corrige' ? 'Correction' : 'Sujet';
-        const matiereInfo = MATIERES[doc.matiere?.toLowerCase()] || { emoji: '📘', name: doc.matiere || 'Document' };
-
-        await sendMessage(senderId, `
-⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
-${DECORATIONS.divider}
-${typeEmoji} ${typeLabel}
-${matiereInfo.emoji} ${matiereInfo.name}
-📅 Année: ${doc.annee || 'N/A'}
-🎓 Série: ${doc.serie || 'N/A'}
-
-⏳ Préparation du fichier PDF...
-        `.trim());
-    } else {
-        await sendMessage(senderId, `
-⏳ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
-${DECORATIONS.divider}
-📖 ${titre}
-📂 Source: ${doc.source || 'N/A'}
-
-⏳ Préparation du fichier PDF...
-        `.trim());
-    }
-
+    await sendMessage(senderId, `⏳ Préparation du PDF : ${doc.titre}...`);
     try {
-        if (!pdfUrl) {
-            await sendMessage(senderId, `
-❌ 𝗟𝗜𝗘𝗡 𝗡𝗢𝗡 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘
-${DECORATIONS.divider}
-Le lien de téléchargement n'est pas
-disponible pour ce document.
-
-🔄 Essaie avec un autre document.
-            `.trim());
-            return;
-        }
-
-        if (doc.url_image) {
-            try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: {
-                            url: doc.url_image,
-                            is_reusable: true
-                        }
-                    }
-                });
-                await new Promise(resolve => setTimeout(resolve, 300));
-            } catch (imgError) {
-                console.log('Erreur envoi image:', imgError.message);
-            }
-        }
-
         const fileSize = await getFileSize(pdfUrl);
-        console.log(`Taille du PDF: ${formatFileSize(fileSize)}`);
-
         if (fileSize > 0 && fileSize < MAX_FILE_SIZE) {
-            await sendMessage(senderId, `
-📊 Taille: ${formatFileSize(fileSize)}
-📥 Envoi du PDF en pièce jointe...
-            `.trim());
-
-            try {
-                const { buffer } = await downloadToBuffer(pdfUrl);
-                const filename = doc.nom_fichier || `${titre.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)}.pdf`;
-                
-                const result = await sendPdfToMessenger(senderId, buffer, filename);
-                
-                if (result.success) {
-                    await sendMessage(senderId, `
-✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦
-${DECORATIONS.header}
-📖 ${titre}
-📊 Taille: ${formatFileSize(fileSize)}
-${DECORATIONS.footer}
-
-💡 Le PDF a été envoyé en pièce jointe
-📱 Tu peux le sauvegarder sur ton téléphone
-
-🔄 Tape "pdf" pour voir le guide
-                    `.trim());
-                    return;
-                }
-            } catch (downloadError) {
-                console.log('Erreur envoi direct, envoi du lien:', downloadError.message);
-            }
+            const { buffer } = await downloadToBuffer(pdfUrl);
+            const filename = `${(doc.titre || 'document').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+            const result = await sendPdfToMessenger(senderId, buffer, filename);
+            if (result.success) return;
         }
-
-        let pdfSentSuccessfully = false;
-        try {
-            await sendMessage(senderId, {
-                attachment: {
-                    type: 'file',
-                    payload: {
-                        url: pdfUrl,
-                        is_reusable: true
-                    }
-                }
-            });
-            pdfSentSuccessfully = true;
-        } catch (sendError) {
-            console.log('Erreur envoi PDF direct:', sendError.message);
-        }
-
-        const sizeInfo = fileSize > 0 ? `📊 Taille: ${formatFileSize(fileSize)}` : '';
-        const sizeWarning = fileSize >= MAX_FILE_SIZE ? '\n⚠️ Fichier volumineux' : '';
-
-        await sendMessage(senderId, `
-${pdfSentSuccessfully ? '✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́' : '📥 𝗟𝗜𝗘𝗡 𝗗𝗘 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧'}
-${DECORATIONS.header}
-📖 ${titre}
-${sizeInfo}${sizeWarning}
-${DECORATIONS.footer}
-        `.trim());
-
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        await sendMessage(senderId, `
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁:
-${pdfUrl}
-        `.trim());
-
-        await sendMessage(senderId, `
-💡 ${pdfSentSuccessfully ? 'PDF envoyé + lien ci-dessus' : 'Clique sur le lien pour télécharger'}
-📱 Le fichier sera enregistré sur ton téléphone
-
-🔄 Tape "pdf" pour continuer
-        `.trim());
-
+        await sendMessage(senderId, `🔗 Fichier volumineux ou envoi direct impossible. Téléchargez ici :\n${pdfUrl}`);
     } catch (error) {
-        console.error('Erreur téléchargement:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁
-${DECORATIONS.divider}
-Impossible de récupérer le fichier.
-Réessaie dans quelques instants.
-
-🔗 Lien direct: ${pdfUrl || 'Non disponible'}
-        `.trim());
+        await sendMessage(senderId, `🔗 Erreur d'envoi direct. Téléchargez ici :\n${pdfUrl}`);
     }
-}
-
-async function showHelp(senderId) {
-    const helpHeader = `
-📚 𝗣𝗗𝗙 - 𝗚𝗨𝗜𝗗𝗘 𝗗'𝗨𝗧𝗜𝗟𝗜𝗦𝗔𝗧𝗜𝗢𝗡
-${DECORATIONS.header}
-Recherche de livres PDF et sujets
-Bacc Madagascar (1999-2025)
-${DECORATIONS.footer}`.trim();
-
-    await sendMessage(senderId, helpHeader);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const booksSection = `
-📖 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 𝗗𝗘 𝗟𝗜𝗩𝗥𝗘𝗦
-${DECORATIONS.divider}
-📌 pdf python
-   ➜ Recherche livres sur Python
-
-📌 pdf roman victor hugo
-   ➜ Recherche romans de Victor Hugo
-
-📌 pdf mathematiques terminale
-   ➜ Livres de maths terminale
-
-📌 pdf science biologie
-   ➜ Livres scientifiques`.trim();
-
-    await sendMessage(senderId, booksSection);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const baccSection = `
-🎓 𝗦𝗨𝗝𝗘𝗧𝗦 𝗕𝗔𝗖𝗖 𝗠𝗔𝗗𝗔𝗚𝗔𝗦𝗖𝗔𝗥
-${DECORATIONS.divider}
-📌 pdf bacc math
-   ➜ Tous les sujets de maths
-
-📌 pdf bacc physique C 2022
-   ➜ Physique série C, année 2022
-
-📌 pdf math D correction
-   ➜ Corrections maths série D
-
-📌 pdf philo A sujet 2020
-   ➜ Sujet philo série A 2020`.trim();
-
-    await sendMessage(senderId, baccSection);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const matieres = `
-📖 𝗠𝗔𝗧𝗜𝗘̀𝗥𝗘𝗦 𝗕𝗔𝗖𝗖
-${DECORATIONS.divider}
-🔢 mathematiques (math)
-⚛️ physique (phy, pc)
-🧬 svt (bio)
-🌍 histoire-geo (hg)
-🇲🇬 malagasy (mlg)
-🧠 philosophie (philo)
-📚 francais (fr)
-🇬🇧 anglais (ang)
-💰 economie (eco)
-
-🎓 𝗦𝗲́𝗿𝗶𝗲𝘀: A, C, D, L, S, OSE`.trim();
-
-    await sendMessage(senderId, matieres);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const navigation = `
-🧭 𝗡𝗔𝗩𝗜𝗚𝗔𝗧𝗜𝗢𝗡
-${DECORATIONS.divider}
-◆ Envoie le numéro pour télécharger
-◆ "suivant" → Page suivante
-◆ "precedent" → Page précédente
-◆ "page 3" → Aller à la page 3
-
-📥 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧
-${DECORATIONS.divider}
-◆ PDF < 25 Mo: envoyé en pièce jointe
-◆ PDF > 25 Mo: lien de téléchargement
-◆ Image de couverture incluse`.trim();
-
-    await sendMessage(senderId, navigation);
 }
 
 module.exports = async (senderId, prompt) => {
     try {
-        const userSession = userSessions.get(senderId) || {};
-        const input = (typeof prompt === 'string') ? prompt.trim().toLowerCase() : '';
+        const input = prompt.trim();
+        const session = userSessions.get(senderId);
 
-        if (/^\d+$/.test(input) && userSession.pageResults && userSession.pageResults.length > 0) {
+        if (/^\d+$/.test(input) && session && session.pageResults) {
             const index = parseInt(input) - 1;
-            
-            if (index >= 0 && index < userSession.pageResults.length) {
-                await handleDownload(senderId, userSession.pageResults[index], userSession.mode);
-            } else {
-                await sendMessage(senderId, `
-❌ 𝗡𝘂𝗺𝗲́𝗿𝗼 𝗶𝗻𝘃𝗮𝗹𝗶𝗱𝗲
-${DECORATIONS.divider}
-Choisis un numéro entre 1 et ${userSession.pageResults.length}
-                `.trim());
-            }
-            return;
-        }
-
-        if (input === 'suivant' || input === 'next') {
-            if (userSession.results && userSession.results.length > 0) {
-                const totalPages = Math.ceil(userSession.results.length / RESULTS_PER_PAGE);
-                const newPage = Math.min((userSession.currentPage || 1) + 1, totalPages);
-                
-                if (userSession.mode === 'bacc') {
-                    await displayBaccResults(senderId, userSession.results, newPage, userSession.results.length, userSession.searchInfo);
-                } else {
-                    await displayBookResults(senderId, userSession.results, newPage, userSession.results.length, userSession.searchQuery);
-                }
-            }
-            return;
-        }
-
-        if (input === 'precedent' || input === 'prev') {
-            if (userSession.results && userSession.results.length > 0) {
-                const newPage = Math.max((userSession.currentPage || 1) - 1, 1);
-                
-                if (userSession.mode === 'bacc') {
-                    await displayBaccResults(senderId, userSession.results, newPage, userSession.results.length, userSession.searchInfo);
-                } else {
-                    await displayBookResults(senderId, userSession.results, newPage, userSession.results.length, userSession.searchQuery);
-                }
-            }
-            return;
-        }
-
-        if (input.startsWith('page ')) {
-            const pageNum = parseInt(input.replace('page ', ''));
-            if (userSession.results && !isNaN(pageNum)) {
-                const totalPages = Math.ceil(userSession.results.length / RESULTS_PER_PAGE);
-                if (pageNum >= 1 && pageNum <= totalPages) {
-                    if (userSession.mode === 'bacc') {
-                        await displayBaccResults(senderId, userSession.results, pageNum, userSession.results.length, userSession.searchInfo);
-                    } else {
-                        await displayBookResults(senderId, userSession.results, pageNum, userSession.results.length, userSession.searchQuery);
-                    }
-                }
-            }
-            return;
-        }
-
-        if (!input || input === 'help' || input === 'aide') {
-            await showHelp(senderId);
-            return;
-        }
-
-        const loadingMsg = getRandomMessage(LOADING_MESSAGES);
-        await sendMessage(senderId, `
-⏳ 𝗥𝗘𝗖𝗛𝗘𝗥𝗖𝗛𝗘 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦
-${DECORATIONS.divider}
-${loadingMsg}
-🔍 "${input}"
-        `.trim());
-
-        const searchParams = parseSearchQuery(input);
-
-        if (searchParams.isBacc) {
-            const { results, pagination, total, searchInfo } = await searchBacc(
-                searchParams.matiere,
-                searchParams.serie,
-                searchParams.annee,
-                searchParams.type
-            );
-
-            if (results.length === 0) {
-                await sendMessage(senderId, `
-😔 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧
-${DECORATIONS.divider}
-Aucun sujet Bacc trouvé pour:
-"${input}"
-
-💡 𝗖𝗼𝗻𝘀𝗲𝗶𝗹𝘀 :
-◆ Vérifie l'orthographe
-◆ Essaie: pdf bacc math
-◆ Ou: pdf bacc physique C 2022
-◆ Tape "pdf aide" pour le guide
-                `.trim());
+            if (index >= 0 && index < session.pageResults.length) {
+                await handleDownload(senderId, session.pageResults[index]);
                 return;
             }
-
-            await displayBaccResults(senderId, results, 1, total, searchInfo);
-        } else {
-            const query = searchParams.bookQuery || input;
-            
-            const localResults = searchLocalPdfs(query);
-            
-            let apiResults = [];
-            let total = 0;
-            try {
-                const apiData = await searchBooks(query, searchParams.bookType);
-                apiResults = apiData.results || [];
-                total = apiData.total || 0;
-            } catch (apiError) {
-                console.log('Erreur API, utilisation des résultats locaux:', apiError.message);
-            }
-            
-            const combinedResults = [...localResults, ...apiResults];
-            const combinedTotal = localResults.length + total;
-
-            if (combinedResults.length === 0) {
-                await sendMessage(senderId, `
-😔 𝗔𝗨𝗖𝗨𝗡 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧
-${DECORATIONS.divider}
-Aucun livre PDF trouvé pour:
-"${input}"
-
-💡 𝗖𝗼𝗻𝘀𝗲𝗶𝗹𝘀 :
-◆ Vérifie l'orthographe
-◆ Essaie avec moins de mots
-◆ Exemple: pdf python
-◆ Tape "pdf aide" pour le guide
-                `.trim());
-                return;
-            }
-
-            await displayBookResults(senderId, combinedResults, 1, combinedTotal, query);
         }
 
+        const query = parseSearchQuery(input);
+        if (!query || query === 'aide') {
+            await sendMessage(senderId, "📖 *GUIDE PDF*\nTapez 'pdf <recherche>' pour trouver des documents.\nExemple: 'pdf mathématiques'");
+            return;
+        }
+
+        await sendMessage(senderId, `🔎 ${getRandomMessage(LOADING_MESSAGES)}\n🔍 "${query}"`);
+        const { results } = await searchPdfs(query);
+
+        if (results.length === 0) {
+            await sendMessage(senderId, `😔 Aucun PDF trouvé pour "${query}". Essayez un mot-clé plus simple (ex: "physique" au lieu de "sujet physique A").`);
+            return;
+        }
+
+        await displayResults(senderId, results, 1, query);
     } catch (error) {
-        console.error('Erreur commande pdf:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗶𝗻𝗮𝘁𝘁𝗲𝗻𝗱𝘂𝗲
-${DECORATIONS.divider}
-Une erreur est survenue lors du traitement.
-Réessaie dans quelques instants.
-
-💡 Tape "pdf aide" pour voir le guide.
-        `.trim());
+        await sendMessage(senderId, "❌ Une erreur est survenue lors du traitement.");
     }
+};
+
+module.exports.info = {
+    name: "pdf",
+    description: "Recherche et téléchargement de PDF.",
+    usage: "pdf <votre recherche>"
 };
