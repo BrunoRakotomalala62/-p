@@ -91,11 +91,10 @@ async function searchPdfs(params) {
         const response = await axios.get(url.slice(0, -1), { timeout: 30000 });
         let pdfs = response.data.pdfs || [];
         
-        // Filter locally because the API might be returning more results than requested
         if (params.serie) {
             const requestedSerie = params.serie.toUpperCase();
             pdfs = pdfs.filter(pdf => {
-                if (!pdf.serie) return true; // Keep if no serie info
+                if (!pdf.serie) return true;
                 return pdf.serie.toUpperCase().includes(requestedSerie);
             });
         }
@@ -134,7 +133,6 @@ module.exports = async (senderId, prompt) => {
         const input = prompt.trim().toLowerCase();
         const session = userSessions.get(senderId);
 
-        // Handle Pagination
         const pageMatch = input.match(/^page\s*(\d+)$/);
         if (pageMatch && session?.results) {
             const pageNum = parseInt(pageMatch[1]);
@@ -145,24 +143,27 @@ module.exports = async (senderId, prompt) => {
             }
         }
 
-        // Handle Download
         if (/^\d+$/.test(input) && session?.pageResults) {
             const index = parseInt(input) - 1;
             if (index >= 0 && index < session.pageResults.length) {
                 const doc = session.pageResults[index];
                 await sendMessage(senderId, `⏳ Préparation de : ${doc.titre}...`);
-                const downloadUrl = `${API_BASE}/telecharger?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
-                try {
-                    const fileSize = await getFileSize(doc.url);
-                    if (fileSize > 0 && fileSize < MAX_FILE_SIZE) {
-                        const { buffer } = await downloadToBuffer(doc.url);
-                        const filename = `${doc.titre.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-                        if ((await sendPdfToMessenger(senderId, buffer, filename)).success) return;
-                    }
-                    await sendMessage(senderId, `🔗 Lien de téléchargement :\n${downloadUrl}`);
-                } catch {
-                    await sendMessage(senderId, `🔗 Lien de téléchargement :\n${downloadUrl}`);
+                
+                // If it's a direct PDF URL, try to send it as a file first
+                if (doc.url && doc.url.toLowerCase().endsWith('.pdf')) {
+                    try {
+                        const fileSize = await getFileSize(doc.url);
+                        if (fileSize > 0 && fileSize < MAX_FILE_SIZE) {
+                            const { buffer } = await downloadToBuffer(doc.url);
+                            const filename = `${doc.titre.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                            if ((await sendPdfToMessenger(senderId, buffer, filename)).success) return;
+                        }
+                    } catch (e) { console.error('Direct PDF error:', e.message); }
                 }
+
+                // Use /capturer for pages that contain PDFs but aren't direct links
+                const captureUrl = `${API_BASE}/capturer?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
+                await sendMessage(senderId, `🔗 Le document est sur une page web. Vous pouvez le visualiser ou le capturer ici :\n${captureUrl}`);
                 return;
             }
         }
@@ -189,6 +190,6 @@ module.exports = async (senderId, prompt) => {
 
 module.exports.info = {
     name: "pdf",
-    description: "Recherche de sujets de BACC avec filtrage par série.",
+    description: "Recherche de sujets de BACC.",
     usage: "pdf <matiere> <serie> <annee>"
 };
