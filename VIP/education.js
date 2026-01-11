@@ -607,15 +607,33 @@ ${matiereInfo.emoji} ${matiereInfo.name}
             let pdfSentSuccessfully = false;
             
             try {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'file',
-                        payload: {
-                            url: pdfUrl,
-                            is_reusable: true
+                // Determine if it's a capture URL or direct PDF
+                const isCaptureUrl = pdfUrl.includes('/capturer?url=');
+                const filename = (doc.titre || 'document').replace(/\s+/g, '_') + '.pdf';
+
+                if (isCaptureUrl) {
+                    // It's a capture URL, we should try to get the actual PDF or send as file
+                    // For now, let's try to send it as a file attachment with a proper name
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'file',
+                            payload: {
+                                url: pdfUrl,
+                                is_reusable: true
+                            }
                         }
-                    }
-                });
+                    });
+                } else {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'file',
+                            payload: {
+                                url: pdfUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                }
                 pdfSentSuccessfully = true;
                 console.log('PDF envoyé avec succès:', pdfUrl);
             } catch (sendError) {
