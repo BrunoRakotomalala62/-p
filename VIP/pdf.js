@@ -87,8 +87,20 @@ async function searchPdfs(params) {
         if (params.serie) url += `serie=${params.serie}&`;
         if (params.type) url += `type=${params.type}&`;
         if (params.annee) url += `annee=${params.annee}&`;
+        
         const response = await axios.get(url.slice(0, -1), { timeout: 30000 });
-        return response.data.pdfs || [];
+        let pdfs = response.data.pdfs || [];
+        
+        // Filter locally because the API might be returning more results than requested
+        if (params.serie) {
+            const requestedSerie = params.serie.toUpperCase();
+            pdfs = pdfs.filter(pdf => {
+                if (!pdf.serie) return true; // Keep if no serie info
+                return pdf.serie.toUpperCase().includes(requestedSerie);
+            });
+        }
+        
+        return pdfs;
     } catch { return []; }
 }
 
@@ -177,6 +189,6 @@ module.exports = async (senderId, prompt) => {
 
 module.exports.info = {
     name: "pdf",
-    description: "Recherche de sujets de BACC avec pagination.",
-    usage: "pdf <matiere> <serie> <annee> ou 'page X'"
+    description: "Recherche de sujets de BACC avec filtrage par série.",
+    usage: "pdf <matiere> <serie> <annee>"
 };
