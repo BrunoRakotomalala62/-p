@@ -605,40 +605,64 @@ ${matiereInfo.emoji} ${matiereInfo.name}
 
         if (pdfUrl) {
             let pdfSentSuccessfully = false;
-            
-            try {
-                // Determine if it's a capture URL or direct PDF
-                const isCaptureUrl = pdfUrl.includes('/capturer?url=');
-                const filename = (doc.titre || 'document').replace(/\s+/g, '_') + '.pdf';
+            const filename = (doc.titre || 'document').replace(/\s+/g, '_') + '.pdf';
 
-                if (isCaptureUrl) {
-                    // It's a capture URL, we should try to get the actual PDF or send as file
-                    // For now, let's try to send it as a file attachment with a proper name
-                    await sendMessage(senderId, {
+            try {
+                // Download the file as a buffer
+                const response = await axios.get(pdfUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 60000
+                });
+
+                if (response.data) {
+                    const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+                    const stream = Readable.from(response.data);
+                    
+                    const form = new FormData();
+                    form.append('recipient', JSON.stringify({ id: senderId }));
+                    form.append('message', JSON.stringify({
                         attachment: {
                             type: 'file',
-                            payload: {
-                                url: pdfUrl,
-                                is_reusable: true
-                            }
+                            payload: { is_reusable: false }
                         }
+                    }));
+                    form.append('filedata', stream, {
+                        filename: filename,
+                        contentType: 'application/pdf'
                     });
-                } else {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'file',
-                            payload: {
-                                url: pdfUrl,
-                                is_reusable: true
-                            }
+
+                    const fbResponse = await axios.post(
+                        `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+                        form,
+                        {
+                            headers: form.getHeaders(),
+                            maxContentLength: Infinity,
+                            maxBodyLength: Infinity,
+                            timeout: 180000
                         }
-                    });
+                    );
+
+                    if (fbResponse.data && fbResponse.data.message_id) {
+                        pdfSentSuccessfully = true;
+                    }
                 }
-                pdfSentSuccessfully = true;
-                console.log('PDF envoyé avec succès:', pdfUrl);
-            } catch (sendError) {
-                console.log('Erreur envoi PDF direct:', sendError.message);
-                pdfSentSuccessfully = false;
+            } catch (downloadError) {
+                console.log('Erreur téléchargement/envoi PDF buffer:', downloadError.message);
+                // Fallback to URL method if buffer fails
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'file',
+                            payload: {
+                                url: pdfUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    pdfSentSuccessfully = true;
+                } catch (fallbackError) {
+                    console.log('Erreur fallback URL:', fallbackError.message);
+                }
             }
 
             const successMessage = `
@@ -647,39 +671,26 @@ ${DECORATIONS.header}
 📝 ${doc.titre || 'Document'}
 ${matiereInfo.emoji} ${matiereInfo.name}
 ${typeEmoji} ${typeLabel}
-📅 ${doc.annee || 'N/A'} | 🎓 ${doc.serie || 'N/A'}
-${DECORATIONS.footer}`.trim();
+📅 Année: ${doc.annee || 'N/A'} | 🎓 Série: ${doc.serie || 'N/A'}
+${DECORATIONS.footer}
+
+${pdfSentSuccessfully ? '💡 Le fichier a été envoyé directement.' : '🔗 Voici le lien direct pour le visualiser :'}
+${!pdfSentSuccessfully ? pdfUrl : ''}
+
+📱 Tu peux le sauvegarder sur ton téléphone
+🔄 Tape "education" pour continuer`.trim();
 
             await sendMessage(senderId, successMessage);
-            await new Promise(resolve => setTimeout(resolve, 200));
-
-            await sendMessage(senderId, `
-🔗 𝗟𝗶𝗲𝗻 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁:
-${pdfUrl}
-            `.trim());
-
-            await sendMessage(senderId, `
-💡 ${pdfSentSuccessfully ? 'PDF envoyé + lien ci-dessus' : 'Clique sur le lien pour télécharger'}
-📱 Le fichier sera enregistré sur ton téléphone
-
-🔄 Tape "education" pour continuer
-            `.trim());
-
         } else {
             await sendMessage(senderId, `
-❌ 𝗟𝗜𝗘𝗡 𝗡𝗢𝗡 𝗗𝗜𝗦𝗣𝗢𝗡𝗜𝗕𝗟𝗘
-${DECORATIONS.divider}
-Le lien de téléchargement n'est pas
-disponible pour ce document.
-
-🔄 Essaie avec un autre document.
+❌ Document non trouvé.
+Le lien de téléchargement est manquant.
             `.trim());
         }
-
     } catch (error) {
-        console.error('Erreur téléchargement:', error.message);
+        console.error('Erreur globale téléchargement:', error.message);
         await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁
+❌ 𝗘𝗿𝗿𝗲𝘂𝗿
 ${DECORATIONS.divider}
 Impossible de récupérer le fichier.
 Réessaie dans quelques instants.
