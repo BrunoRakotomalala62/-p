@@ -31,13 +31,6 @@ const DECORATIONS = {
     subDivider: '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈'
 };
 
-function formatFileSize(bytes) {
-    if (!bytes) return 'N/A';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-}
-
 async function getFileSize(url) {
     try {
         const response = await axios.head(url, { timeout: 10000, maxRedirects: 5 });
@@ -50,8 +43,7 @@ async function downloadToBuffer(url) {
         method: 'GET', url, responseType: 'arraybuffer', timeout: 180000, maxRedirects: 5,
         headers: { 'User-Agent': 'Mozilla/5.0' }
     });
-    const buffer = Buffer.from(response.data);
-    return { buffer, size: buffer.length };
+    return { buffer: Buffer.from(response.data) };
 }
 
 async function sendPdfToMessenger(recipientId, buffer, filename) {
@@ -95,31 +87,33 @@ async function searchPdfs(params) {
         if (params.serie) url += `serie=${params.serie}&`;
         if (params.type) url += `type=${params.type}&`;
         if (params.annee) url += `annee=${params.annee}&`;
-        
-        console.log('API Search URL:', url);
-        const response = await axios.get(url, { timeout: 30000 });
+        const response = await axios.get(url.slice(0, -1), { timeout: 30000 });
         return response.data.pdfs || [];
-    } catch (error) {
-        console.error('Search error:', error.message);
-        return [];
-    }
+    } catch { return []; }
 }
 
-async function displayResults(senderId, pdfs, params) {
-    const pagePdfs = pdfs.slice(0, RESULTS_PER_PAGE);
-    userSessions.set(senderId, { results: pdfs, pageResults: pagePdfs });
+async function displayResults(senderId, pdfs, params, page = 1) {
+    const totalPages = Math.ceil(pdfs.length / RESULTS_PER_PAGE);
+    const startIdx = (page - 1) * RESULTS_PER_PAGE;
+    const pagePdfs = pdfs.slice(startIdx, startIdx + RESULTS_PER_PAGE);
+    
+    userSessions.set(senderId, { results: pdfs, pageResults: pagePdfs, currentPage: page, params });
 
     let msg = `📚 𝗕𝗔𝗖𝗖𝗔𝗟𝗔𝗨𝗥𝗘́𝗔𝗧 𝗠𝗔𝗗𝗔𝗚𝗔𝗦𝗖𝗔𝗥\n${DECORATIONS.header}\n`;
     msg += `📖 Matière: ${params.matiere || 'Toutes'}\n`;
     if (params.serie) msg += `🎓 Série: ${params.serie}\n`;
     if (params.annee) msg += `📅 Année: ${params.annee}\n`;
+    msg += `📄 Page ${page}/${totalPages}\n`;
     msg += `${DECORATIONS.footer}\n\n`;
 
     pagePdfs.forEach((pdf, i) => {
         msg += `${i + 1}️⃣ 📄 ${pdf.titre}\n`;
     });
 
-    msg += `\n${DECORATIONS.divider}\n📥 Envoyez le numéro (1-${pagePdfs.length}) pour télécharger.`;
+    msg += `\n${DECORATIONS.divider}\n📥 Numéro (1-${pagePdfs.length}) pour télécharger.`;
+    if (page < totalPages) msg += `\n⏭️ Tapez "page ${page + 1}" pour la suite.`;
+    if (page > 1) msg += `\n⏮️ Tapez "page ${page - 1}" pour le précédent.`;
+    
     await sendMessage(senderId, msg);
 }
 
@@ -128,22 +122,30 @@ module.exports = async (senderId, prompt) => {
         const input = prompt.trim().toLowerCase();
         const session = userSessions.get(senderId);
 
+        // Handle Pagination
+        const pageMatch = input.match(/^page\s*(\d+)$/);
+        if (pageMatch && session?.results) {
+            const pageNum = parseInt(pageMatch[1]);
+            const totalPages = Math.ceil(session.results.length / RESULTS_PER_PAGE);
+            if (pageNum >= 1 && pageNum <= totalPages) {
+                await displayResults(senderId, session.results, session.params, pageNum);
+                return;
+            }
+        }
+
+        // Handle Download
         if (/^\d+$/.test(input) && session?.pageResults) {
             const index = parseInt(input) - 1;
             if (index >= 0 && index < session.pageResults.length) {
                 const doc = session.pageResults[index];
                 await sendMessage(senderId, `⏳ Préparation de : ${doc.titre}...`);
-                
-                // Utilisation de l'endpoint /telecharger de l'API
                 const downloadUrl = `${API_BASE}/telecharger?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
-                
                 try {
                     const fileSize = await getFileSize(doc.url);
                     if (fileSize > 0 && fileSize < MAX_FILE_SIZE) {
                         const { buffer } = await downloadToBuffer(doc.url);
                         const filename = `${doc.titre.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-                        const res = await sendPdfToMessenger(senderId, buffer, filename);
-                        if (res.success) return;
+                        if ((await sendPdfToMessenger(senderId, buffer, filename)).success) return;
                     }
                     await sendMessage(senderId, `🔗 Lien de téléchargement :\n${downloadUrl}`);
                 } catch {
@@ -163,18 +165,18 @@ module.exports = async (senderId, prompt) => {
         const pdfs = await searchPdfs(params);
 
         if (pdfs.length === 0) {
-            await sendMessage(senderId, "😔 Aucun document trouvé. Vérifiez l'orthographe ou essayez d'autres critères.");
+            await sendMessage(senderId, "😔 Aucun document trouvé.");
             return;
         }
 
-        await displayResults(senderId, pdfs, params);
-    } catch (error) {
+        await displayResults(senderId, pdfs, params, 1);
+    } catch {
         await sendMessage(senderId, "❌ Une erreur est survenue.");
     }
 };
 
 module.exports.info = {
     name: "pdf",
-    description: "Recherche de sujets de BACC (API Accesmad).",
-    usage: "pdf <matiere> <serie> <annee>"
+    description: "Recherche de sujets de BACC avec pagination.",
+    usage: "pdf <matiere> <serie> <annee> ou 'page X'"
 };
