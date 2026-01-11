@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
-const API_BASE = 'https://meo-book.vercel.app';
+const API_BASE = 'https://pdf-zpbp.onrender.com';
 const LOCAL_PDF_DIR = path.join(__dirname, '..', 'pdf_exercice_bacc');
 const RESULTS_PER_PAGE = 10;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
