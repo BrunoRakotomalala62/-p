@@ -317,23 +317,29 @@ async function searchBooks(query, bookType = 'all', page = 1) {
 
 async function searchBacc(matiere, serie, annee, type, page = 1) {
     try {
-        let url = `${API_BASE}/sujets?page=${page}&par_page=50`;
+        let url = `${API_BASE}/recherche?page=${page}&par_page=50`;
         
-        if (matiere) url += `&matiere=${encodeURIComponent(matiere)}`;
-        if (serie) url += `&serie=${encodeURIComponent(serie)}`;
-        if (annee) url += `&annee=${annee}`;
-        if (type) url += `&type=${encodeURIComponent(type)}`;
+        // Build the search query for the API which expects 'pdf' parameter
+        let queryParts = [];
+        if (matiere) queryParts.push(matiere);
+        if (serie) queryParts.push(serie);
+        if (annee) queryParts.push(annee);
+        if (type) queryParts.push(type);
+        
+        const searchQuery = queryParts.join(' ') || 'bacc';
+        url += `&pdf=${encodeURIComponent(searchQuery)}`;
         
         console.log('API Sujets URL:', url);
         
         const response = await axios.get(url, { timeout: 30000 });
         
-        if (response.data && response.data.sujets) {
+        // The new API returns results in 'livres' for all searches
+        if (response.data && response.data.livres) {
             return {
-                results: response.data.sujets,
+                results: response.data.livres,
                 pagination: response.data.pagination,
                 total: response.data.nombre_resultats,
-                searchInfo: response.data.recherche
+                searchInfo: { matiere, serie, annee, type }
             };
         }
         return { results: [], pagination: null, total: 0 };
