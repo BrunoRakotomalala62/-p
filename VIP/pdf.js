@@ -341,6 +341,13 @@ async function searchBacc(matiere, serie, annee, type, page = 1) {
                 total: response.data.nombre_resultats,
                 searchInfo: { matiere, serie, annee, type }
             };
+        } else if (response.data && response.data.sujets) {
+            return {
+                results: response.data.sujets,
+                pagination: response.data.pagination,
+                total: response.data.nombre_resultats,
+                searchInfo: response.data.recherche
+            };
         }
         return { results: [], pagination: null, total: 0 };
     } catch (error) {
