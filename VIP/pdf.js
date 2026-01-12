@@ -80,18 +80,26 @@ function parseInput(input) {
     return result;
 }
 
-async function searchPdfs(params) {
+async function searchPdfs(params, queryText = null) {
     try {
-        let url = `${API_BASE}/pdfs?`;
-        if (params.matiere) url += `matiere=${params.matiere}&`;
-        if (params.serie) url += `serie=${params.serie}&`;
-        if (params.type) url += `type=${params.type}&`;
-        if (params.annee) url += `annee=${params.annee}&`;
+        let url;
+        if (queryText) {
+            // New route for generic search
+            url = `${API_BASE}/recherche_cache?q=${encodeURIComponent(queryText)}`;
+        } else {
+            // Existing route for filtered search
+            url = `${API_BASE}/pdfs?`;
+            if (params.matiere) url += `matiere=${params.matiere}&`;
+            if (params.serie) url += `serie=${params.serie}&`;
+            if (params.type) url += `type=${params.type}&`;
+            if (params.annee) url += `annee=${params.annee}&`;
+            url = url.slice(0, -1);
+        }
         
-        const response = await axios.get(url.slice(0, -1), { timeout: 30000 });
-        let pdfs = response.data.pdfs || [];
+        const response = await axios.get(url, { timeout: 30000 });
+        let pdfs = response.data.pdfs || response.data.resultats || [];
         
-        if (params.serie) {
+        if (params.serie && !queryText) {
             const requestedSerie = params.serie.toUpperCase();
             pdfs = pdfs.filter(pdf => {
                 if (!pdf.serie) return true;
@@ -100,7 +108,10 @@ async function searchPdfs(params) {
         }
         
         return pdfs;
-    } catch { return []; }
+    } catch (e) { 
+        console.error('Search error:', e.message);
+        return []; 
+    }
 }
 
 async function displayResults(senderId, pdfs, params, page = 1) {
@@ -149,9 +160,14 @@ module.exports = async (senderId, prompt) => {
                 const doc = session.pageResults[index];
                 await sendMessage(senderId, `⏳ Préparation de : ${doc.titre}...`);
                 
-                let pdfUrl = doc.url;
-                // If it's not a direct PDF, use the capture URL to get the PDF
-                if (!pdfUrl || !pdfUrl.toLowerCase().endsWith('.pdf')) {
+                let pdfUrl;
+                if (doc.id) {
+                    // New route for download by ID
+                    pdfUrl = `${API_BASE}/download?id=${doc.id}`;
+                } else if (doc.url && doc.url.toLowerCase().endsWith('.pdf')) {
+                    pdfUrl = doc.url;
+                } else {
+                    // Fallback to capture
                     pdfUrl = `${API_BASE}/capturer?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
                 }
 
@@ -169,21 +185,25 @@ module.exports = async (senderId, prompt) => {
                     console.error('PDF download/send error:', e.message); 
                 }
 
-                // Fallback message if direct send fails
-                const captureUrl = `${API_BASE}/capturer?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
-                await sendMessage(senderId, `🔗 Désolé, l'envoi direct a échoué. Vous pouvez visualiser le document ici :\n${captureUrl}`);
+                // Final fallback if direct send fails
+                const finalUrl = doc.id ? `${API_BASE}/download?id=${doc.id}` : `${API_BASE}/capturer?url=${encodeURIComponent(doc.url)}&titre=${encodeURIComponent(doc.titre)}`;
+                await sendMessage(senderId, `🔗 Désolé, l'envoi direct a échoué. Vous pouvez visualiser le document ici :\n${finalUrl}`);
                 return;
             }
         }
 
         const params = parseInput(input);
-        if (!params.matiere && input !== 'bacc') {
-            await sendMessage(senderId, "📖 *GUIDE PDF BACC*\nTapez 'pdf <matière> <série> <année>'.\nExemple: 'pdf physique A 2022'");
+        
+        // Use generic search if no specific filters but input is present
+        const useGenericSearch = !params.matiere && !params.serie && !params.annee && input !== 'bacc';
+        
+        if (!params.matiere && input !== 'bacc' && !useGenericSearch) {
+            await sendMessage(senderId, "📖 *GUIDE PDF BACC*\nTapez 'pdf <matière> <série> <année>' ou simplement un mot clé.\nExemple: 'pdf physique' ou 'lesona'");
             return;
         }
 
         await sendMessage(senderId, "🔍 Recherche des sujets en cours...");
-        const pdfs = await searchPdfs(params);
+        const pdfs = await searchPdfs(params, useGenericSearch ? input : null);
 
         if (pdfs.length === 0) {
             await sendMessage(senderId, "😔 Aucun document trouvé.");
