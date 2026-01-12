@@ -97,11 +97,21 @@ async function searchPdfs(params, queryText = null) {
         }
         
         const response = await axios.get(url, { timeout: 30000 });
-        let pdfs = response.data.pdfs || response.data.resultats || [];
+        let results = response.data.pdfs || response.data.resultats || [];
+        
+        // Normalize results to have consistent 'titre' and 'id' fields
+        const pdfs = results.map(item => ({
+            titre: item.titre || item.nom || 'Document sans titre',
+            id: item.id || item.google_drive_id || null,
+            url: item.url || item.url_telechargement || null,
+            serie: item.serie || null,
+            annee: item.annee || null,
+            matiere: item.matiere || null
+        }));
         
         if (params.serie && !queryText) {
             const requestedSerie = params.serie.toUpperCase();
-            pdfs = pdfs.filter(pdf => {
+            return pdfs.filter(pdf => {
                 if (!pdf.serie) return true;
                 return pdf.serie.toUpperCase().includes(requestedSerie);
             });
