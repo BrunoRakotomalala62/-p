@@ -85,38 +85,48 @@ function parseInput(input) {
 
 async function searchPdfs(params, queryText = null) {
     try {
-        let url;
-        if (queryText) {
-            // New route for generic search
-            url = `${API_BASE}/recherche_cache?q=${encodeURIComponent(queryText)}`;
-        } else {
-            // Existing route for filtered search
-            url = `${API_BASE}/pdfs?`;
+        let results = [];
+        
+        // 1. Fetch from specific filtered search if params are present
+        if (params.matiere || params.serie || params.annee) {
+            let url = `${API_BASE}/pdfs?`;
             if (params.matiere) url += `matiere=${params.matiere}&`;
             if (params.serie) url += `serie=${params.serie}&`;
             if (params.type) url += `type=${params.type}&`;
             if (params.annee) url += `annee=${params.annee}&`;
             url = url.slice(0, -1);
+            
+            const resp = await axios.get(url, { timeout: 30000 });
+            if (resp.data.pdfs) results = results.concat(resp.data.pdfs);
+        }
+
+        // 2. Fetch from generic search if queryText is present or as a fallback
+        if (queryText || results.length === 0) {
+            const q = queryText || [params.matiere, params.serie, params.annee].filter(Boolean).join(' ');
+            if (q.trim()) {
+                const url = `${API_BASE}/recherche_cache?q=${encodeURIComponent(q)}`;
+                const resp = await axios.get(url, { timeout: 30000 });
+                const searchResults = resp.data.resultats || [];
+                results = results.concat(searchResults);
+            }
         }
         
-        const response = await axios.get(url, { timeout: 30000 });
-        let results = response.data.pdfs || response.data.resultats || [];
+        // Deduplicate and normalize
+        const seenIds = new Set();
+        const pdfs = [];
         
-        // Normalize results to have consistent 'titre' and 'id' fields
-        const pdfs = results.map(item => ({
-            titre: item.titre || item.nom || 'Document sans titre',
-            id: item.id || item.google_drive_id || null,
-            url: item.url || item.url_telechargement || null,
-            serie: item.serie || null,
-            annee: item.annee || null,
-            matiere: item.matiere || null
-        }));
-        
-        if (params.serie && !queryText) {
-            const requestedSerie = params.serie.toUpperCase();
-            return pdfs.filter(pdf => {
-                if (!pdf.serie) return true;
-                return pdf.serie.toUpperCase().includes(requestedSerie);
+        for (const item of results) {
+            const id = item.id || item.google_drive_id;
+            if (id && seenIds.has(id)) continue;
+            if (id) seenIds.add(id);
+            
+            pdfs.push({
+                titre: item.titre || item.nom || 'Document sans titre',
+                id: id || null,
+                url: item.url || item.url_telechargement || null,
+                serie: item.serie || null,
+                annee: item.annee || null,
+                matiere: item.matiere || null
             });
         }
         
@@ -215,11 +225,16 @@ module.exports = async (senderId, prompt) => {
             return;
         }
 
-        await sendMessage(senderId, "🔍 Recherche des sujets en cours...");
+        if (input !== 'bacc' && !useGenericSearch) {
+            await sendMessage(senderId, "🔍 Recherche des sujets en cours...");
+        }
+        
         const pdfs = await searchPdfs(params, useGenericSearch ? input : null);
 
         if (pdfs.length === 0) {
-            await sendMessage(senderId, "😔 Aucun document trouvé.");
+            if (input !== 'bacc' && !useGenericSearch) {
+                await sendMessage(senderId, "😔 Aucun document trouvé.");
+            }
             return;
         }
 
