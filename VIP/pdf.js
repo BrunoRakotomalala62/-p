@@ -70,9 +70,6 @@ function parseInput(input) {
     const result = { matiere: null, serie: null, type: null, annee: null };
     
     for (const part of parts) {
-        // Skip common search terms that aren't specific filters
-        if (part.includes('ème') || part.includes('bepc') || part.includes('bepe')) continue;
-
         for (const [key, val] of Object.entries(MATIERES)) {
             if (part === key || val.aliases.includes(part)) { result.matiere = key; break; }
         }
@@ -87,48 +84,26 @@ async function searchPdfs(params, queryText = null) {
     try {
         let results = [];
         
-        // 1. Fetch from specific filtered search if params are present
-        if (params.matiere || params.serie || params.annee) {
-            let url = `${API_BASE}/pdfs?`;
-            if (params.matiere) url += `matiere=${params.matiere}&`;
-            if (params.serie) url += `serie=${params.serie}&`;
-            if (params.type) url += `type=${params.type}&`;
-            if (params.annee) url += `annee=${params.annee}&`;
-            url = url.slice(0, -1);
-            
-            const resp = await axios.get(url, { timeout: 30000 });
-            if (resp.data.pdfs) results = results.concat(resp.data.pdfs);
-        }
-
-        // 2. Fetch from generic search if queryText is present or as a fallback
-        if (queryText || results.length === 0) {
-            const q = queryText || [params.matiere, params.serie, params.annee].filter(Boolean).join(' ');
-            if (q.trim()) {
-                const url = `${API_BASE}/recherche_cache?q=${encodeURIComponent(q)}`;
-                const resp = await axios.get(url, { timeout: 30000 });
-                const searchResults = resp.data.resultats || [];
-                results = results.concat(searchResults);
-            }
-        }
+        // Use ONLY specific filtered search for BACC
+        let url = `${API_BASE}/pdfs?`;
+        if (params.matiere) url += `matiere=${params.matiere}&`;
+        if (params.serie) url += `serie=${params.serie}&`;
+        if (params.type) url += `type=${params.type}&`;
+        if (params.annee) url += `annee=${params.annee}&`;
+        url = url.slice(0, -1);
         
-        // Deduplicate and normalize
-        const seenIds = new Set();
-        const pdfs = [];
+        const resp = await axios.get(url, { timeout: 30000 });
+        if (resp.data.pdfs) results = resp.data.pdfs;
         
-        for (const item of results) {
-            const id = item.id || item.google_drive_id;
-            if (id && seenIds.has(id)) continue;
-            if (id) seenIds.add(id);
-            
-            pdfs.push({
-                titre: item.titre || item.nom || 'Document sans titre',
-                id: id || null,
-                url: item.url || item.url_telechargement || null,
-                serie: item.serie || null,
-                annee: item.annee || null,
-                matiere: item.matiere || null
-            });
-        }
+        // Normalize results
+        const pdfs = results.map(item => ({
+            titre: item.titre || item.nom || 'Document sans titre',
+            id: item.id || item.google_drive_id || null,
+            url: item.url || item.url_telechargement || null,
+            serie: item.serie || null,
+            annee: item.annee || null,
+            matiere: item.matiere || null
+        }));
         
         return pdfs;
     } catch (e) { 
@@ -217,10 +192,9 @@ module.exports = async (senderId, prompt) => {
 
         const params = parseInput(input);
         
-        // Use generic search if no specific filters but input is present
-        const useGenericSearch = (!params.matiere && !params.serie && !params.annee && input !== 'bacc') || input.includes('ème') || input.includes('bepc') || input.includes('bepe');
+        const useGenericSearch = false; // Désactivé selon la demande
         
-        if (!params.matiere && input !== 'bacc' && !useGenericSearch) {
+        if (!params.matiere && input !== 'bacc') {
             await sendMessage(senderId, "📖 *GUIDE PDF BACC*\nTapez 'pdf <matière> <série> <année>' ou simplement un mot clé.\nExemple: 'pdf physique' ou 'lesona'");
             return;
         }
