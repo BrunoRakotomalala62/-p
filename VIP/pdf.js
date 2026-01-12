@@ -71,7 +71,7 @@ function parseInput(input) {
     
     for (const part of parts) {
         // Skip common search terms that aren't specific filters
-        if (part.includes('ème') || part.includes('bepc')) continue;
+        if (part.includes('ème') || part.includes('bepc') || part.includes('bepe')) continue;
 
         for (const [key, val] of Object.entries(MATIERES)) {
             if (part === key || val.aliases.includes(part)) { result.matiere = key; break; }
@@ -218,7 +218,7 @@ module.exports = async (senderId, prompt) => {
         const params = parseInput(input);
         
         // Use generic search if no specific filters but input is present
-        const useGenericSearch = (!params.matiere && !params.serie && !params.annee && input !== 'bacc') || input.includes('ème') || input.includes('bepc');
+        const useGenericSearch = (!params.matiere && !params.serie && !params.annee && input !== 'bacc') || input.includes('ème') || input.includes('bepc') || input.includes('bepe');
         
         if (!params.matiere && input !== 'bacc' && !useGenericSearch) {
             await sendMessage(senderId, "📖 *GUIDE PDF BACC*\nTapez 'pdf <matière> <série> <année>' ou simplement un mot clé.\nExemple: 'pdf physique' ou 'lesona'");
