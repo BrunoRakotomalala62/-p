@@ -119,20 +119,27 @@ async function displayResults(senderId, pdfs, params, page = 1) {
     
     userSessions.set(senderId, { results: pdfs, pageResults: pagePdfs, currentPage: page, params });
 
-    let msg = `📚 𝗕𝗔𝗖𝗖𝗔𝗟𝗔𝗨𝗥𝗘́𝗔𝗧 𝗠𝗔𝗗𝗔𝗚𝗔𝗦𝗖𝗔𝗥\n${DECORATIONS.header}\n`;
-    msg += `📖 Matière: ${params.matiere || 'Toutes'}\n`;
-    if (params.serie) msg += `🎓 Série: ${params.serie}\n`;
-    if (params.annee) msg += `📅 Année: ${params.annee}\n`;
-    msg += `📄 Page ${page}/${totalPages}\n`;
-    msg += `${DECORATIONS.footer}\n\n`;
+    let msg = `🎓 𝗕𝗔𝗖𝗖𝗔𝗟𝗔𝗨𝗥𝗘́𝗔𝗧 𝗠𝗔𝗗𝗔𝗚𝗔𝗦𝗖𝗔𝗥 🇲🇬\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📖 *Matière:* ${params.matiere ? MATIERES[params.matiere].emoji + ' ' + MATIERES[params.matiere].name : '✨ Toutes'}\n`;
+    if (params.serie) msg += `🎓 *Série:* ${params.serie}\n`;
+    if (params.annee) msg += `📅 *Année:* ${params.annee}\n`;
+    msg += `📑 *Page:* ${page}/${totalPages} (${pdfs.length} docs)\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     pagePdfs.forEach((pdf, i) => {
-        msg += `${i + 1}️⃣ 📄 ${pdf.titre}\n`;
+        const num = (startIdx + i + 1);
+        msg += `${num}️⃣ 📄 *${pdf.titre}*\n`;
+        if (pdf.serie || pdf.annee) {
+            msg += `    ╰┈➤ 🏷️ ${pdf.serie || ''} ${pdf.annee ? '• ' + pdf.annee : ''}\n`;
+        }
     });
 
-    msg += `\n${DECORATIONS.divider}\n📥 Numéro (1-${pagePdfs.length}) pour télécharger.`;
-    if (page < totalPages) msg += `\n⏭️ Tapez "page ${page + 1}" pour la suite.`;
-    if (page > 1) msg += `\n⏮️ Tapez "page ${page - 1}" pour le précédent.`;
+    msg += `\n━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📥 Tapez le *numéro* pour télécharger.\n`;
+    if (page < totalPages) msg += `⏭️ Tapez "*page ${page + 1}*" pour la suite.\n`;
+    if (page > 1) msg += `⏮️ Tapez "*page ${page - 1}*" pour revenir.\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━`;
     
     await sendMessage(senderId, msg);
 }
