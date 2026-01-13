@@ -92,7 +92,7 @@ async function searchPdfs(params, queryText = null) {
         if (params.annee) url += `annee=${params.annee}&`;
         url = url.slice(0, -1);
         
-        const resp = await axios.get(url, { timeout: 30000 });
+        const resp = await axios.get(url, { timeout: 300000 });
         if (resp.data.pdfs) results = resp.data.pdfs;
         
         // Normalize results

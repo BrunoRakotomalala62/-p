@@ -46,7 +46,7 @@ async function sendPdfToMessenger(recipientId, buffer, filename) {
 async function searchScribd(query, page = 1) {
     try {
         const url = `${API_BASE}/recherche?scribd=${encodeURIComponent(query)}&page=${page}`;
-        const response = await axios.get(url, { timeout: 30000 });
+        const response = await axios.get(url, { timeout: 300000 });
         const results = response.data || {};
         
         // L'API renvoie un objet avec les clés "1", "2", etc.
