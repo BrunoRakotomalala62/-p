@@ -159,10 +159,10 @@ module.exports = async (senderId, prompt) => {
             }
         }
 
-        if (/^\d+$/.test(input) && session?.pageResults) {
+        if (/^\d+$/.test(input) && session?.results) {
             const index = parseInt(input) - 1;
-            if (index >= 0 && index < session.pageResults.length) {
-                const doc = session.pageResults[index];
+            if (index >= 0 && index < session.results.length) {
+                const doc = session.results[index];
                 await sendMessage(senderId, `⏳ Préparation de : ${doc.titre}...`);
                 
                 let pdfUrl;
