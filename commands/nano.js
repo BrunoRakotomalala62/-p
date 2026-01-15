@@ -48,8 +48,8 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
             console.log(`Appel API nano: ${apiUrl}`);
             
-            // Timeout à 10 minutes
-            const response = await axios.get(apiUrl, { timeout: 600000 });
+            // Attente de 5 minutes (300000 ms)
+            const response = await axios.get(apiUrl, { timeout: 300000 });
             console.log("Réponse brute de l'API:", JSON.stringify(response.data));
             
             let data = response.data;
@@ -64,7 +64,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
             const resultUrl = data.resultats_url || data.result;
 
             if (resultUrl) {
-                // Envoyer l'image transformée
+                // Envoyer l'image en tant qu'attachement (payload url)
                 await sendMessage(senderId, {
                     attachment: {
                         type: 'image',
@@ -75,7 +75,6 @@ module.exports = async (senderId, messageText, api, attachments) => {
                     }
                 });
                 
-                // Envoyer le message de succès APRES l'image
                 await sendMessage(senderId, "✅ Transformer envoyé avec succès");
             } else {
                 console.log("URL de résultat manquante. Données reçues:", data);
@@ -84,11 +83,8 @@ module.exports = async (senderId, messageText, api, attachments) => {
         } catch (error) {
             console.error("Erreur détaillée lors de l'appel à l'API nano-banana:", error.response ? error.response.data : error.message);
             
-            // Si l'erreur vient de l'envoi de l'image via sendMessage
-            if (error.message && error.message.includes('sendMessage')) {
-                await sendMessage(senderId, "Désolé, j'ai reçu l'image transformée mais je n'ai pas pu vous l'envoyer.");
-            } else if (error.code === 'ECONNABORTED') {
-                await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 10 minutes). Veuillez réessayer.");
+            if (error.code === 'ECONNABORTED') {
+                await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 5 minutes). Veuillez réessayer.");
             } else {
                 await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
             }
