@@ -196,6 +196,9 @@ module.exports = async (senderId, prompt, api, attachments) => {
                         "• Taper 'stop' pour quitter"
                     );
 
+                } else if (response.data && response.data.error) {
+                    console.error('Erreur retournée par l\'API:', response.data.error);
+                    throw new Error(`L'API a retourné une erreur: ${response.data.error}`);
                 } else {
                     console.error('Réponse API invalide:', response.data);
                     throw new Error("L'API n'a pas retourné de résultat valide");
