@@ -10,7 +10,7 @@ module.exports = async (senderId, prompt, type, data) => {
         const inputLower = input.toLowerCase();
 
         // If the user sends an image attachment (even if they typed "nano")
-        if (data && data.type === 'image') {
+        if (type === 'attachment' && data && data.type === 'image') {
             const imageUrl = data.url;
             imageSessions.set(senderId, { imageUrl });
             
@@ -23,13 +23,15 @@ module.exports = async (senderId, prompt, type, data) => {
         
         // If user just typed "nano" or another text without having sent an image yet
         if (!session || !session.imageUrl) {
-            await sendMessage(senderId, "Veuillez d'abord m'envoyer une photo en pièce jointe pour commencer la transformation.");
+            // Only send this if it's not a background attachment trigger
+            if (type !== 'attachment') {
+                await sendMessage(senderId, "Veuillez d'abord m'envoyer une photo en pièce jointe pour commencer la transformation.");
+            }
             return;
         }
 
         // If we reach here, we have an image in session and the user sent text
-        if (!input) {
-            await sendMessage(senderId, "Veuillez me dire quelle transformation vous souhaitez faire à cette photo.");
+        if (!input || input === "IMAGE_ATTACHMENT") {
             return;
         }
 
