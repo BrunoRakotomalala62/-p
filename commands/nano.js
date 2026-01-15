@@ -4,28 +4,37 @@ const sendMessage = require('../handles/sendMessage');
 const userStates = {};
 
 module.exports = async (senderId, userText, api, imageAttachments) => {
+    // Initialiser l'état si inexistant
     if (!userStates[senderId]) {
         userStates[senderId] = { step: 'idle', imageUrl: null };
     }
 
     const state = userStates[senderId];
+    const text = userText ? userText.toLowerCase().trim() : "";
+
+    // Commande "RESET_CONVERSATION" envoyée par handleMessage.js (via "supprimer")
+    if (userText === 'RESET_CONVERSATION') {
+        userStates[senderId] = { step: 'idle', imageUrl: null };
+        return;
+    }
 
     // Commande initiale "nano"
-    if (userText.toLowerCase() === 'nano') {
+    if (text === 'nano') {
         state.step = 'awaiting_image';
+        state.imageUrl = null;
         await sendMessage(senderId, "envoyé une image à transformer");
         return;
     }
 
-    // Réception de l'image
+    // Réception de l'image (si on attend une image)
     if (state.step === 'awaiting_image' && imageAttachments && imageAttachments.length > 0) {
         state.imageUrl = imageAttachments[0].payload.url;
         state.step = 'awaiting_prompt';
         await sendMessage(senderId, "j'ai bien reçu votre image, Poser de questions à transformer votre image");
-        return { skipCommandCheck: true };
+        return;
     }
 
-    // Réception du prompt de transformation
+    // Réception du prompt de transformation (si on attend un prompt)
     if (state.step === 'awaiting_prompt' && userText && userText !== 'IMAGE_ATTACHMENT') {
         await sendMessage(senderId, "veuillez patienter pendant quelques minutes..........");
 
