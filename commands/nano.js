@@ -159,53 +159,25 @@ module.exports = async (senderId, prompt, api, attachments) => {
             }
 
             try {
-                // Utiliser l'API Rapido avec clé API intégrée
-                const apiBaseUrl = 'https://rapido.zetsu.xyz/api/nano-v1';
-                const apiKey = 'rapi_4806a41790cd4a83921d56b667ab3f16';
+                // Utiliser la nouvelle API Nano Banana
+                const apiUrl = `https://nano-banana-api-five.vercel.app/nanobanana?prompt=${encodeURIComponent(transformPrompt)}&image=${encodeURIComponent(state.images[0])}&s&uid=${senderId}`;
                 
-                // Construire l'URL avec l'ordre correct: prompt -> url -> apikey
-                let apiUrl = `${apiBaseUrl}?prompt=${encodeURIComponent(transformPrompt)}`;
+                console.log(`Appel API Nano: ${apiUrl}`);
                 
-                // Ajouter toutes les images à l'URL dans l'ordre
-                if (numberOfImages === 1) {
-                    apiUrl += `&url=${encodeURIComponent(state.images[0])}`;
-                    console.log(`Appel API Nano avec 1 image (transformation ${state.transformCount})`);
-                } else {
-                    // Première image avec url, les suivantes avec url2, url3, etc.
-                    apiUrl += `&url=${encodeURIComponent(state.images[0])}`;
-                    for (let i = 1; i < state.images.length; i++) {
-                        apiUrl += `&url${i + 1}=${encodeURIComponent(state.images[i])}`;
-                    }
-                    console.log(`Appel API Nano avec ${numberOfImages} images (transformation ${state.transformCount})`);
-                    console.log(`Ordre des images: 1ère, 2ème${numberOfImages > 2 ? ', 3ème' : ''}${numberOfImages > 3 ? ', 4ème...' : ''}`);
-                }
-                
-                // Ajouter la clé API à la fin
-                apiUrl += `&apikey=${encodeURIComponent(apiKey)}`;
-                
-                console.log(`URL de l'API: ${apiUrl}`);
-                
-                // Télécharger l'image binaire de l'API Rapido
                 const response = await axios.get(apiUrl, {
-                    responseType: 'arraybuffer',
-                    timeout: 120000 // 120 secondes de timeout pour les transformations longues
+                    timeout: 120000
                 });
 
-                console.log('✅ Image reçue de Rapido, taille:', response.data.length, 'bytes');
+                if (response.data && response.data.resultats_url) {
+                    const resultImageUrl = response.data.resultats_url;
+                    console.log('✅ Image générée par l\'API:', resultImageUrl);
 
-                // Uploader l'image sur catbox pour que Facebook puisse y accéder
-                const imageBuffer = Buffer.from(response.data);
-                const resultImageUrl = await uploadImageToCatbox(imageBuffer);
-                
-                if (resultImageUrl && resultImageUrl.startsWith('https://')) {
                     // Mettre à jour l'image courante avec le résultat
                     state.currentImageUrl = resultImageUrl;
                     state.step = 'ready_for_next';
                     state.isProcessing = false;
                     
-                    console.log('✅ Transformation réussie, image disponible sur:', resultImageUrl);
-                    
-                    // Envoyer l'image transformée
+                    // Envoyer l'image transformée en pièce jointe
                     await sendMessage(senderId, {
                         attachment: {
                             type: "image",
@@ -225,8 +197,7 @@ module.exports = async (senderId, prompt, api, attachments) => {
                     );
 
                 } else {
-                    console.error('Response data type:', typeof response.data);
-                    console.error('Response headers:', response.headers);
+                    console.error('Réponse API invalide:', response.data);
                     throw new Error("L'API n'a pas retourné de résultat valide");
                 }
 
