@@ -165,7 +165,7 @@ module.exports = async (senderId, prompt, api, attachments) => {
                 console.log(`Appel API Nano: ${apiUrl}`);
                 
                 const response = await axios.get(apiUrl, {
-                    timeout: 120000
+                    timeout: 180000 // 3 minutes
                 });
 
                 if (response.data && response.data.resultats_url) {
