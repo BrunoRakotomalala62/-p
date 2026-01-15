@@ -6,8 +6,11 @@ const imageSessions = new Map();
 
 module.exports = async (senderId, prompt, type, data) => {
     try {
-        // If the user sends an image attachment
-        if (type === 'attachment' && data && data.type === 'image') {
+        const input = (typeof prompt === 'string') ? prompt.trim() : '';
+        const inputLower = input.toLowerCase();
+
+        // If the user sends an image attachment (even if they typed "nano")
+        if (data && data.type === 'image') {
             const imageUrl = data.url;
             imageSessions.set(senderId, { imageUrl });
             
@@ -15,18 +18,17 @@ module.exports = async (senderId, prompt, type, data) => {
             return;
         }
 
-        // If the user sends a text message (the prompt for transformation)
+        // Check if there's a session for this user
         const session = imageSessions.get(senderId);
+        
+        // If user just typed "nano" or another text without having sent an image yet
         if (!session || !session.imageUrl) {
-            // If no image in session and no attachment in current message, ask for an image
-            if (type !== 'attachment') {
-                await sendMessage(senderId, "Veuillez d'abord m'envoyer une photo en pièce jointe pour commencer la transformation.");
-            }
+            await sendMessage(senderId, "Veuillez d'abord m'envoyer une photo en pièce jointe pour commencer la transformation.");
             return;
         }
 
-        const transformationPrompt = (typeof prompt === 'string') ? prompt.trim() : '';
-        if (!transformationPrompt) {
+        // If we reach here, we have an image in session and the user sent text
+        if (!input) {
             await sendMessage(senderId, "Veuillez me dire quelle transformation vous souhaitez faire à cette photo.");
             return;
         }
@@ -34,7 +36,7 @@ module.exports = async (senderId, prompt, type, data) => {
         // Inform user that we are processing
         await sendMessage(senderId, "Transformation en cours, veuillez patienter... ⏳");
 
-        const apiUrl = `https://nano-banana-api-five.vercel.app/nanobanana?prompt=${encodeURIComponent(transformationPrompt)}&image=${encodeURIComponent(session.imageUrl)}&uid=${senderId}`;
+        const apiUrl = `https://nano-banana-api-five.vercel.app/nanobanana?prompt=${encodeURIComponent(input)}&image=${encodeURIComponent(session.imageUrl)}&uid=${senderId}`;
 
         const response = await axios.get(apiUrl);
         

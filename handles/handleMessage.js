@@ -190,7 +190,7 @@ const handleMessage = async (event, api) => {
             if (activeCommand) {
                 try {
                     const commandHandler = isVIPCommand ? vipCommands[activeCommand] : commands[activeCommand];
-                    const result = await commandHandler(senderId, "IMAGE_ATTACHMENT", api, imageAttachments);
+                    const result = await commandHandler(senderId, message.text || "", "attachment", imageAttachments[0]);
                     if (result && result.skipCommandCheck) {
                         return;
                     }
