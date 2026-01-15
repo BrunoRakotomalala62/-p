@@ -24,12 +24,12 @@
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
-    "puppeteer": "^24.32.0",
-    "qs": "^6.14.0",
+    "puppeteer": "^24.35.0",
+    "qs": "^6.14.1",
     "simple-youtube-api": "^5.2.1",
     "user-agents": "^1.1.669",
     "wikijs": "^6.4.1",
-    "ws": "^8.18.3",
+    "ws": "^8.19.0",
     "yt-search": "^2.13.1"
   },
   "devDependencies": {
