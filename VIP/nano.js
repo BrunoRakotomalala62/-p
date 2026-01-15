@@ -8,8 +8,8 @@ module.exports = async (senderId, prompt, type, data) => {
     try {
         const input = (typeof prompt === 'string') ? prompt.trim() : '';
 
-        // If the user sends an image attachment
-        if (data && data.type === 'image') {
+        // Si c'est un attachement d'image
+        if (type === 'attachment' && data && data.type === 'image') {
             const imageUrl = data.url;
             imageSessions.set(senderId, { imageUrl });
             
@@ -17,19 +17,19 @@ module.exports = async (senderId, prompt, type, data) => {
             return;
         }
 
-        // Check if there's a session for this user
+        // Vérifier si on a une session image
         const session = imageSessions.get(senderId);
         
         if (!session || !session.imageUrl) {
-            // Avoid responding to background triggers or empty messages
-            if (input && input !== "IMAGE_ATTACHMENT" && type !== 'attachment') {
+            // Si l'utilisateur envoie du texte sans avoir envoyé d'image avant
+            if (input && input !== "IMAGE_ATTACHMENT" && input !== "nano") {
                 await sendMessage(senderId, "Veuillez d'abord m'envoyer une photo en pièce jointe pour commencer la transformation.");
             }
             return;
         }
 
-        // If we reach here, we have an image in session and the user sent text
-        if (!input || input === "IMAGE_ATTACHMENT") {
+        // Si l'utilisateur envoie juste "nano" ou "IMAGE_ATTACHMENT", on ne fait rien
+        if (!input || input === "IMAGE_ATTACHMENT" || input.toLowerCase() === "nano") {
             return;
         }
 
