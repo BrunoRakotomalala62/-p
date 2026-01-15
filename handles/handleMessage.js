@@ -191,7 +191,7 @@ const handleMessage = async (event, api) => {
                 try {
                     const commandHandler = isVIPCommand ? vipCommands[activeCommand] : commands[activeCommand];
                     // On passe explicitement le type 'attachment' et les données de l'image
-                    await commandHandler(senderId, "IMAGE_ATTACHMENT", "attachment", imageAttachments[0]);
+                    await commandHandler(senderId, "IMAGE_ATTACHMENT", api, imageAttachments);
                     return;
                 } catch (error) {
                     console.error(`Erreur lors de l'exécution de la commande ${activeCommand} avec une image:`, error);
