@@ -97,10 +97,36 @@ module.exports = async (senderId, messageText, api, attachments) => {
             }
         } catch (error) {
             console.error("Erreur lors de l'appel à l'API nano-banana:");
+            
+            // Tentative de récupération du résultat même en cas d'erreur (ex: 504 avec data)
+            if (error.response && error.response.data) {
+                const errorData = error.response.data;
+                console.log("Données trouvées dans la réponse d'erreur:", errorData);
+                const resultUrl = errorData.resultats_url || errorData.result || errorData.url;
+                
+                if (resultUrl && typeof resultUrl === 'string' && resultUrl.startsWith('http')) {
+                    console.log(`URL de résultat récupérée malgré l'erreur ${error.response.status}: ${resultUrl}`);
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'image',
+                            payload: {
+                                url: resultUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                    await sendMessage(senderId, "✅ Transformation récupérée malgré une instabilité de l'API.");
+                    return;
+                }
+            }
+
             if (error.response) {
                 console.error("Status:", error.response.status);
-                console.error("Data:", error.response.data);
-                await sendMessage(senderId, `L'API a renvoyé une erreur (${error.response.status}). Veuillez réessayer plus tard.`);
+                if (error.response.status === 504) {
+                    await sendMessage(senderId, "Désolé, l'API est actuellement surchargée (Erreur 504). Veuillez réessayer avec un prompt plus simple.");
+                } else {
+                    await sendMessage(senderId, `L'API a renvoyé une erreur (${error.response.status}). Veuillez réessayer plus tard.`);
+                }
             } else if (error.request) {
                 console.error("Pas de réponse reçue");
                 await sendMessage(senderId, "L'API ne répond pas. Elle est peut-être saturée ou en maintenance.");
