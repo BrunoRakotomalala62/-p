@@ -47,7 +47,9 @@ module.exports = async (senderId, messageText, api, attachments) => {
             const apiUrl = `https://nano-banana-api-five.vercel.app/nanobanana?prompt=${query}&image=${encodeURIComponent(imageUrl)}&s&uid=${senderId}`;
 
             console.log(`Appel API nano: ${apiUrl}`);
-            const response = await axios.get(apiUrl);
+            
+            // Augmenter le timeout à 4 minutes (240000 ms) car l'API est lente
+            const response = await axios.get(apiUrl, { timeout: 240000 });
             const resultUrl = response.data.resultats_url;
 
             if (resultUrl) {
@@ -61,20 +63,22 @@ module.exports = async (senderId, messageText, api, attachments) => {
                     }
                 });
                 
-                await sendMessage(senderId, "✅ Transformé envoyé avec succès");
-                // On garde la session pour permettre d'autres questions sur la même image
+                await sendMessage(senderId, "✅ Transformer envoyé avec succès");
             } else {
                 await sendMessage(senderId, "Désolé, je n'ai pas pu générer le résultat. L'API n'a pas renvoyé d'URL.");
             }
         } catch (error) {
             console.error("Erreur lors de l'appel à l'API nano-banana:", error);
-            await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
+            if (error.code === 'ECONNABORTED') {
+                await sendMessage(senderId, "Le traitement a pris trop de temps. Veuillez réessayer plus tard.");
+            } else {
+                await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
+            }
         }
         return;
     }
 
     // Si l'utilisateur tape juste "nano" ou lance la commande
-    // On l'invite à envoyer une image
     console.log(`Initialisation de nano pour ${senderId}`);
     await sendMessage(senderId, "Envoyez une image pour commencer la transformation.");
 };
