@@ -48,9 +48,12 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
             console.log(`Appel API nano: ${apiUrl}`);
             
-            // Augmenter le timeout à 4 minutes (240000 ms) car l'API est lente
-            const response = await axios.get(apiUrl, { timeout: 240000 });
-            const resultUrl = response.data.resultats_url;
+            // Augmenter le timeout à 10 minutes (600000 ms) car l'API est très lente
+            // Ajout de logs pour voir la réponse brute
+            const response = await axios.get(apiUrl, { timeout: 600000 });
+            console.log("Réponse brute de l'API:", JSON.stringify(response.data));
+            
+            const resultUrl = response.data.resultats_url || response.data.result;
 
             if (resultUrl) {
                 await sendMessage(senderId, {
@@ -65,12 +68,13 @@ module.exports = async (senderId, messageText, api, attachments) => {
                 
                 await sendMessage(senderId, "✅ Transformer envoyé avec succès");
             } else {
-                await sendMessage(senderId, "Désolé, je n'ai pas pu générer le résultat. L'API n'a pas renvoyé d'URL.");
+                console.log("URL de résultat manquante dans la réponse:", response.data);
+                await sendMessage(senderId, "Désolé, je n'ai pas pu générer le résultat. L'API a répondu mais n'a pas renvoyé d'image.");
             }
         } catch (error) {
-            console.error("Erreur lors de l'appel à l'API nano-banana:", error);
+            console.error("Erreur détaillée lors de l'appel à l'API nano-banana:", error.response ? error.response.data : error.message);
             if (error.code === 'ECONNABORTED') {
-                await sendMessage(senderId, "Le traitement a pris trop de temps. Veuillez réessayer plus tard.");
+                await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 10 minutes). Veuillez réessayer avec un prompt plus simple.");
             } else {
                 await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
             }
@@ -78,7 +82,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         return;
     }
 
-    // Si l'utilisateur tape juste "nano" ou lance la commande
+    // Si l'utilisateur tape juste "nano"
     console.log(`Initialisation de nano pour ${senderId}`);
     await sendMessage(senderId, "Envoyez une image pour commencer la transformation.");
 };
