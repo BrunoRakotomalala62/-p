@@ -48,22 +48,35 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
             console.log(`Appel API nano: ${apiUrl}`);
             
-            // Attente de 5 minutes (300000 ms)
-            const response = await axios.get(apiUrl, { timeout: 300000 });
-            console.log("Réponse brute de l'API:", JSON.stringify(response.data));
+            // Augmentation de la robustesse de l'appel
+            const response = await axios.get(apiUrl, { 
+                timeout: 300000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+            
+            console.log("Réponse reçue de l'API nano-banana:", response.data);
             
             let data = response.data;
-            if (typeof data === 'string') {
+            if (typeof data === 'string' && data.includes('{')) {
                 try {
                     data = JSON.parse(data);
                 } catch (e) {
-                    console.error("Erreur parsing JSON:", e);
+                    console.error("Erreur parsing JSON (tentative):", e);
                 }
             }
 
-            const resultUrl = data.resultats_url || data.result;
+            // L'API peut renvoyer l'URL dans différents champs ou être l'URL elle-même
+            let resultUrl = null;
+            if (typeof data === 'object' && data !== null) {
+                resultUrl = data.resultats_url || data.result || data.url || data.image_url;
+            } else if (typeof data === 'string' && data.startsWith('http')) {
+                resultUrl = data.trim();
+            }
 
             if (resultUrl) {
+                console.log(`URL de résultat trouvée: ${resultUrl}`);
                 // Envoyer l'image en tant qu'attachement (payload url)
                 await sendMessage(senderId, {
                     attachment: {
@@ -75,18 +88,29 @@ module.exports = async (senderId, messageText, api, attachments) => {
                     }
                 });
                 
-                await sendMessage(senderId, "✅ Transformer envoyé avec succès");
+                await sendMessage(senderId, "✅ Transformation envoyée avec succès");
+                // On peut garder la session ou la supprimer. Ici on la garde pour permettre d'autres transformations sur la même image ?
+                // Mais l'image originale est dans session.imageUrl. Si on veut enchaîner, on pourrait mettre à jour session.imageUrl.
             } else {
-                console.log("URL de résultat manquante. Données reçues:", data);
-                await sendMessage(senderId, "Désolé, je n'ai pas pu générer le résultat. L'API a répondu mais n'a pas renvoyé d'image.");
+                console.error("URL de résultat manquante dans la réponse API. Données:", data);
+                await sendMessage(senderId, "Désolé, l'API n'a pas renvoyé d'image exploitable. Voici la réponse reçue : " + (typeof data === 'string' ? data.substring(0, 100) : "Format inconnu"));
             }
         } catch (error) {
-            console.error("Erreur détaillée lors de l'appel à l'API nano-banana:", error.response ? error.response.data : error.message);
-            
-            if (error.code === 'ECONNABORTED') {
-                await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 5 minutes). Veuillez réessayer.");
+            console.error("Erreur lors de l'appel à l'API nano-banana:");
+            if (error.response) {
+                console.error("Status:", error.response.status);
+                console.error("Data:", error.response.data);
+                await sendMessage(senderId, `L'API a renvoyé une erreur (${error.response.status}). Veuillez réessayer plus tard.`);
+            } else if (error.request) {
+                console.error("Pas de réponse reçue");
+                await sendMessage(senderId, "L'API ne répond pas. Elle est peut-être saturée ou en maintenance.");
             } else {
-                await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
+                console.error("Message:", error.message);
+                if (error.code === 'ECONNABORTED') {
+                    await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 5 minutes). L'API est très lente actuellement.");
+                } else {
+                    await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
+                }
             }
         }
         return;
