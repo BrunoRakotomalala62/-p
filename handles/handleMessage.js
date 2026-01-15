@@ -191,6 +191,8 @@ const handleMessage = async (event, api) => {
                 try {
                     const commandHandler = isVIPCommand ? vipCommands[activeCommand] : commands[activeCommand];
                     // On passe explicitement le type 'attachment' et les données de l'image
+                    // Note: commands[activeCommand] est appelé ici. 
+                    // nano.js attend (senderId, userText, api, imageAttachments)
                     await commandHandler(senderId, "IMAGE_ATTACHMENT", api, imageAttachments);
                     return;
                 } catch (error) {

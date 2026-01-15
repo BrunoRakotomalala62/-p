@@ -20,7 +20,9 @@ module.exports = async (senderId, userText, api, imageAttachments) => {
     // Réception de l'image
     if (userText === 'IMAGE_ATTACHMENT' && imageAttachments && imageAttachments.length > 0) {
         if (state.step === 'waiting_image') {
-            state.imageUrl = imageAttachments[0].payload.url;
+            // Extraire l'URL de l'image de la structure correcte
+            const attachment = imageAttachments[0];
+            state.imageUrl = attachment.payload ? attachment.payload.url : attachment.url;
             state.step = 'waiting_prompt';
             await sendMessage(senderId, "✅ *Image reçue avec succès !* 🖼️\n\n💡 Posez maintenant vos questions ou décrivez les changements à apporter (ex: 'changer en violet ses cheveux').");
             return { skipCommandCheck: true };
