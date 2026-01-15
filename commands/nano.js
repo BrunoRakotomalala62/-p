@@ -13,7 +13,7 @@ module.exports = async (senderId, userText, api, imageAttachments) => {
     // Commande initiale "nano"
     if (userText && userText.toLowerCase() === 'nano') {
         state.step = 'waiting_image';
-        await sendMessage(senderId, "envoyé une image à transformer");
+        await sendMessage(senderId, "🎨 *𝗡𝗔𝗡𝗢-𝗘𝗗𝗜𝗧* ✨\n\n📸 Veuillez envoyer l'image que vous souhaitez transformer !");
         return;
     }
 
@@ -22,7 +22,7 @@ module.exports = async (senderId, userText, api, imageAttachments) => {
         if (state.step === 'waiting_image') {
             state.imageUrl = imageAttachments[0].payload.url;
             state.step = 'waiting_prompt';
-            await sendMessage(senderId, "j'ai bien reçu votre image, Poser de questions à transformer votre image");
+            await sendMessage(senderId, "✅ *Image reçue avec succès !* 🖼️\n\n💡 Posez maintenant vos questions ou décrivez les changements à apporter (ex: 'changer en violet ses cheveux').");
             return { skipCommandCheck: true };
         }
     }
@@ -32,7 +32,7 @@ module.exports = async (senderId, userText, api, imageAttachments) => {
         const prompt = userText;
         const imageUrl = state.imageUrl;
 
-        await sendMessage(senderId, "veuillez patienter pendant quelques minutes..........");
+        await sendMessage(senderId, "🚀 *Transformation en cours...*\n\n⏳ Veuillez patienter quelques instants pendant que je traite votre demande de création... 🎨✨");
 
         try {
             const apiUrl = `https://nano-banana-api-five.vercel.app/nanobanana?prompt=${encodeURIComponent(prompt)}&image=${encodeURIComponent(imageUrl)}&uid=${senderId}`;
@@ -50,6 +50,7 @@ module.exports = async (senderId, userText, api, imageAttachments) => {
                         }
                     }
                 });
+                await sendMessage(senderId, "✨ *Et voilà !* Votre image a été transformée avec succès. 🎈");
             } else {
                 throw new Error("L'API n'a pas renvoyé d'URL de résultat.");
             }
