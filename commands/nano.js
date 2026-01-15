@@ -48,12 +48,22 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
             console.log(`Appel API nano: ${apiUrl}`);
             
-            // Augmenter le timeout à 10 minutes (600000 ms) car l'API est très lente
-            // Ajout de logs pour voir la réponse brute
+            // Timeout à 10 minutes
             const response = await axios.get(apiUrl, { timeout: 600000 });
-            console.log("Réponse brute de l'API:", JSON.stringify(response.data));
+            console.log("Réponse brute de l'API (Type):", typeof response.data);
+            console.log("Réponse brute de l'API (Contenu):", JSON.stringify(response.data));
             
-            const resultUrl = response.data.resultats_url || response.data.result;
+            // L'API peut renvoyer directement l'objet JSON ou parfois une chaîne JSON si mal configurée
+            let data = response.data;
+            if (typeof data === 'string') {
+                try {
+                    data = JSON.parse(data);
+                } catch (e) {
+                    console.error("Erreur parsing JSON:", e);
+                }
+            }
+
+            const resultUrl = data.resultats_url || data.result;
 
             if (resultUrl) {
                 await sendMessage(senderId, {
@@ -68,13 +78,13 @@ module.exports = async (senderId, messageText, api, attachments) => {
                 
                 await sendMessage(senderId, "✅ Transformer envoyé avec succès");
             } else {
-                console.log("URL de résultat manquante dans la réponse:", response.data);
+                console.log("URL de résultat manquante. Données reçues:", data);
                 await sendMessage(senderId, "Désolé, je n'ai pas pu générer le résultat. L'API a répondu mais n'a pas renvoyé d'image.");
             }
         } catch (error) {
             console.error("Erreur détaillée lors de l'appel à l'API nano-banana:", error.response ? error.response.data : error.message);
             if (error.code === 'ECONNABORTED') {
-                await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 10 minutes). Veuillez réessayer avec un prompt plus simple.");
+                await sendMessage(senderId, "Le traitement a pris trop de temps (plus de 10 minutes). Veuillez réessayer.");
             } else {
                 await sendMessage(senderId, "Désolé, une erreur s'est produite lors du traitement de votre demande.");
             }
