@@ -161,16 +161,16 @@ function formatText(text) {
 // Fonction pour le chat simple (TEXT ONLY)
 async function chat(prompt, uid) {
     try {
-        const API_BASE = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
+        const API_BASE = "https://cohere-mu.vercel.app/cohere";
 
         const params = new URLSearchParams({
-            uid: uid,
-            pro: prompt
+            prompt: prompt,
+            uid: uid
         });
 
         const apiUrl = `${API_BASE}?${params.toString()}`;
 
-        console.log('🔗 Appel API Gemini (Text):', apiUrl);
+        console.log('🔗 Appel API Cohere (Text):', apiUrl);
 
         const response = await axios.get(apiUrl, {
             timeout: 60000,
@@ -180,16 +180,16 @@ async function chat(prompt, uid) {
         });
         const result = response.data;
 
-        console.log('✅ Réponse API Gemini reçue:', JSON.stringify(result).substring(0, 200));
+        console.log('✅ Réponse API Cohere reçue:', JSON.stringify(result).substring(0, 200));
 
-        if (!result || !result.success || !result.response) {
+        if (!result || result.status !== 'success' || !result.response) {
             console.error('❌ Réponse API invalide:', result);
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
         return replaceBranding(formatText(result.response));
     } catch (error) {
-        console.error('❌ Erreur chat Gemini:', error.message);
+        console.error('❌ Erreur chat Cohere:', error.message);
         if (error.response) {
             console.error('Status:', error.response.status);
             console.error('Data:', error.response.data);
@@ -198,26 +198,26 @@ async function chat(prompt, uid) {
     }
 }
 
-// Fonction pour le chat avec plusieurs images
+// Fonction pour le chat avec image (Cohere API)
 async function chatWithMultipleImages(prompt, uid, imageUrls) {
     try {
-        const API_BASE = "https://api-geminiplusieursphoto2026.vercel.app/gemini";
+        const API_BASE = "https://cohere-mu.vercel.app/cohere";
 
-        const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez ces photos";
+        const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez cette photo";
 
         const params = new URLSearchParams({
-            uid: uid,
-            pro: finalPrompt
+            prompt: finalPrompt,
+            uid: uid
         });
 
-        // Ajouter les images comme image1, image2, image3, etc.
-        imageUrls.forEach((url, index) => {
-            params.append(`image${index + 1}`, url);
-        });
+        // Ajouter la première image (l'API Cohere supporte une image à la fois)
+        if (imageUrls && imageUrls.length > 0) {
+            params.append('image', imageUrls[0]);
+        }
 
         const apiUrl = `${API_BASE}?${params.toString()}`;
 
-        console.log('🔗 Appel API Gemini (Images):', apiUrl, 'Count:', imageUrls.length);
+        console.log('🔗 Appel API Cohere (Image):', apiUrl);
 
         const response = await axios.get(apiUrl, {
             timeout: 60000,
@@ -227,16 +227,16 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         });
         const result = response.data;
 
-        console.log('✅ Réponse API Gemini image reçue:', JSON.stringify(result).substring(0, 200));
+        console.log('✅ Réponse API Cohere image reçue:', JSON.stringify(result).substring(0, 200));
 
-        if (!result || !result.success || !result.response) {
+        if (!result || result.status !== 'success' || !result.response) {
             console.error('❌ Réponse API invalide:', result);
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
         return replaceBranding(formatText(result.response));
     } catch (error) {
-        console.error('❌ Erreur chat avec images Gemini:', error.message);
+        console.error('❌ Erreur chat avec image Cohere:', error.message);
         if (error.response) {
             console.error('Status:', error.response.status);
             console.error('Data:', error.response.data);
