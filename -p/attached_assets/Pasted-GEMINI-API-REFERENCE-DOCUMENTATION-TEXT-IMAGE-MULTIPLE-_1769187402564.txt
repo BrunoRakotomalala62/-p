@@ -1,0 +1,198 @@
+GEMINI API REFERENCE DOCUMENTATION
+(TEXT / IMAGE / MULTIPLE IMAGE SUPPORT)
+
+ENDPOINT
+POST /gemini
+
+URL
+https://yaya-q598.onrender.com/gemini
+
+CONTENT TYPE
+application/json
+
+
+REQUIRED FIELDS
+
+senderid
+
+Type: string
+
+Description: Unique user or session identifier
+
+Example: "user_123"
+
+
+message
+
+Type: string
+
+Description: User prompt or instruction
+
+Special command:
+
+"clear" → clears conversation history for this senderid
+
+
+
+cookies
+
+Type: object
+
+Description: Gemini authentication cookies
+
+Required key:
+
+"__Secure-1PSID"
+
+
+OPTIONAL FIELDS
+
+urls
+
+Type: array of strings
+
+Description: Public image URLs to be analyzed visually
+
+Supported formats:
+
+.jpg
+
+.jpeg
+
+.png
+
+.webp
+
+
+IMPORTANT IMAGE HANDLING NOTES
+
+• Images are NOT uploaded directly
+• Images MUST be accessible via public URL
+• The server automatically:
+
+Downloads the image
+
+Converts it to RGB
+
+Re-encodes it as PNG
+
+Sends it as a VISION input to Gemini
+
+
+DO NOT SEND:
+
+Binary data
+
+Hex dumps
+
+Base64 strings
+
+Raw JPEG metadata
+
+Non-image files
+
+
+If binary or raw image data is sent as text, Gemini will treat it as FILE DATA, not a visual image.
+
+USAGE EXAMPLES
+
+1. TEXT ONLY REQUEST
+
+
+
+curl -X POST https://yaya-q598.onrender.com/gemini \
+  -H "Content-Type: application/json" \
+  -d '{
+    "senderid": "user_123",
+    "message": "Explain black holes in simple terms",
+    "cookies": {
+      "__Secure-1PSID": "YOUR_GEMINI_COOKIE_HERE"
+    }
+  }'
+
+2. SINGLE IMAGE REQUEST
+
+
+
+curl -X POST https://yaya-q598.onrender.com/gemini \
+  -H "Content-Type: application/json" \
+  -d '{
+    "senderid": "user_123",
+    "message": "Describe this image",
+    "cookies": {
+      "__Secure-1PSID": "YOUR_GEMINI_COOKIE_HERE"
+    },
+    "urls": [
+      "https://example.com/photo.jpg"
+    ]
+  }'
+
+3. MULTIPLE IMAGE REQUEST
+
+
+
+curl -X POST https://yaya-q598.onrender.com/gemini \
+  -H "Content-Type: application/json" \
+  -d '{
+    "senderid": "user_123",
+    "message": "Compare these images",
+    "cookies": {
+      "__Secure-1PSID": "YOUR_GEMINI_COOKIE_HERE"
+    },
+    "urls": [
+      "https://example.com/img1.jpg",
+      "https://example.com/img2.png"
+    ]
+  }'
+
+RESPONSE FORMAT
+
+Successful response:
+
+senderid
+model
+images_used
+response
+
+Example:
+
+{
+  "senderid": "user_123",
+  "model": "gemini-3-pro",
+  "images_used": 2,
+  "response": "The first image shows..."
+}
+l
+
+MODEL FALLBACK
+
+Primary model:
+
+gemini-3-pro
+
+
+Fallback model (automatic):
+
+gemini-2.5-flash
+
+
+If fallback is used, the response includes:
+
+"fallback": "gemini-3-pro failed"
+
+COMMON ERRORS
+
+400 Missing senderid or message
+400 Invalid cookies
+400 Image error (invalid URL or unreadable image)
+500 Gemini provider failure
+
+KEY TAKEAWAY
+
+To make Gemini SEE images:
+
+Always send image URLs
+
+Always send a normal text prompt
+
+Never send raw image data as text
