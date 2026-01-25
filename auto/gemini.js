@@ -277,20 +277,69 @@ function cleanLatexSyntax(text) {
     return text
         .replace(/\$\$/g, "")
         .replace(/\$/g, "")
+        .replace(/\\\[/g, "")
+        .replace(/\\\]/g, "")
         .replace(/\\\(|\\\\\(|\\\\\\\(/g, "")
         .replace(/\\\)|\\\\\)|\\\\\\\)/g, "")
         .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
-        .replace(/\\implies/g, "=>")
-        .replace(/\\boxed\{([^{}]+)\}/g, "[$1]")
+        .replace(/\\implies/g, "⟹")
+        .replace(/\\Rightarrow/g, "⟹")
+        .replace(/\\rightarrow/g, "→")
+        .replace(/\\leftarrow/g, "←")
+        .replace(/\\Leftrightarrow/g, "⟺")
+        .replace(/\\leq/g, "≤")
+        .replace(/\\geq/g, "≥")
+        .replace(/\\neq/g, "≠")
+        .replace(/\\approx/g, "≈")
+        .replace(/\\infty/g, "∞")
+        .replace(/\\sqrt\{([^{}]+)\}/g, "√($1)")
+        .replace(/\\boxed\{([^{}]+)\}/g, "【$1】")
         .replace(/\\quad/g, " ")
-        .replace(/\\cdot/g, "×")
+        .replace(/\\cdot/g, "·")
         .replace(/\\times/g, "×")
         .replace(/\\div/g, "÷")
+        .replace(/\\pm/g, "±")
+        .replace(/\\sum/g, "∑")
+        .replace(/\\prod/g, "∏")
+        .replace(/\\int/g, "∫")
+        .replace(/\\pi/g, "π")
+        .replace(/\\alpha/g, "α")
+        .replace(/\\beta/g, "β")
+        .replace(/\\gamma/g, "γ")
+        .replace(/\\delta/g, "δ")
+        .replace(/\\theta/g, "θ")
+        .replace(/\\lambda/g, "λ")
+        .replace(/\\mu/g, "μ")
+        .replace(/\\sigma/g, "σ")
+        .replace(/\\omega/g, "ω")
         .replace(/\\text\{([^{}]+)\}/g, "$1")
         .replace(/\\equiv[^\\]*\\pmod\{([^{}]+)\}/g, "≡ (mod $1)")
         .replace(/\\[a-zA-Z]+/g, "")
-        .replace(/\\\\/g, "")
-        .replace(/\{|\}/g, "");
+        .replace(/\\\\/g, "\n")
+        .replace(/\{|\}/g, "")
+        .replace(/\n\s*\n\s*\n/g, "\n\n")
+        .trim();
+}
+
+// Fonction pour rendre la réponse plus dynamique avec des titres en gras Unicode
+function formatDynamicResponse(text) {
+    let result = text;
+    
+    // Convertir les numéros d'étapes en format plus visible
+    result = result.replace(/^(\d+)\.\s+/gm, (match, num) => {
+        const boldNums = {'0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'};
+        const boldNum = num.split('').map(d => boldNums[d] || d).join('');
+        return `${boldNum}. `;
+    });
+    
+    // Ajouter des séparateurs visuels entre les étapes principales
+    result = result.replace(/\n(𝟏\.|𝟐\.|𝟑\.|𝟒\.|𝟓\.|𝟔\.|𝟕\.|𝟖\.|𝟗\.)/g, '\n\n▸ $1');
+    
+    // Mettre en évidence les résultats finaux
+    result = result.replace(/(x\s*=\s*\d+)/gi, '✦ $1 ✦');
+    result = result.replace(/(la solution|le résultat|donc|conclusion)/gi, '🔹 $1');
+    
+    return result;
 }
 
 // Fonction pour envoyer des messages longs en plusieurs parties si nécessaire
@@ -401,18 +450,20 @@ async function handleTextMessage(senderId, message) {
 
         // Nettoyer les symboles LaTeX de la réponse
         const cleanedResponse = cleanLatexSyntax(response);
+        
+        // Rendre la réponse plus dynamique
+        const dynamicResponse = formatDynamicResponse(cleanedResponse);
 
-        // Formater la réponse
-        const formattedResponse = `
-✅ AMPINGA D'OR AI 🇲🇬
-━━━━━━━━━━━━━━
+        // Formater la réponse finale
+        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬
+━━━━━━━━━━━━━━━━━━━━
 
-✍️Réponse 👇
+✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇
 
-${cleanedResponse}
-━━━━━━━━━━━━━━━━━━
-🧠 Powered by 👉@Bruno | Ampinga AI
-`;
+${dynamicResponse}
+
+━━━━━━━━━━━━━━━━━━━━
+🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`;
 
         // Envoyer la réponse formatée
         await sendLongMessage(senderId, formattedResponse);
