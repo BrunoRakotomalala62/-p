@@ -2,8 +2,8 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-// URL de base pour l'API Phind
-const API_BASE_URL = 'https://api.ccprojectsapis-jonell.gleeze.com/api/phindai';
+// URL de base pour l'API Copilot
+const API_BASE_URL = 'https://api-library-kohi.onrender.com/api/copilot';
 
 // Stockage de l'historique des conversations pour chaque utilisateur
 const conversationHistory = {};
@@ -113,7 +113,7 @@ module.exports = async (senderId, prompt) => {
 🔄 Pour réinitialiser: tiana reset
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔬 Powered by Phind AI | 👨‍💻 @Bruno
+🔬 Powered by Copilot AI | 👨‍💻 @Bruno
             `.trim();
             await sendMessage(senderId, welcomeMessage);
             return;
@@ -125,12 +125,19 @@ module.exports = async (senderId, prompt) => {
         // Construire le contexte avec l'historique
         const contextualPrompt = buildConversationContext(senderId, prompt);
 
-        // Construire l'URL de l'API
-        const apiUrl = `${API_BASE_URL}?q=${encodeURIComponent(contextualPrompt)}`;
+        // Construire l'URL de l'API avec les nouveaux paramètres
+        const apiUrl = `${API_BASE_URL}?prompt=${encodeURIComponent(contextualPrompt)}&model=gpt-5&user=${encodeURIComponent(senderId)}`;
         
         // Appel à l'API
         const response = await axios.get(apiUrl);
-        const reply = response.data;
+        
+        // Extraire le texte de la réponse JSON
+        if (!response.data || !response.data.status || !response.data.data || !response.data.data.text) {
+            await sendMessage(senderId, "❌ Désolé, je n'ai pas pu générer une réponse. Veuillez réessayer.");
+            return;
+        }
+        
+        const reply = response.data.data.text;
 
         // Vérifier si la réponse est vide
         if (!reply || reply.trim() === '') {
@@ -168,7 +175,7 @@ ${reply}
 💬 Historique: ${conversationHistory[senderId].length} échanges
 🔄 Tapez "tiana reset" pour réinitialiser
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔬 Powered by Phind AI | 👨‍💻 @Bruno
+🔬 Powered by Copilot AI | 👨‍💻 @Bruno
         `.trim();
 
         // Envoyer la réponse formatée avec découpage intelligent
