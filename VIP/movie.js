@@ -1,6 +1,4 @@
 const axios = require('axios');
-const fs = require('fs-extra');
-const path = require('path');
 
 // Cache global simple pour stocker les résultats de recherche par utilisateur
 const userSearchCache = {};
@@ -37,7 +35,7 @@ module.exports = async function (senderId, userText, api) {
                 }
                 return;
             } catch (e) {
-                console.error("Erreur download:", e);
+                console.error("Erreur download:", e.message);
                 return await sendMessage(senderId, "❌ Erreur lors de la récupération du lien.");
             }
         }
@@ -45,7 +43,7 @@ module.exports = async function (senderId, userText, api) {
 
     if (!query) return;
 
-    // Gestion de la pagination (si spécifiée comme dernier argument)
+    // Gestion de la pagination
     let page = 1;
     const lastArg = args[args.length - 1];
     let searchQuery = query;
@@ -61,14 +59,12 @@ module.exports = async function (senderId, userText, api) {
         const searchUrl = `https://movie--ngz1zcaz.replit.app/recherche?video=${encodeURIComponent(searchQuery)}&page=${page}`;
         const response = await axios.get(searchUrl);
         
-        // Structure de l'API: {"resultats": [...]}
         const results = response.data.resultats || response.data.results || (Array.isArray(response.data) ? response.data : null);
 
         if (!results || !Array.isArray(results) || results.length === 0) {
             return await sendMessage(senderId, "❌ Aucun résultat trouvé.");
         }
 
-        // Stocker en cache pour le téléchargement futur
         userSearchCache[senderId] = results;
 
         const maxResults = Math.min(results.length, 15);
@@ -78,21 +74,21 @@ module.exports = async function (senderId, userText, api) {
             const title = item.titre || item.title || "Sans titre";
             const imageUrl = item.image_url || item.image || item.poster;
             
-            let msgObj = { body: `Titre ${i + 1}\n${title}` };
+            // Envoyer le message de texte
+            await api.sendMessage(`Titre ${i + 1}\n${title}`, senderId);
             
+            // Envoyer l'image séparément si elle existe
             if (imageUrl) {
                 try {
-                    const imgRes = await axios.get(imageUrl, { responseType: 'stream' });
-                    msgObj.attachment = imgRes.data;
+                    await api.sendMessage({
+                        attachment: await axios.get(imageUrl, { responseType: 'stream' }).then(res => res.data)
+                    }, senderId);
                 } catch (e) {
-                    console.error("Erreur image stream:", e.message);
+                    console.error(`Erreur image ${i+1}:`, e.message);
                 }
             }
             
-            // Envoyer chaque résultat un par un avec son image
-            await api.sendMessage(msgObj, senderId);
-            // Petit délai pour éviter le rate limit
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 800)); // Délai légèrement plus long pour la stabilité
         }
 
         await sendMessage(senderId, "💡 Répondez avec le numéro pour télécharger.");
