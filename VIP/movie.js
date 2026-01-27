@@ -59,6 +59,7 @@ module.exports = async function (senderId, userText, api) {
         const searchUrl = `https://movie--ngz1zcaz.replit.app/recherche?video=${encodeURIComponent(searchQuery)}&page=${page}`;
         const response = await axios.get(searchUrl);
         
+        // Structure de l'API: {"resultats": [...]}
         const results = response.data.resultats || response.data.results || (Array.isArray(response.data) ? response.data : null);
 
         if (!results || !Array.isArray(results) || results.length === 0) {
@@ -74,21 +75,24 @@ module.exports = async function (senderId, userText, api) {
             const title = item.titre || item.title || "Sans titre";
             const imageUrl = item.image_url || item.image || item.poster;
             
-            // Envoyer le message de texte
-            await api.sendMessage(`Titre ${i + 1}\n${title}`, senderId);
+            let messageText = `Titre ${i + 1}\n${title}`;
             
-            // Envoyer l'image séparément si elle existe
             if (imageUrl) {
                 try {
+                    // Envoi groupé texte + image si possible, sinon séparé
                     await api.sendMessage({
+                        body: messageText,
                         attachment: await axios.get(imageUrl, { responseType: 'stream' }).then(res => res.data)
                     }, senderId);
                 } catch (e) {
-                    console.error(`Erreur image ${i+1}:`, e.message);
+                    console.error(`Erreur image stream ${i+1}:`, e.message);
+                    await api.sendMessage(messageText, senderId);
                 }
+            } else {
+                await api.sendMessage(messageText, senderId);
             }
             
-            await new Promise(resolve => setTimeout(resolve, 800)); // Délai légèrement plus long pour la stabilité
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
         await sendMessage(senderId, "💡 Répondez avec le numéro pour télécharger.");
