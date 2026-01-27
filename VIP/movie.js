@@ -1,17 +1,18 @@
 const axios = require('axios');
+const fs = require('fs-extra');
+const path = require('path');
 
 // Cache global simple pour stocker les résultats de recherche par utilisateur
 const userSearchCache = {};
 
 module.exports = async function (senderId, userText, api) {
+    const sendMessage = require('../handles/sendMessage');
     const args = userText.split(" ");
     const query = args.join(" ");
 
-    if (!query || userText === "RESET_CONVERSATION") {
+    if (userText === "RESET_CONVERSATION") {
         return;
     }
-
-    const sendMessage = require('../handles/sendMessage');
 
     // Gestion du téléchargement par numéro
     if (!isNaN(userText.trim()) && args.length === 1) {
@@ -21,14 +22,13 @@ module.exports = async function (senderId, userText, api) {
         if (cache && cache[index]) {
             const item = cache[index];
             try {
-                await sendMessage(senderId, `📥 Préparation du téléchargement pour : ${item.titre}...`);
+                await sendMessage(senderId, `📥 Préparation du téléchargement pour : ${item.titre || item.title}...`);
                 
-                const downloadUrl = `https://movie--ngz1zcaz.replit.app/download?video=${encodeURIComponent(item.detail_url)}`;
+                const detailUrl = item.detail_url || item.id;
+                const downloadUrl = `https://movie--ngz1zcaz.replit.app/download?video=${encodeURIComponent(detailUrl)}`;
                 const response = await axios.get(downloadUrl);
                 
-                // L'API semble renvoyer un objet avec le lien de téléchargement
-                // Structure probable: { "download_link": "..." } ou similaire
-                const link = response.data.download_link || response.data.link || response.data.url;
+                const link = response.data.download_link || response.data.link || response.data.url || response.data.download_url;
                 
                 if (link) {
                     await sendMessage(senderId, `✅ Voici votre lien de téléchargement :\n\n${link}`);
@@ -42,6 +42,8 @@ module.exports = async function (senderId, userText, api) {
             }
         }
     }
+
+    if (!query) return;
 
     // Gestion de la pagination (si spécifiée comme dernier argument)
     let page = 1;
@@ -59,8 +61,8 @@ module.exports = async function (senderId, userText, api) {
         const searchUrl = `https://movie--ngz1zcaz.replit.app/recherche?video=${encodeURIComponent(searchQuery)}&page=${page}`;
         const response = await axios.get(searchUrl);
         
-        // Structure de l'API: {"resultats": [...], "page": 1, "keyword": "..."}
-        const results = response.data.resultats || response.data;
+        // Structure de l'API: {"resultats": [...]}
+        const results = response.data.resultats || response.data.results || (Array.isArray(response.data) ? response.data : null);
 
         if (!results || !Array.isArray(results) || results.length === 0) {
             return await sendMessage(senderId, "❌ Aucun résultat trouvé.");
@@ -69,32 +71,34 @@ module.exports = async function (senderId, userText, api) {
         // Stocker en cache pour le téléchargement futur
         userSearchCache[senderId] = results;
 
-        let message = `🎬 𝗥𝗘́𝗦𝗨𝗟𝗧𝗔𝗧𝗦 𝗣𝗢𝗨𝗥 "${searchQuery.toUpperCase()}" (Page ${page})\n━━━━━━━━━━━━━━━━━━━━\n\n`;
-        const attachments = [];
-
-        for (let i = 0; i < Math.min(results.length, 15); i++) {
+        const maxResults = Math.min(results.length, 15);
+        
+        for (let i = 0; i < maxResults; i++) {
             const item = results[i];
-            message += `${i + 1}. ${item.titre || "Sans titre"}\n`;
+            const title = item.titre || item.title || "Sans titre";
+            const imageUrl = item.image_url || item.image || item.poster;
             
-            if (item.image_url) {
+            let msgObj = { body: `Titre ${i + 1}\n${title}` };
+            
+            if (imageUrl) {
                 try {
-                    // Pour Messenger, on peut envoyer les URLs directement dans le tableau d'attachements
-                    attachments.push(item.image_url); 
+                    const imgRes = await axios.get(imageUrl, { responseType: 'stream' });
+                    msgObj.attachment = imgRes.data;
                 } catch (e) {
-                    console.error("Erreur image:", e);
+                    console.error("Erreur image stream:", e.message);
                 }
             }
+            
+            // Envoyer chaque résultat un par un avec son image
+            await api.sendMessage(msgObj, senderId);
+            // Petit délai pour éviter le rate limit
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        message += "\n━━━━━━━━━━━━━━━━━━━━\n💡 Répondez avec le numéro pour télécharger.";
-        
-        await api.sendMessage({
-            body: message,
-            attachment: attachments
-        }, senderId);
+        await sendMessage(senderId, "💡 Répondez avec le numéro pour télécharger.");
 
     } catch (error) {
-        console.error("Erreur movie search:", error);
+        console.error("Erreur movie search:", error.message);
         await sendMessage(senderId, "❌ Une erreur est survenue lors de la recherche.");
     }
 };
