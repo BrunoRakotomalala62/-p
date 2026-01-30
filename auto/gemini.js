@@ -161,7 +161,7 @@ function formatText(text) {
 // Fonction pour le chat simple (TEXT ONLY)
 async function chat(prompt, uid) {
     try {
-        const API_BASE = "https://cohere-mu.vercel.app/cohere";
+        const API_BASE = "https://gemini-api-wrapper--ioy4xbxx.replit.app/gemini";
 
         const params = new URLSearchParams({
             prompt: prompt,
@@ -170,7 +170,7 @@ async function chat(prompt, uid) {
 
         const apiUrl = `${API_BASE}?${params.toString()}`;
 
-        console.log('🔗 Appel API Cohere (Text):', apiUrl);
+        console.log('🔗 Appel API Gemini (Text):', apiUrl);
 
         const response = await axios.get(apiUrl, {
             timeout: 60000,
@@ -180,16 +180,16 @@ async function chat(prompt, uid) {
         });
         const result = response.data;
 
-        console.log('✅ Réponse API Cohere reçue:', JSON.stringify(result).substring(0, 200));
+        console.log('✅ Réponse API Gemini reçue:', JSON.stringify(result).substring(0, 200));
 
-        if (!result || result.status !== 'success' || !result.response) {
+        if (!result || result.status !== 'success' || !result.answer) {
             console.error('❌ Réponse API invalide:', result);
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
-        return replaceBranding(formatText(result.response));
+        return replaceBranding(formatText(result.answer));
     } catch (error) {
-        console.error('❌ Erreur chat Cohere:', error.message);
+        console.error('❌ Erreur chat Gemini:', error.message);
         if (error.response) {
             console.error('Status:', error.response.status);
             console.error('Data:', error.response.data);
@@ -198,26 +198,26 @@ async function chat(prompt, uid) {
     }
 }
 
-// Fonction pour le chat avec image (Cohere API)
+// Fonction pour le chat avec image (Gemini API)
 async function chatWithMultipleImages(prompt, uid, imageUrls) {
     try {
-        const API_BASE = "https://cohere-mu.vercel.app/cohere";
+        const API_BASE = "https://gemini-api-wrapper--ioy4xbxx.replit.app/gemini";
 
-        const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Décrivez cette photo";
+        const finalPrompt = prompt && prompt.trim() !== "" ? prompt : "Que vois-tu sur cette image";
 
         const params = new URLSearchParams({
             prompt: finalPrompt,
             uid: uid
         });
 
-        // Ajouter la première image (l'API Cohere supporte une image à la fois)
+        // Ajouter la première image
         if (imageUrls && imageUrls.length > 0) {
             params.append('image', imageUrls[0]);
         }
 
         const apiUrl = `${API_BASE}?${params.toString()}`;
 
-        console.log('🔗 Appel API Cohere (Image):', apiUrl);
+        console.log('🔗 Appel API Gemini (Image):', apiUrl);
 
         const response = await axios.get(apiUrl, {
             timeout: 60000,
@@ -227,16 +227,16 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         });
         const result = response.data;
 
-        console.log('✅ Réponse API Cohere image reçue:', JSON.stringify(result).substring(0, 200));
+        console.log('✅ Réponse API Gemini image reçue:', JSON.stringify(result).substring(0, 200));
 
-        if (!result || result.status !== 'success' || !result.response) {
+        if (!result || result.status !== 'success' || !result.answer) {
             console.error('❌ Réponse API invalide:', result);
             throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
         }
 
-        return replaceBranding(formatText(result.response));
+        return replaceBranding(formatText(result.answer));
     } catch (error) {
-        console.error('❌ Erreur chat avec image Cohere:', error.message);
+        console.error('❌ Erreur chat avec image Gemini:', error.message);
         if (error.response) {
             console.error('Status:', error.response.status);
             console.error('Data:', error.response.data);
