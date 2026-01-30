@@ -180,14 +180,16 @@ async function chat(prompt, uid) {
         });
         const result = response.data;
 
-        console.log('✅ Réponse API Gemini reçue:', JSON.stringify(result).substring(0, 200));
+        console.log('✅ Réponse API Gemini reçue:', JSON.stringify(result).substring(0, 500));
 
-        if (!result || result.status !== 'success' || !result.answer) {
+        const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
+
+        if (!result || result.status !== 'success' || !answer) {
             console.error('❌ Réponse API invalide:', result);
-            throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
+            throw new Error(result?.error || 'Aucune réponse exploitable reçue de l\'API');
         }
 
-        return replaceBranding(formatText(result.answer));
+        return replaceBranding(formatText(answer));
     } catch (error) {
         console.error('❌ Erreur chat Gemini:', error.message);
         if (error.response) {
@@ -227,14 +229,16 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         });
         const result = response.data;
 
-        console.log('✅ Réponse API Gemini image reçue:', JSON.stringify(result).substring(0, 200));
+        console.log('✅ Réponse API Gemini image reçue:', JSON.stringify(result).substring(0, 500));
 
-        if (!result || result.status !== 'success' || !result.answer) {
+        const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
+
+        if (!result || result.status !== 'success' || !answer) {
             console.error('❌ Réponse API invalide:', result);
-            throw new Error(result?.error || 'Aucune réponse reçue de l\'API');
+            throw new Error(result?.error || 'Aucune réponse exploitable reçue de l\'API');
         }
 
-        return replaceBranding(formatText(result.answer));
+        return replaceBranding(formatText(answer));
     } catch (error) {
         console.error('❌ Erreur chat avec image Gemini:', error.message);
         if (error.response) {
