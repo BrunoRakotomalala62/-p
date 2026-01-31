@@ -9,7 +9,7 @@ const userImageMemory = new Map();
 
 // Configuration de l'API Replit et ImgBB
 const API_CONFIG = {
-    BASE_URL: "https://gemini-api-wrapper--ioy4xbxx.replit.app/gemini",
+    BASE_URL: "https://gemini-api-wrapper--dukgiqn.replit.app/gemini",
     TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     IMGBB_API_KEY: 'fa76a43cd1f8d1e193f4b3329dda455f'
