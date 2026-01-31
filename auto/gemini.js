@@ -20,7 +20,7 @@ async function uploadImageToCatbox(imageUrl) {
 
         const imageResponse = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
-            timeout: 30000,
+            timeout: 15000, // Timeout plus court pour basculer rapidement sur le fallback
             maxContentLength: Infinity,
             headers: {
                 'User-Agent': API_CONFIG.USER_AGENT
@@ -40,7 +40,7 @@ async function uploadImageToCatbox(imageUrl) {
         console.log('📤 Upload vers catbox.moe...');
         const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
             headers: formData.getHeaders(),
-            timeout: 30000,
+            timeout: 15000,
             maxBodyLength: Infinity,
             maxContentLength: Infinity
         });
@@ -56,7 +56,7 @@ async function uploadImageToCatbox(imageUrl) {
         return publicUrl;
     } catch (error) {
         console.error('❌ Erreur lors de l\'upload de l\'image:', error.message);
-        throw new Error(`Impossible d'uploader l'image: ${error.message}`);
+        throw error; // On laisse l'erreur remonter pour activer le fallback
     }
 }
 
@@ -215,7 +215,20 @@ async function chat(prompt, uid) {
     if (userImageMemory.has(uid)) {
         const imageUrl = userImageMemory.get(uid);
         console.log(`📸 Utilisation de l'image en mémoire pour ${uid}`);
-        return await callGeminiApi({ prompt, uid, image: imageUrl });
+        
+        try {
+            const response = await callGeminiApi({ prompt, uid, image: imageUrl });
+            // Effacer l'image de la mémoire après une réponse réussie
+            userImageMemory.delete(uid);
+            return response;
+        } catch (error) {
+            // Si l'erreur est liée à l'image, on peut suggérer de la renvoyer
+            if (error.message.includes("visualiser l'image") || error.message.includes("URL")) {
+                userImageMemory.delete(uid);
+                throw new Error("L'image en mémoire a expiré ou est inaccessible. Veuillez renvoyer l'image.");
+            }
+            throw error;
+        }
     }
     return await callGeminiApi({ prompt, uid });
 }
@@ -281,12 +294,12 @@ async function handleTextMessage(senderId, message) {
         const cleanedResponse = cleanLatexSyntax(response);
         const dynamicResponse = formatDynamicResponse(cleanedResponse);
 
-        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\n${dynamicResponse}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`;
+        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\n${dynamicResponse}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`;
 
         await sendLongMessage(senderId, formattedResponse);
     } catch (error) {
         console.error("❌ Erreur:", error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
@@ -294,16 +307,35 @@ async function handleImageMessage(senderId, imageUrl) {
     try {
         await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
         
-        const publicImageUrl = await uploadImageToCatbox(imageUrl);
+        let finalImageUrl = imageUrl;
+        let uploadSuccess = false;
+
+        try {
+            // Tentative d'upload vers Catbox
+            finalImageUrl = await uploadImageToCatbox(imageUrl);
+            uploadSuccess = true;
+        } catch (uploadError) {
+            console.warn("⚠️ Échec Catbox, utilisation de l'URL directe Facebook comme secours.");
+            // En cas d'échec Catbox, on garde l'URL Facebook d'origine
+            finalImageUrl = imageUrl;
+        }
         
-        // Mémoriser l'image au lieu de répondre directement
-        userImageMemory.set(senderId, publicImageUrl);
+        const isUpdate = userImageMemory.has(senderId);
+        userImageMemory.set(senderId, finalImageUrl);
         
-        await sendMessage(senderId, "✅ Image reçue et mémorisée ! ✨🧠\n\nPosez maintenant votre question sur cette image (ex: 'Résous cet exercice' ou 'Que vois-tu ?').");
+        const statusMsg = uploadSuccess 
+            ? "✅ Image reçue et mémorisée ! ✨🧠" 
+            : "✅ Image reçue (mode secours activé) ! ✨🧠";
+            
+        const updateMsg = isUpdate 
+            ? "\n\n🔄 (Une ancienne image a été remplacée)" 
+            : "";
+
+        await sendMessage(senderId, `${statusMsg}${updateMsg}\n\nPosez maintenant votre question sur cette image.`);
         
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter vos images.\n\nErreur: ${error.message}\n\nAssurez-vous que les URLs des images sont accessibles publiquement.\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
