@@ -181,14 +181,27 @@ function formatDynamicResponse(text) {
 
 // --- Fonctions d'appel API ---
 
+/**
+ * Appelle l'API Gemini en utilisant la méthode POST
+ * Paramètres attendus: pro, image, uid
+ */
 async function callGeminiApi(params) {
-    const apiUrl = `${API_CONFIG.BASE_URL}?${new URLSearchParams(params).toString()}`;
-    console.log(`🔗 Appel API Gemini: ${apiUrl.substring(0, 200)}...`);
+    // Préparation des données pour POST selon la demande
+    const postData = {
+        pro: params.prompt || params.pro,
+        image: params.image,
+        uid: params.uid
+    };
+
+    console.log(`🔗 Appel API Gemini (POST): ${API_CONFIG.BASE_URL}`);
 
     try {
-        const response = await axios.get(apiUrl, {
+        const response = await axios.post(API_CONFIG.BASE_URL, postData, {
             timeout: API_CONFIG.TIMEOUT,
-            headers: { 'User-Agent': API_CONFIG.USER_AGENT }
+            headers: { 
+                'User-Agent': API_CONFIG.USER_AGENT,
+                'Content-Type': 'application/json'
+            }
         });
 
         const result = response.data;
@@ -201,6 +214,24 @@ async function callGeminiApi(params) {
 
         return replaceBranding(formatText(answer));
     } catch (error) {
+        // Fallback vers GET si POST échoue avec 405 (Method Not Allowed)
+        if (error.response && error.response.status === 405) {
+            console.warn('⚠️ POST non autorisé, tentative en GET...');
+            const getParams = new URLSearchParams({
+                prompt: postData.pro,
+                uid: postData.uid
+            });
+            if (postData.image) getParams.append('image', postData.image);
+            
+            const response = await axios.get(`${API_CONFIG.BASE_URL}?${getParams.toString()}`, {
+                timeout: API_CONFIG.TIMEOUT,
+                headers: { 'User-Agent': API_CONFIG.USER_AGENT }
+            });
+            const result = response.data;
+            const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
+            return replaceBranding(formatText(answer));
+        }
+
         if (error.code === 'ECONNABORTED') {
             throw new Error('Le délai d\'attente (timeout) a été dépassé. L\'API met trop de temps à répondre.');
         }
@@ -332,7 +363,7 @@ async function handleImageMessage(senderId, imageUrl) {
         
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝐞𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
