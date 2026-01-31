@@ -186,11 +186,10 @@ function formatDynamicResponse(text) {
  * Paramètres attendus: pro, image, uid
  */
 async function callGeminiApi(params) {
-    // Préparation des données pour POST selon la demande
     const postData = {
         pro: params.prompt || params.pro,
-        image: params.image,
-        uid: params.uid
+        image: params.image || null,
+        uid: params.uid || null
     };
 
     console.log(`🔗 Appel API Gemini (POST): ${API_CONFIG.BASE_URL}`);
@@ -205,6 +204,8 @@ async function callGeminiApi(params) {
         });
 
         const result = response.data;
+        
+        // L'API renvoie désormais { status: "success", answer: "..." }
         const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
 
         if (!answer) {
@@ -214,14 +215,15 @@ async function callGeminiApi(params) {
 
         return replaceBranding(formatText(answer));
     } catch (error) {
-        // Fallback vers GET si POST échoue avec 405 (Method Not Allowed)
-        if (error.response && error.response.status === 405) {
-            console.warn('⚠️ POST non autorisé, tentative en GET...');
-            const getParams = new URLSearchParams({
-                prompt: postData.pro,
-                uid: postData.uid
-            });
+        console.error('❌ Erreur API Gemini:', error.message);
+        
+        // Fallback GET en cas d'erreur persistante sur POST
+        if (error.response && (error.response.status === 405 || error.response.status === 404)) {
+            console.warn('⚠️ Erreur sur POST, tentative de secours en GET...');
+            const getParams = new URLSearchParams();
+            getParams.append('pro', postData.pro);
             if (postData.image) getParams.append('image', postData.image);
+            if (postData.uid) getParams.append('uid', postData.uid);
             
             const response = await axios.get(`${API_CONFIG.BASE_URL}?${getParams.toString()}`, {
                 timeout: API_CONFIG.TIMEOUT,
@@ -232,9 +234,6 @@ async function callGeminiApi(params) {
             return replaceBranding(formatText(answer));
         }
 
-        if (error.code === 'ECONNABORTED') {
-            throw new Error('Le délai d\'attente (timeout) a été dépassé. L\'API met trop de temps à répondre.');
-        }
         throw error;
     }
 }
@@ -251,7 +250,6 @@ async function chat(prompt, uid) {
             userImageMemory.delete(uid);
             return response;
         } catch (error) {
-            // Si l'erreur est liée à l'image, on peut suggérer de la renvoyer
             if (error.message.includes("visualiser l'image") || error.message.includes("URL")) {
                 userImageMemory.delete(uid);
                 throw new Error("L'image en mémoire a expiré ou est inaccessible. Veuillez renvoyer l'image.");
@@ -340,7 +338,6 @@ async function handleImageMessage(senderId, imageUrl) {
         let uploadSuccess = false;
 
         try {
-            // Tentative d'upload vers ImgBB
             finalImageUrl = await uploadImageToPublic(imageUrl);
             uploadSuccess = true;
         } catch (uploadError) {
