@@ -4,12 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const FormData = require('form-data');
 
-const conversationHistory = new Map();
+// Mémorisation des images par utilisateur
+const userImageMemory = new Map();
 
 // Configuration de l'API Replit
 const API_CONFIG = {
     BASE_URL: "https://gemini-api-wrapper--ioy4xbxx.replit.app/gemini",
-    TIMEOUT: 90000, // Augmenté à 90s pour éviter les timeouts sur les requêtes complexes
+    TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
 
@@ -193,7 +194,6 @@ async function callGeminiApi(params) {
         });
 
         const result = response.data;
-        // L'API peut renvoyer result.answer ou result.response
         const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
 
         if (!answer) {
@@ -211,6 +211,12 @@ async function callGeminiApi(params) {
 }
 
 async function chat(prompt, uid) {
+    // Vérifier si l'utilisateur a une image en mémoire
+    if (userImageMemory.has(uid)) {
+        const imageUrl = userImageMemory.get(uid);
+        console.log(`📸 Utilisation de l'image en mémoire pour ${uid}`);
+        return await callGeminiApi({ prompt, uid, image: imageUrl });
+    }
     return await callGeminiApi({ prompt, uid });
 }
 
@@ -259,7 +265,8 @@ async function sendLongMessage(senderId, message) {
 async function handleTextMessage(senderId, message) {
     try {
         if (message && message.toLowerCase() === 'clear') {
-            await sendMessage(senderId, "🔄 Conversation réinitialisée avec succès!");
+            userImageMemory.delete(senderId);
+            await sendMessage(senderId, "🔄 Conversation et images réinitialisées avec succès!");
             return;
         }
 
@@ -287,27 +294,13 @@ async function handleImageMessage(senderId, imageUrl) {
     try {
         await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
         
-        // On utilise directement l'URL de l'image reçue de Facebook car l'API Replit semble l'accepter
-        // Si l'utilisateur a précisé que l'URL doit être publique, celle de FB l'est temporairement.
-        // Mais pour plus de sécurité, on garde l'upload catbox si nécessaire.
-        // Cependant, l'utilisateur a dit que son API fonctionne avec une URL Google Images.
+        const publicImageUrl = await uploadImageToCatbox(imageUrl);
         
-        let publicImageUrl = imageUrl;
-        try {
-            publicImageUrl = await uploadImageToCatbox(imageUrl);
-        } catch (uploadError) {
-            console.warn("⚠️ Échec de l'upload Catbox, tentative avec l'URL directe:", uploadError.message);
-        }
+        // Mémoriser l'image au lieu de répondre directement
+        userImageMemory.set(senderId, publicImageUrl);
         
-        await sendMessage(senderId, "✨🧠 Analyse de l'image... ⏳💫");
-        const response = await chatWithMultipleImages("Que vois-tu sur cette image", senderId, [publicImageUrl]);
+        await sendMessage(senderId, "✅ Image reçue et mémorisée ! ✨🧠\n\nPosez maintenant votre question sur cette image (ex: 'Résous cet exercice' ou 'Que vois-tu ?').");
         
-        const cleanedResponse = cleanLatexSyntax(response);
-        const dynamicResponse = formatDynamicResponse(cleanedResponse);
-
-        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\n${dynamicResponse}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`;
-
-        await sendLongMessage(senderId, formattedResponse);
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
         await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter vos images.\n\nErreur: ${error.message}\n\nAssurez-vous que les URLs des images sont accessibles publiquement.\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
@@ -319,5 +312,7 @@ module.exports = {
     handleImageMessage,
     chat,
     chatWithMultipleImages,
-    resetConversation: async (uid) => conversationHistory.delete(uid)
+    resetConversation: async (uid) => {
+        userImageMemory.delete(uid);
+    }
 };
