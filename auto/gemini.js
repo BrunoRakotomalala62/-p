@@ -9,7 +9,7 @@ const userImageMemory = new Map();
 
 // Configuration des APIs
 const API_CONFIG = {
-    GEMINI_URL: "https://gemini-api-wrapper--dukgiqn.replit.app/gemini",
+    GEMINI_URL: "https://gemini-api-wrapper--ngaxicuq.replit.app/gemini",
     UPLOAD_URL: "https://image-upload-sigma-swart.vercel.app/upload",
     TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
