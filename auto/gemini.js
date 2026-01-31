@@ -193,11 +193,12 @@ async function callGeminiApi(params) {
         });
 
         const result = response.data;
+        // L'API peut renvoyer result.answer ou result.response
         const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
 
-        if (!result || result.status !== 'success' || !answer) {
+        if (!answer) {
             console.error('❌ Réponse API invalide:', result);
-            throw new Error(result?.error || 'Aucune réponse exploitable reçue de l\'API');
+            throw new Error(result?.message || result?.error || 'Aucune réponse exploitable reçue de l\'API');
         }
 
         return replaceBranding(formatText(answer));
@@ -257,8 +258,6 @@ async function sendLongMessage(senderId, message) {
 
 async function handleTextMessage(senderId, message) {
     try {
-        const conversationHistoryOld = {}; // Local mock or use global if needed
-        
         if (message && message.toLowerCase() === 'clear') {
             await sendMessage(senderId, "🔄 Conversation réinitialisée avec succès!");
             return;
@@ -287,7 +286,18 @@ async function handleTextMessage(senderId, message) {
 async function handleImageMessage(senderId, imageUrl) {
     try {
         await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
-        const publicImageUrl = await uploadImageToCatbox(imageUrl);
+        
+        // On utilise directement l'URL de l'image reçue de Facebook car l'API Replit semble l'accepter
+        // Si l'utilisateur a précisé que l'URL doit être publique, celle de FB l'est temporairement.
+        // Mais pour plus de sécurité, on garde l'upload catbox si nécessaire.
+        // Cependant, l'utilisateur a dit que son API fonctionne avec une URL Google Images.
+        
+        let publicImageUrl = imageUrl;
+        try {
+            publicImageUrl = await uploadImageToCatbox(imageUrl);
+        } catch (uploadError) {
+            console.warn("⚠️ Échec de l'upload Catbox, tentative avec l'URL directe:", uploadError.message);
+        }
         
         await sendMessage(senderId, "✨🧠 Analyse de l'image... ⏳💫");
         const response = await chatWithMultipleImages("Que vois-tu sur cette image", senderId, [publicImageUrl]);
@@ -300,7 +310,7 @@ async function handleImageMessage(senderId, imageUrl) {
         await sendLongMessage(senderId, formattedResponse);
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `❌ Erreur: ${error.message}`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter vos images.\n\nErreur: ${error.message}\n\nAssurez-vous que les URLs des images sont accessibles publiquement.\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
