@@ -172,9 +172,14 @@ function formatDynamicResponse(text) {
  * Appelle l'API Gemini
  */
 async function callGeminiApi(params) {
-    const pro = params.prompt || params.pro || "décrivez bien cette photo?";
+    let pro = params.prompt || params.pro || "décrivez bien cette photo?";
     const image = params.image || null;
     const uid = params.uid || "123";
+
+    // Si une image est présente, on renforce le prompt pour s'assurer que Gemini l'analyse
+    if (image) {
+        pro = `[IMAGE_ATTACHED: ${image}] Analyse cette image et réponds à la demande suivante : ${pro}`;
+    }
 
     console.log(`🔗 Appel API Gemini: ${API_CONFIG.GEMINI_URL}`);
 
