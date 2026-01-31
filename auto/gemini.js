@@ -7,19 +7,20 @@ const FormData = require('form-data');
 // Mémorisation des images par utilisateur
 const userImageMemory = new Map();
 
-// Configuration de l'API Replit
+// Configuration de l'API Replit et ImgBB
 const API_CONFIG = {
     BASE_URL: "https://gemini-api-wrapper--ioy4xbxx.replit.app/gemini",
     TIMEOUT: 90000,
-    USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    IMGBB_API_KEY: 'fa76a43cd1f8d1e193f4b3329dda455f'
 };
 
 /**
- * Télécharge une image et la convertit en Base64
+ * Upload une image vers ImgBB pour obtenir une URL publique stable
  */
-async function getImageAsBase64(imageUrl) {
+async function uploadImageToPublic(imageUrl) {
     try {
-        console.log('📥 Téléchargement de l\'image pour conversion Base64:', imageUrl);
+        console.log('📥 Téléchargement de l\'image depuis:', imageUrl);
 
         const imageResponse = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
@@ -30,11 +31,29 @@ async function getImageAsBase64(imageUrl) {
             }
         });
 
-        const base64Image = Buffer.from(imageResponse.data).toString('base64');
-        console.log('✅ Image convertie en Base64, longueur:', base64Image.length);
-        return base64Image;
+        const imageBuffer = Buffer.from(imageResponse.data);
+        console.log('✅ Image téléchargée, taille:', imageBuffer.length, 'bytes');
+
+        const formData = new FormData();
+        formData.append('image', imageBuffer.toString('base64'));
+
+        console.log('📤 Upload vers ImgBB...');
+        const uploadResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${API_CONFIG.IMGBB_API_KEY}`, formData, {
+            headers: formData.getHeaders(),
+            timeout: 20000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
+        });
+
+        if (uploadResponse.data && uploadResponse.data.success) {
+            const directUrl = uploadResponse.data.data.url;
+            console.log('✅ Image uploadée avec succès sur ImgBB:', directUrl);
+            return directUrl;
+        } else {
+            throw new Error('Échec de l\'upload vers ImgBB');
+        }
     } catch (error) {
-        console.error('❌ Erreur lors de la conversion de l\'image:', error.message);
+        console.error('❌ Erreur lors de l\'upload de l\'image vers ImgBB:', error.message);
         throw error;
     }
 }
@@ -163,58 +182,49 @@ function formatDynamicResponse(text) {
 // --- Fonctions d'appel API ---
 
 async function callGeminiApi(params) {
-    console.log(`🔗 Appel API Gemini pour l'utilisateur ${params.uid}...`);
+    const apiUrl = `${API_CONFIG.BASE_URL}?${new URLSearchParams(params).toString()}`;
+    console.log(`🔗 Appel API Gemini: ${apiUrl.substring(0, 200)}...`);
 
     try {
-        // Utilisation de POST pour éviter les limites de taille d'URL avec le Base64
-        const response = await axios.post(API_CONFIG.BASE_URL, params, {
+        const response = await axios.get(apiUrl, {
             timeout: API_CONFIG.TIMEOUT,
-            headers: { 
-                'User-Agent': API_CONFIG.USER_AGENT,
-                'Content-Type': 'application/json'
-            }
+            headers: { 'User-Agent': API_CONFIG.USER_AGENT }
         });
 
         const result = response.data;
         const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
 
         if (!answer) {
-            // Si le POST échoue, on tente un repli en GET (au cas où l'API ne supporte que GET)
-            console.warn('⚠️ POST n\'a pas retourné de réponse, tentative en GET...');
-            const apiUrl = `${API_CONFIG.BASE_URL}?${new URLSearchParams(params).toString()}`;
-            const getResponse = await axios.get(apiUrl, {
-                timeout: API_CONFIG.TIMEOUT,
-                headers: { 'User-Agent': API_CONFIG.USER_AGENT }
-            });
-            const getResult = getResponse.data;
-            const getAnswer = getResult.answer || getResult.response || (getResult.status === 'success' ? getResult.data : null);
-            
-            if (!getAnswer) {
-                throw new Error('Aucune réponse exploitable reçue de l\'API');
-            }
-            return replaceBranding(formatText(getAnswer));
+            console.error('❌ Réponse API invalide:', result);
+            throw new Error(result?.message || result?.error || 'Aucune réponse exploitable reçue de l\'API');
         }
 
         return replaceBranding(formatText(answer));
     } catch (error) {
         if (error.code === 'ECONNABORTED') {
-            throw new Error('Le délai d\'attente (timeout) a été dépassé.');
+            throw new Error('Le délai d\'attente (timeout) a été dépassé. L\'API met trop de temps à répondre.');
         }
         throw error;
     }
 }
 
 async function chat(prompt, uid) {
+    // Vérifier si l'utilisateur a une image en mémoire
     if (userImageMemory.has(uid)) {
-        const imageData = userImageMemory.get(uid);
-        console.log(`📸 Utilisation de l'image (Base64) en mémoire pour ${uid}`);
+        const imageUrl = userImageMemory.get(uid);
+        console.log(`📸 Utilisation de l'image en mémoire pour ${uid}`);
         
         try {
-            const response = await callGeminiApi({ prompt, uid, image: imageData });
+            const response = await callGeminiApi({ prompt, uid, image: imageUrl });
+            // Effacer l'image de la mémoire après une réponse réussie
             userImageMemory.delete(uid);
             return response;
         } catch (error) {
-            userImageMemory.delete(uid);
+            // Si l'erreur est liée à l'image, on peut suggérer de la renvoyer
+            if (error.message.includes("visualiser l'image") || error.message.includes("URL")) {
+                userImageMemory.delete(uid);
+                throw new Error("L'image en mémoire a expiré ou est inaccessible. Veuillez renvoyer l'image.");
+            }
             throw error;
         }
     }
@@ -227,7 +237,7 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         uid: uid
     };
     if (imageUrls && imageUrls.length > 0) {
-        params.image = await getImageAsBase64(imageUrls[0]);
+        params.image = await uploadImageToPublic(imageUrls[0]);
     }
     return await callGeminiApi(params);
 }
@@ -295,24 +305,34 @@ async function handleImageMessage(senderId, imageUrl) {
     try {
         await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
         
-        try {
-            const base64Data = await getImageAsBase64(imageUrl);
-            
-            const isUpdate = userImageMemory.has(senderId);
-            userImageMemory.set(senderId, base64Data);
-            
-            const updateMsg = isUpdate 
-                ? "\n\n🔄 (Une ancienne image a été remplacée)" 
-                : "";
+        let finalImageUrl = imageUrl;
+        let uploadSuccess = false;
 
-            await sendMessage(senderId, `✅ Image reçue et mémorisée ! ✨🧠${updateMsg}\n\nPosez maintenant votre question sur cette image.`);
+        try {
+            // Tentative d'upload vers ImgBB
+            finalImageUrl = await uploadImageToPublic(imageUrl);
+            uploadSuccess = true;
         } catch (uploadError) {
-            throw new Error("Impossible de traiter l'image. Assurez-vous que le lien est valide.");
+            console.warn("⚠️ Échec de l'upload public, utilisation de l'URL directe Facebook comme secours.");
+            finalImageUrl = imageUrl;
         }
+        
+        const isUpdate = userImageMemory.has(senderId);
+        userImageMemory.set(senderId, finalImageUrl);
+        
+        const statusMsg = uploadSuccess 
+            ? "✅ Image reçue et mémorisée ! ✨🧠" 
+            : "✅ Image reçue (mode secours activé) ! ✨🧠";
+            
+        const updateMsg = isUpdate 
+            ? "\n\n🔄 (Une ancienne image a été remplacée)" 
+            : "";
+
+        await sendMessage(senderId, `${statusMsg}${updateMsg}\n\nPosez maintenant votre question sur cette image.`);
         
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝐞𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
