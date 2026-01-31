@@ -14,13 +14,16 @@ const API_CONFIG = {
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
 
-async function uploadImageToCatbox(imageUrl) {
+/**
+ * Upload une image vers tmpfiles.org pour obtenir une URL publique stable
+ */
+async function uploadImageToPublic(imageUrl) {
     try {
         console.log('📥 Téléchargement de l\'image depuis:', imageUrl);
 
         const imageResponse = await axios.get(imageUrl, {
             responseType: 'arraybuffer',
-            timeout: 15000, // Timeout plus court pour basculer rapidement sur le fallback
+            timeout: 15000,
             maxContentLength: Infinity,
             headers: {
                 'User-Agent': API_CONFIG.USER_AGENT
@@ -31,32 +34,33 @@ async function uploadImageToCatbox(imageUrl) {
         console.log('✅ Image téléchargée, taille:', imageBuffer.length, 'bytes');
 
         const formData = new FormData();
-        formData.append('reqtype', 'fileupload');
-        formData.append('fileToUpload', imageBuffer, {
+        formData.append('file', imageBuffer, {
             filename: 'image.jpg',
             contentType: imageResponse.headers['content-type'] || 'image/jpeg'
         });
 
-        console.log('📤 Upload vers catbox.moe...');
-        const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
+        console.log('📤 Upload vers tmpfiles.org...');
+        const uploadResponse = await axios.post('https://tmpfiles.org/api/v1/upload', formData, {
             headers: formData.getHeaders(),
-            timeout: 15000,
+            timeout: 20000,
             maxBodyLength: Infinity,
             maxContentLength: Infinity
         });
 
-        const publicUrl = uploadResponse.data.trim();
-
-        if (!publicUrl.startsWith('https://')) {
-            console.error('❌ Réponse invalide de catbox:', publicUrl);
-            throw new Error('Service d\'hébergement indisponible');
+        if (uploadResponse.data && uploadResponse.data.status === 'success') {
+            // L'URL retournée est de type https://tmpfiles.org/XXXXX
+            // Pour l'URL directe, on insère /dl/ après le domaine
+            const rawUrl = uploadResponse.data.data.url;
+            const directUrl = rawUrl.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+            
+            console.log('✅ Image uploadée avec succès:', directUrl);
+            return directUrl;
+        } else {
+            throw new Error('Échec de l\'upload vers tmpfiles.org');
         }
-
-        console.log('✅ Image uploadée avec succès:', publicUrl);
-        return publicUrl;
     } catch (error) {
         console.error('❌ Erreur lors de l\'upload de l\'image:', error.message);
-        throw error; // On laisse l'erreur remonter pour activer le fallback
+        throw error;
     }
 }
 
@@ -294,12 +298,12 @@ async function handleTextMessage(senderId, message) {
         const cleanedResponse = cleanLatexSyntax(response);
         const dynamicResponse = formatDynamicResponse(cleanedResponse);
 
-        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\n${dynamicResponse}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`;
+        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\n${dynamicResponse}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`;
 
         await sendLongMessage(senderId, formattedResponse);
     } catch (error) {
         console.error("❌ Erreur:", error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
@@ -311,12 +315,11 @@ async function handleImageMessage(senderId, imageUrl) {
         let uploadSuccess = false;
 
         try {
-            // Tentative d'upload vers Catbox
-            finalImageUrl = await uploadImageToCatbox(imageUrl);
+            // Tentative d'upload vers tmpfiles.org
+            finalImageUrl = await uploadImageToPublic(imageUrl);
             uploadSuccess = true;
         } catch (uploadError) {
-            console.warn("⚠️ Échec Catbox, utilisation de l'URL directe Facebook comme secours.");
-            // En cas d'échec Catbox, on garde l'URL Facebook d'origine
+            console.warn("⚠️ Échec de l'upload public, utilisation de l'URL directe Facebook comme secours.");
             finalImageUrl = imageUrl;
         }
         
@@ -335,7 +338,7 @@ async function handleImageMessage(senderId, imageUrl) {
         
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
