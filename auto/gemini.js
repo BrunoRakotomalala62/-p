@@ -182,30 +182,33 @@ function formatDynamicResponse(text) {
 // --- Fonctions d'appel API ---
 
 /**
- * Appelle l'API Gemini en utilisant la méthode POST
+ * Appelle l'API Gemini
  * Paramètres attendus: pro, image, uid
  */
 async function callGeminiApi(params) {
-    const postData = {
-        pro: params.prompt || params.pro,
-        image: params.image || null,
-        uid: params.uid || null
-    };
+    const pro = params.pro || params.prompt;
+    const image = params.image || null;
+    const uid = params.uid || null;
 
-    console.log(`🔗 Appel API Gemini (POST): ${API_CONFIG.BASE_URL}`);
+    console.log(`🔗 Appel API Gemini: ${API_CONFIG.BASE_URL}`);
 
     try {
-        const response = await axios.post(API_CONFIG.BASE_URL, postData, {
+        // Utilisation de GET car c'est ce qui a été testé avec succès
+        const response = await axios.get(API_CONFIG.BASE_URL, {
+            params: {
+                pro: pro,
+                image: image,
+                uid: uid
+            },
             timeout: API_CONFIG.TIMEOUT,
             headers: { 
-                'User-Agent': API_CONFIG.USER_AGENT,
-                'Content-Type': 'application/json'
+                'User-Agent': API_CONFIG.USER_AGENT
             }
         });
 
         const result = response.data;
         
-        // L'API renvoie désormais { status: "success", answer: "..." }
+        // L'API renvoie { status: "success", answer: "..." }
         const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
 
         if (!answer) {
@@ -216,24 +219,6 @@ async function callGeminiApi(params) {
         return replaceBranding(formatText(answer));
     } catch (error) {
         console.error('❌ Erreur API Gemini:', error.message);
-        
-        // Fallback GET en cas d'erreur persistante sur POST
-        if (error.response && (error.response.status === 405 || error.response.status === 404)) {
-            console.warn('⚠️ Erreur sur POST, tentative de secours en GET...');
-            const getParams = new URLSearchParams();
-            getParams.append('pro', postData.pro);
-            if (postData.image) getParams.append('image', postData.image);
-            if (postData.uid) getParams.append('uid', postData.uid);
-            
-            const response = await axios.get(`${API_CONFIG.BASE_URL}?${getParams.toString()}`, {
-                timeout: API_CONFIG.TIMEOUT,
-                headers: { 'User-Agent': API_CONFIG.USER_AGENT }
-            });
-            const result = response.data;
-            const answer = result.answer || result.response || (result.status === 'success' ? result.data : null);
-            return replaceBranding(formatText(answer));
-        }
-
         throw error;
     }
 }
@@ -245,9 +230,8 @@ async function chat(prompt, uid) {
         console.log(`📸 Utilisation de l'image en mémoire pour ${uid}`);
         
         try {
-            const response = await callGeminiApi({ prompt, uid, image: imageUrl });
-            // Effacer l'image de la mémoire après une réponse réussie
-            userImageMemory.delete(uid);
+            const response = await callGeminiApi({ pro: prompt, uid, image: imageUrl });
+            // On garde l'image en mémoire pour permettre des questions de suivi
             return response;
         } catch (error) {
             if (error.message.includes("visualiser l'image") || error.message.includes("URL")) {
@@ -257,12 +241,12 @@ async function chat(prompt, uid) {
             throw error;
         }
     }
-    return await callGeminiApi({ prompt, uid });
+    return await callGeminiApi({ pro: prompt, uid });
 }
 
 async function chatWithMultipleImages(prompt, uid, imageUrls) {
     const params = {
-        prompt: prompt && prompt.trim() !== "" ? prompt : "Que vois-tu sur cette image",
+        pro: prompt && prompt.trim() !== "" ? prompt : "Que vois-tu sur cette image",
         uid: uid
     };
     if (imageUrls && imageUrls.length > 0) {
@@ -292,7 +276,9 @@ async function sendLongMessage(senderId, message) {
                     bestBreakPoint = lastSeparator + separator.length;
                 }
             }
-            if (bestBreakPoint !== -1) endIndex = bestBreakPoint;
+            if (bestBreakPoint !== -1) {
+                endIndex = bestBreakPoint;
+            }
         } else {
             endIndex = message.length;
         }
@@ -360,7 +346,7 @@ async function handleImageMessage(senderId, imageUrl) {
         
     } catch (error) {
         console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝐝 𝙗𝙮 👉 @Bruno | Ampinga AI`);
     }
 }
 
