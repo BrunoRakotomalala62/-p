@@ -1,0 +1,18 @@
+https://gemini-api-wrapper--ngaxicuq.replit.app/gemini?pro=décrivez bien cette photo?&image=https://i.ibb.co/zWmMpgBm/american-staffordshire-terrier.jpg&uid=123
+
+Sa réponse Json :
+{"status":"success","uid":"123","answer":"Voici une description détaillée de la photo de cet **American Staffordshire Terrier** (souvent appelé \"AmStaff\").\n\nC'est un portrait qui met magnifiquement en valeur les caractéristiques physiques et la prestance de cette race.\n\n### 1. Apparence Physique\n* **Musculature :** Le chien dégage une impression de puissance brute. On remarque immédiatement son corps **athlétique et trapu**. Son poitrail est large et bien descendu, témoignant de sa force physique.\n* **Robes et Poils :** Son pelage est **court, ras et brillant** (lustré). Bien que la couleur précise dépende de la photo spécifique (souvent bringé, fauve, noir ou bleu avec des marques blanches), le poil semble serré et dur au toucher, typique des terriers.\n* **Ossature :** Il possède une ossature lourde avec des pattes droites et solides, bien plantées au sol, ce qui lui confère une grande stabilité.\n\n### 2. La Tête et l'Expression\n* **Structure crânienne :** La tête est l'élément le plus distinctif. Elle est **large et carrée**, avec des muscles jugulaires (joues) très prononcés et un stop (la cassure entre le front et le nez) bien marqué.\n* **Les Yeux :** Ses yeux sont généralement ronds, écartés et foncés. Ils expriment une **grande intelligence** et une vigilance constante. C'est un regard direct, franc et confiant.\n* **La Mâchoire :** Le museau est de longueur moyenne mais apparaît très puissant, capable d'une grande force de pression.\n* **Oreilles :** Elles sont attachées haut sur la tête. Selon qu'elles soient naturelles (semi-dressées) ou coupées (dans les pays où cela est encore autorisé/pratiqué), elles contribuent à son air alerte.\n\n### 3. Attitude et Atmosphère\n* **Posture :** Le chien semble se tenir avec **fierté et assurance**. Il n'y a pas d'agressivité dans sa posture, mais plutôt une sérénité vigilante.\n* **Tempérament visible :** Malgré son apparence physique intimidante pour certains, l'expression faciale de l'AmStaff laisse souvent transparaître sa nature **loyale et affectueuse**. C'est un chien qui semble prêt à l'action mais calme.\n\n---\n\n**Ce que cette image inspire :**\nCette photo capture l'essence de l'American Staffordshire Terrier : un mélange parfait entre **force physique** et **élégance rustique**.\n\n**Souhaitez-vous que je vous donne des informations sur le caractère ou l'éducation de cette race spécifique ?**","execution_time":"29.96s","image_processed":false}
+
+
+
+
+Voici l'API URL pour rendre public l'URL image :
+
+https://image-upload-sigma-swart.vercel.app/upload?img=https://www.woopets.fr/chien/race/american-staffordshire-terrier/
+
+
+Sa réponse Json :
+{"image_direct":"https://i.ibb.co/zWmMpgBm/american-staffordshire-terrier.jpg"}
+
+Et on envoie à Gemini api pour qu'il traite ca
+
