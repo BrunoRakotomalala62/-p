@@ -7,15 +7,16 @@ const FormData = require('form-data');
 // Mémorisation des images par utilisateur
 const userImageMemory = new Map();
 
-// Configuration de l'API Replit
+// Configuration de l'API Replit et ImgBB
 const API_CONFIG = {
     BASE_URL: "https://gemini-api-wrapper--ioy4xbxx.replit.app/gemini",
     TIMEOUT: 90000,
-    USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    IMGBB_API_KEY: 'fa76a43cd1f8d1e193f4b3329dda455f'
 };
 
 /**
- * Upload une image vers tmpfiles.org pour obtenir une URL publique stable
+ * Upload une image vers ImgBB pour obtenir une URL publique stable
  */
 async function uploadImageToPublic(imageUrl) {
     try {
@@ -34,32 +35,25 @@ async function uploadImageToPublic(imageUrl) {
         console.log('✅ Image téléchargée, taille:', imageBuffer.length, 'bytes');
 
         const formData = new FormData();
-        formData.append('file', imageBuffer, {
-            filename: 'image.jpg',
-            contentType: imageResponse.headers['content-type'] || 'image/jpeg'
-        });
+        formData.append('image', imageBuffer.toString('base64'));
 
-        console.log('📤 Upload vers tmpfiles.org...');
-        const uploadResponse = await axios.post('https://tmpfiles.org/api/v1/upload', formData, {
+        console.log('📤 Upload vers ImgBB...');
+        const uploadResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${API_CONFIG.IMGBB_API_KEY}`, formData, {
             headers: formData.getHeaders(),
             timeout: 20000,
             maxBodyLength: Infinity,
             maxContentLength: Infinity
         });
 
-        if (uploadResponse.data && uploadResponse.data.status === 'success') {
-            // L'URL retournée est de type https://tmpfiles.org/XXXXX
-            // Pour l'URL directe, on insère /dl/ après le domaine
-            const rawUrl = uploadResponse.data.data.url;
-            const directUrl = rawUrl.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
-            
-            console.log('✅ Image uploadée avec succès:', directUrl);
+        if (uploadResponse.data && uploadResponse.data.success) {
+            const directUrl = uploadResponse.data.data.url;
+            console.log('✅ Image uploadée avec succès sur ImgBB:', directUrl);
             return directUrl;
         } else {
-            throw new Error('Échec de l\'upload vers tmpfiles.org');
+            throw new Error('Échec de l\'upload vers ImgBB');
         }
     } catch (error) {
-        console.error('❌ Erreur lors de l\'upload de l\'image:', error.message);
+        console.error('❌ Erreur lors de l\'upload de l\'image vers ImgBB:', error.message);
         throw error;
     }
 }
@@ -315,7 +309,7 @@ async function handleImageMessage(senderId, imageUrl) {
         let uploadSuccess = false;
 
         try {
-            // Tentative d'upload vers tmpfiles.org
+            // Tentative d'upload vers ImgBB
             finalImageUrl = await uploadImageToPublic(imageUrl);
             uploadSuccess = true;
         } catch (uploadError) {
