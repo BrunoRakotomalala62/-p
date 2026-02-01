@@ -9,7 +9,7 @@ const userImageMemory = new Map();
 
 // Configuration des APIs
 const API_CONFIG = {
-    GEMINI_URL: "https://gemini-api-wrapper--ngaxicuq.replit.app/gemini",
+    GEMINI_URL: "https://poe-mode.vercel.app/poe",
     UPLOAD_URL: "https://image-upload-sigma-swart.vercel.app/upload",
     TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -169,27 +169,27 @@ function formatDynamicResponse(text) {
 // --- Fonctions d'appel API ---
 
 /**
- * Appelle l'API Gemini
+ * Appelle l'API Poe (Claude)
  */
 async function callGeminiApi(params) {
     let pro = params.prompt || params.pro || "décrivez bien cette photo?";
     const image = params.image || null;
     const uid = params.uid || "123";
 
-    // Si une image est présente, on renforce le prompt pour s'assurer que Gemini l'analyse
-    if (image) {
-        pro = `[IMAGE_ATTACHED: ${image}] Analyse cette image et réponds à la demande suivante : ${pro}`;
-    }
-
-    console.log(`🔗 Appel API Gemini: ${API_CONFIG.GEMINI_URL}`);
+    console.log(`🔗 Appel API Poe: ${API_CONFIG.GEMINI_URL}`);
 
     try {
+        const queryParams = {
+            claude: pro,
+            uid: uid
+        };
+
+        if (image) {
+            queryParams.image = image;
+        }
+
         const response = await axios.get(API_CONFIG.GEMINI_URL, {
-            params: {
-                pro: pro,
-                image: image,
-                uid: uid
-            },
+            params: queryParams,
             timeout: API_CONFIG.TIMEOUT,
             headers: { 
                 'User-Agent': API_CONFIG.USER_AGENT
@@ -198,19 +198,18 @@ async function callGeminiApi(params) {
 
         const result = response.data;
         
-        // L'API renvoie souvent le texte dans 'answer', 'response' ou directement 'data'
-        const answer = result.answer || result.response || (result.status === 'success' ? result.data : result);
+        // La nouvelle API renvoie la réponse dans le champ 'réponse'
+        const answer = result.réponse || result.response || result.answer || result;
 
-        if (!answer || (typeof answer === 'object' && !answer.text)) {
+        if (!answer) {
             console.log('⚠️ Structure de réponse inhabituelle:', result);
-            // Si c'est un objet, on essaie de l'extraire ou de le stringifier
-            return typeof answer === 'string' ? answer : JSON.stringify(answer);
+            return JSON.stringify(result);
         }
 
-        const finalAnswer = typeof answer === 'string' ? answer : (answer.text || JSON.stringify(answer));
+        const finalAnswer = typeof answer === 'string' ? answer : JSON.stringify(answer);
         return replaceBranding(formatText(finalAnswer));
     } catch (error) {
-        console.error('❌ Erreur API Gemini:', error.message);
+        console.error('❌ Erreur API Poe:', error.message);
         throw error;
     }
 }
@@ -297,49 +296,30 @@ async function handleTextMessage(senderId, message) {
 
         const response = await chat(message, senderId);
         const cleanedResponse = cleanLatexSyntax(response);
-        const dynamicResponse = formatDynamicResponse(cleanedResponse);
+        const finalResponse = formatDynamicResponse(cleanedResponse);
 
-        const formattedResponse = `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\n${dynamicResponse}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`;
-
-        await sendLongMessage(senderId, formattedResponse);
+        await sendLongMessage(senderId, finalResponse);
     } catch (error) {
-        console.error("❌ Erreur:", error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre demande.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        console.error('❌ Erreur handleTextMessage:', error);
+        await sendMessage(senderId, "❌ Une erreur est survenue lors de l'analyse. Veuillez réessayer.");
     }
 }
 
 async function handleImageMessage(senderId, imageUrl) {
     try {
-        await sendMessage(senderId, "⏳ Traitement de votre image en cours...");
+        await sendMessage(senderId, "📸 Image reçue! ✨AMPINGA AI l'analyse... ⏳💫");
         
-        let finalImageUrl = imageUrl;
-        let uploadSuccess = false;
+        // Mémoriser l'image pour les questions suivantes
+        userImageMemory.set(senderId, imageUrl);
+        
+        const response = await chatWithMultipleImages("décrivez bien cette photo?", senderId, [imageUrl]);
+        const cleanedResponse = cleanLatexSyntax(response);
+        const finalResponse = formatDynamicResponse(cleanedResponse);
 
-        try {
-            // Upload dynamique vers l'API d'hébergement
-            finalImageUrl = await uploadImageToPublic(imageUrl);
-            uploadSuccess = true;
-        } catch (uploadError) {
-            console.warn("⚠️ Échec de l'upload public, utilisation de l'URL directe comme secours.");
-            finalImageUrl = imageUrl;
-        }
-        
-        const isUpdate = userImageMemory.has(senderId);
-        userImageMemory.set(senderId, finalImageUrl);
-        
-        const statusMsg = uploadSuccess 
-            ? "✅ Image reçue et mémorisée ! ✨🧠" 
-            : "✅ Image reçue (mode secours activé) ! ✨🧠";
-            
-        const updateMsg = isUpdate 
-            ? "\n\n🔄 (Une ancienne image a été remplacée)" 
-            : "";
-
-        await sendMessage(senderId, `${statusMsg}${updateMsg}\n\nPosez maintenant votre question sur cette image.`);
-        
+        await sendLongMessage(senderId, finalResponse);
     } catch (error) {
-        console.error('❌ Erreur image:', error.message);
-        await sendMessage(senderId, `✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇\n\nDésolé, je n'ai pas pu traiter votre image.\n\nErreur: ${error.message}\n\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI`);
+        console.error('❌ Erreur handleImageMessage:', error);
+        await sendMessage(senderId, "❌ Erreur lors de l'analyse de l'image.");
     }
 }
 
@@ -347,8 +327,5 @@ module.exports = {
     handleTextMessage,
     handleImageMessage,
     chat,
-    chatWithMultipleImages,
-    resetConversation: async (uid) => {
-        userImageMemory.delete(uid);
-    }
+    chatWithMultipleImages
 };
