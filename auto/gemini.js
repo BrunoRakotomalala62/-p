@@ -47,23 +47,38 @@ async function uploadImageToPublic(imageUrl) {
 
 // --- Fonctions de formatage de texte ---
 
-function convertMathSubscript(text) {
+/**
+ * Convertit les indices mathématiques (ex: H2O -> H₂O)
+ */
+function convertToSubscript(text) {
     if (!text) return "";
     const subscriptMap = {
         '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
-        'a': 'ₐ', 'b': '♭', 'c': '𝒸', 'd': '𝒹', 'e': 'ₑ', 'f': '𝒻', 'g': 'ℊ', 'h': '𝒽', 'i': 'ᵢ', 'j': 'ⱼ',
-        'k': '𝓀', 'l': '𝓁', 'm': 'ℳ', 'n': 'ₙ', 'o': 'ℴ', 'p': '𝓅', 'q': '𝓆', 'r': '𝓇', 's': '𝓈', 't': '𝓉',
-        'u': '𝓊', 'v': '𝓋', 'w': '𝓌', 'x': '𝓍', 'y': '𝓎', 'z': '𝓏',
-        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 'I': 'ᴵ', 'J': 'ᴶ',
-        'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 'Q': 'Q', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ',
-        'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 'Y': 'ʸ', 'Z': 'ᶻ',
-        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+        '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎', 'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'h': 'ₕ',
+        'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'p': 'ₚ', 's': 'ₛ', 't': 'ₜ'
     };
-    return text.replace(/([a-zA-Z])_([0-9a-zA-Z])/g, (match, p1, p2) => {
-        return p1 + (subscriptMap[p2] || p2);
+    return text.replace(/_([0-9a-z+\-=()]+)/g, (match, p1) => {
+        return p1.split('').map(char => subscriptMap[char] || char).join('');
     });
 }
 
+/**
+ * Convertit les exposants mathématiques (ex: 2^3 -> 2³)
+ */
+function convertToSuperscript(text) {
+    if (!text) return "";
+    const superscriptMap = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ', 'i': 'ⁱ'
+    };
+    return text.replace(/\^([0-9n+\-=()]+)/g, (match, p1) => {
+        return p1.split('').map(char => superscriptMap[char] || char).join('');
+    });
+}
+
+/**
+ * Convertit le texte en caractères Unicode gras (Serif Bold)
+ */
 function convertToBold(text) {
     if (!text) return "";
     const boldMap = {
@@ -75,12 +90,7 @@ function convertToBold(text) {
         'u': '𝐮', 'v': '𝐯', 'w': '𝐰', 'x': '𝐱', 'y': '𝐲', 'z': '𝐳',
         '0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'
     };
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        result += boldMap[char] || char;
-    }
-    return result;
+    return text.split('').map(char => boldMap[char] || char).join('');
 }
 
 function replaceBranding(text) {
@@ -90,19 +100,24 @@ function replaceBranding(text) {
         .replace(/Anthropic/gi, '👉Bruno Rakotomalala ✅');
 }
 
+/**
+ * Formate le texte avec les styles Unicode et mathématiques
+ */
 function formatText(text) {
     if (!text) return "";
-    let formattedText = text.replace(/^#{1,6}\s+/gm, '');
     
-    // Exposants
-    formattedText = formattedText.replace(/([a-zA-Z])\^([a-zA-Z0-9])/g, (match, p1, p2) => {
-        const subscriptMap = {'0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'};
-        return p1 + (subscriptMap[p2] || p2);
-    });
+    let formattedText = text;
+
+    // Supprimer les en-têtes Markdown superflus
+    formattedText = formattedText.replace(/^#{1,6}\s+/gm, '');
     
-    formattedText = convertMathSubscript(formattedText);
+    // Gérer les exposants (2^3 -> 2³)
+    formattedText = convertToSuperscript(formattedText);
     
-    // Gras
+    // Gérer les indices (H_2O -> H₂O)
+    formattedText = convertToSubscript(formattedText);
+    
+    // Convertir les sections entre ** en Unicode gras
     formattedText = formattedText.replace(/\*\*([^*]+)\*\*/g, (match, p1) => {
         return convertToBold(p1);
     });
@@ -148,22 +163,26 @@ function cleanLatexSyntax(text) {
         .trim();
 }
 
-function formatDynamicResponse(text) {
-    if (!text) return "";
-    let result = text;
+/**
+ * Applique la structure finale demandée par l'utilisateur
+ */
+function applyFinalStructure(responseBody) {
+    const header = "✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇";
+    const footer = "\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI";
     
-    // Numérotation en gras
-    result = result.replace(/^(\d+)\.\s+/gm, (match, num) => {
-        const boldNums = {'0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗'};
-        const boldNum = num.split('').map(d => boldNums[d] || d).join('');
-        return `${boldNum}. `;
+    // Formater le corps de la réponse dynamiquement
+    let formattedBody = formatText(responseBody);
+    formattedBody = cleanLatexSyntax(formattedBody);
+    
+    // Rendre le texte dynamique et intelligent (ex: numérotation en gras)
+    formattedBody = formattedBody.replace(/^(\d+)\.\s+/gm, (match, num) => {
+        return `${convertToBold(num)}. `;
     });
     
-    result = result.replace(/\n(𝟏\.|𝟐\.|𝟑\.|𝟒\.|𝟓\.|𝟔\.|𝟕\.|𝟖\.|𝟗\.)/g, '\n\n▸ $1');
-    result = result.replace(/(x\s*=\s*\d+)/gi, '✦ $1 ✦');
-    result = result.replace(/(la solution|le résultat|donc|conclusion)/gi, '🔹 $1');
+    // Ajouter des puces stylisées pour la structure
+    formattedBody = formattedBody.replace(/\n(𝟏\.|𝟐\.|𝟑\.|𝟒\.|𝟓\.|𝟔\.|𝟕\.|𝟖\.|𝟗\.)/g, '\n\n▸ $1');
     
-    return result;
+    return `${header}\n${formattedBody}${footer}`;
 }
 
 // --- Fonctions d'appel API ---
@@ -203,11 +222,11 @@ async function callGeminiApi(params) {
 
         if (!answer) {
             console.log('⚠️ Structure de réponse inhabituelle:', result);
-            return JSON.stringify(result);
+            return applyFinalStructure(JSON.stringify(result));
         }
 
         const finalAnswer = typeof answer === 'string' ? answer : JSON.stringify(answer);
-        return replaceBranding(formatText(finalAnswer));
+        return applyFinalStructure(replaceBranding(finalAnswer));
     } catch (error) {
         console.error('❌ Erreur API Poe:', error.message);
         throw error;
@@ -295,10 +314,8 @@ async function handleTextMessage(senderId, message) {
         await sendMessage(senderId, "✨🧠 Analyse en cours... AMPINGA AI réfléchit! ⏳💫");
 
         const response = await chat(message, senderId);
-        const cleanedResponse = cleanLatexSyntax(response);
-        const finalResponse = formatDynamicResponse(cleanedResponse);
-
-        await sendLongMessage(senderId, finalResponse);
+        // La structure est déjà appliquée dans callGeminiApi
+        await sendLongMessage(senderId, response);
     } catch (error) {
         console.error('❌ Erreur handleTextMessage:', error);
         await sendMessage(senderId, "❌ Une erreur est survenue lors de l'analyse. Veuillez réessayer.");
@@ -313,10 +330,8 @@ async function handleImageMessage(senderId, imageUrl) {
         userImageMemory.set(senderId, imageUrl);
         
         const response = await chatWithMultipleImages("décrivez bien cette photo?", senderId, [imageUrl]);
-        const cleanedResponse = cleanLatexSyntax(response);
-        const finalResponse = formatDynamicResponse(cleanedResponse);
-
-        await sendLongMessage(senderId, finalResponse);
+        // La structure est déjà appliquée dans callGeminiApi
+        await sendLongMessage(senderId, response);
     } catch (error) {
         console.error('❌ Erreur handleImageMessage:', error);
         await sendMessage(senderId, "❌ Erreur lors de l'analyse de l'image.");
