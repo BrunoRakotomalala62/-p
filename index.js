@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const axios = require('axios');
 const multer = require('multer');
 const cron = require('node-cron');
+const { monitorComments } = require('./utils/moltbookMonitor');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -264,6 +265,11 @@ cron.schedule('*/14 6-23 * * *', async () => {
     } catch (error) {
         console.error(`Erreur auto-ping: ${error.message}`);
     }
+});
+
+// Planifier la surveillance des commentaires Moltbook toutes les 5 minutes
+cron.schedule('*/5 * * * *', () => {
+    monitorComments().catch(err => console.error('Erreur moniteur Moltbook:', err));
 });
 
 // Démarrer le serveur
