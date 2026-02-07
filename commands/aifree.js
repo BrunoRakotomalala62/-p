@@ -25,13 +25,11 @@ function toBoldUnicode(text) {
  * Ajoute des décorations et emojis au texte
  */
 function decorateText(text) {
-    // Remplacer les titres (Markdown #) par du gras unicode
     let lines = text.split('\n');
     let formattedLines = lines.map(line => {
         if (line.trim().startsWith('#')) {
             return '🔹 ' + toBoldUnicode(line.replace(/^#+\s*/, '').trim());
         }
-        // Remplacer **texte** par du gras unicode
         return line.replace(/\*\*(.*?)\*\*/g, (match, p1) => toBoldUnicode(p1));
     });
 
@@ -47,17 +45,14 @@ async function splitAndSendMessage(senderId, text) {
     
     const decoratedContent = decorateText(text);
     
-    // Si le message entier tient dans un seul envoi
     if ((header.length + decoratedContent.length + footer.length + 4) <= MAX_MESSAGE_LENGTH) {
         await sendMessage(senderId, `${header}\n\n${decoratedContent}\n\n${footer}`);
         return;
     }
 
-    // Sinon, découpage
     await sendMessage(senderId, header);
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Découpage par paragraphes
     const paragraphs = decoratedContent.split('\n\n');
     let currentBatch = '';
 
@@ -68,7 +63,6 @@ async function splitAndSendMessage(senderId, text) {
                 await new Promise(resolve => setTimeout(resolve, 800));
             }
             
-            // Si un seul paragraphe est trop long, on le coupe par phrases
             if (paragraph.length > MAX_MESSAGE_LENGTH) {
                 const sentences = paragraph.split('. ');
                 currentBatch = '';
@@ -109,7 +103,6 @@ module.exports = async (senderId, userText, api) => {
     }
 
     try {
-        // Petit message d'attente
         await sendMessage(senderId, "🔍 𝗥𝗲𝗰𝗵𝗲𝗿𝗰𝗵𝗲 𝗱𝗲 𝗹𝗮 𝗿𝗲́𝗽𝗼𝗻𝘀𝗲 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀... ⏳");
 
         const url = "https://aifreeforever.com/api/generate-ai-answer";
@@ -122,15 +115,31 @@ module.exports = async (senderId, userText, api) => {
         };
 
         const headers = {
-            'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36",
+            'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
             'Content-Type': "application/json",
+            'Accept': "application/json, text/plain, */*",
             'Origin': "https://aifreeforever.com",
             'Referer': "https://aifreeforever.com/tools/free-chatgpt-no-login",
-            'Accept': "application/json, text/plain, */*"
+            'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin'
         };
 
-        const response = await axios.post(url, payload, { headers, timeout: 30000 });
+        const response = await axios.post(url, payload, { 
+            headers, 
+            timeout: 60000,
+            validateStatus: function (status) {
+                return status >= 200 && status < 500;
+            }
+        });
         
+        if (response.status !== 200) {
+            throw new Error(`L'API a retourné un code d'erreur ${response.status}`);
+        }
+
         let aiResponse = "";
         if (response.data && response.data.answer) {
             aiResponse = response.data.answer;
@@ -142,15 +151,25 @@ module.exports = async (senderId, userText, api) => {
             aiResponse = JSON.stringify(response.data);
         }
 
-        if (!aiResponse || aiResponse === "{}") {
-            throw new Error("Réponse vide de l'API");
+        if (!aiResponse || aiResponse === "{}" || aiResponse.length < 2) {
+            throw new Error("Réponse vide ou invalide de l'API");
         }
 
         await splitAndSendMessage(senderId, aiResponse);
 
     } catch (error) {
         console.error('Erreur API AIFree:', error.message);
-        await sendMessage(senderId, "❌ 𝗗𝗲́𝘀𝗼𝗹𝗲́, 𝘂𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝗲𝘀𝘁 𝘀𝘂𝗿𝘃𝗲𝗻𝘂𝗲 lors de la communication avec l'IA.\n\n" + (error.response ? "L'API a répondu avec une erreur." : "Vérifiez votre connexion ou réessayez plus tard."));
+        let errorMsg = "❌ 𝗗𝗲́𝘀𝗼𝗹𝗲́, 𝘂𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝗲𝘀𝘁 𝘀𝘂𝗿𝘃𝗲𝗻𝘂𝗲 lors de la communication avec l'IA.\n\n";
+        
+        if (error.response) {
+            errorMsg += `L'API a répondu avec une erreur (Code: ${error.response.status}).`;
+        } else if (error.code === 'ECONNABORTED') {
+            errorMsg += "Le délai d'attente de l'API a été dépassé. Veuillez réessayer.";
+        } else {
+            errorMsg += "Impossible de contacter l'IA pour le moment. Réessayez dans quelques instants.";
+        }
+        
+        await sendMessage(senderId, errorMsg);
     }
 };
 
