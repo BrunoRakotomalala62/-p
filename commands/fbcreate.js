@@ -178,18 +178,20 @@ const getVerificationCode = async (email, maxAttempts = 10) => {
                     const subject = (emailObj.subject || "").toLowerCase();
                     const body = (emailObj.body || "").toLowerCase();
                     
-                    if (subject.includes('facebook') || subject.includes('confirmation') || subject.includes('code')) {
-                        const codeMatch = subject.match(/(\d{5})/);
+                    if (subject.includes('facebook') || subject.includes('confirmation') || subject.includes('code') || body.includes('fb-')) {
+                        // Chercher un code à 5 chiffres (standard Facebook)
+                        const codeMatch = body.match(/(\d{5})/);
                         if (codeMatch) {
                             const code = codeMatch[1];
-                            console.log(`[✓] Verification code found in subject: ${code}`);
+                            console.log(`[✓] Code de confirmation trouvé: ${code}`);
                             return code;
                         }
                         
-                        const bodyCodeMatch = body.match(/(\d{5})/);
-                        if (bodyCodeMatch) {
-                            const code = bodyCodeMatch[1];
-                            console.log(`[✓] Verification code found in body: ${code}`);
+                        // Alternative dans le sujet
+                        const subjectMatch = subject.match(/(\d{5})/);
+                        if (subjectMatch) {
+                            const code = subjectMatch[1];
+                            console.log(`[✓] Code trouvé dans le sujet: ${code}`);
                             return code;
                         }
                     }
@@ -491,7 +493,8 @@ const confirmFacebookAccount = async (code, userId, email) => {
     const api_key = '882a8490361da98702bf97a021ddc14d';
     const secret = '62f8ce9f74b12f84c123cc23437a4a32';
     
-    const req = {
+    // Méthode 1: user.confirm (standard)
+    const req1 = {
         api_key: api_key,
         c: email,
         code: code,
@@ -499,23 +502,45 @@ const confirmFacebookAccount = async (code, userId, email) => {
         method: 'user.confirm',
         uid: userId,
     };
-    
-    const sig = Object.keys(req).sort().map(k => `${k}=${req[k]}`).join('') + secret;
-    const ensig = crypto.createHash('md5').update(sig).digest('hex');
-    req.sig = ensig;
+    const sig1 = Object.keys(req1).sort().map(k => `${k}=${req1[k]}`).join('') + secret;
+    req1.sig = crypto.createHash('md5').update(sig1).digest('hex');
 
-    const api_url = 'https://b-api.facebook.com/method/user.confirm';
+    // Méthode 2: auth.confirmPhone (souvent utilisée pour l'email aussi dans cette API)
+    const req2 = {
+        api_key: api_key,
+        code: code,
+        format: 'json',
+        method: 'auth.confirmPhone',
+        uid: userId,
+    };
+    const sig2 = Object.keys(req2).sort().map(k => `${k}=${req2[k]}`).join('') + secret;
+    req2.sig = crypto.createHash('md5').update(sig2).digest('hex');
+
+    const userAgent = '[FBAN/FB4A;FBAV/445.0.0.34.118;FBBV/541253456;FBDM/{density=3.0,width=1080,height=2220};FBLC/fr_FR;FBCR/Orange;FBMF/samsung;FBBD/samsung;FBPN/com.facebook.katana;FBDV/SM-G960F;FBSV/9;FBOP/1;FBCA/arm64-v8a:;]';
+
     try {
-        const response = await axios.post(api_url, new URLSearchParams(req), {
-            headers: { 
-                'User-Agent': '[FBAN/FB4A;FBAV/445.0.0.34.118;FBBV/541253456;FBDM/{density=3.0,width=1080,height=2220};FBLC/fr_FR;FBCR/Orange;FBMF/samsung;FBBD/samsung;FBPN/com.facebook.katana;FBDV/SM-G960F;FBSV/9;FBOP/1;FBCA/arm64-v8a:;]' 
-            }
+        console.log(`[⏳] Tentative de confirmation pour ${email} (Code: ${code})...`);
+        let response = await axios.post('https://b-api.facebook.com/method/user.confirm', new URLSearchParams(req1), {
+            headers: { 'User-Agent': userAgent }
         });
-        console.log(`[✓] Account confirmed successfully`);
-        return response.data;
+
+        if (response.data && (response.data.error_code || response.data.error_msg)) {
+            console.log(`[!] Échec méthode 1, tentative méthode 2...`);
+            response = await axios.post('https://b-api.facebook.com/method/auth.confirmPhone', new URLSearchParams(req2), {
+                headers: { 'User-Agent': userAgent }
+            });
+        }
+
+        if (response.data && !response.data.error_msg) {
+            console.log(`[✓] Confirmation réussie pour ${email}`);
+            return response.data;
+        } else {
+            console.error(`[×] Échec final de confirmation: ${JSON.stringify(response.data)}`);
+            return response.data;
+        }
     } catch (error) {
-        console.error(`[×] Confirmation Error: ${error.message}`);
-        return null;
+        console.error(`[×] Erreur réseau lors de la confirmation: ${error.message}`);
+        return { error_msg: error.message };
     }
 };
 
