@@ -42,7 +42,7 @@ module.exports = async (senderId, args) => {
                     
                     if (verificationCode) {
                         console.log(`[✓] Code de vérification reçu: ${verificationCode}`);
-                        const confirmResult = await confirmFacebookAccount(verificationCode, regData.new_user_id);
+                        const confirmResult = await confirmFacebookAccount(verificationCode, regData.new_user_id, account.email);
                         
                         if (confirmResult && !confirmResult.error_msg) {
                             accountStatus = 'Confirmé ✅';
@@ -175,21 +175,22 @@ const getVerificationCode = async (email, maxAttempts = 10) => {
                 const emails = response.data.emails;
                 
                 for (const emailObj of emails) {
-                    if (emailObj.subject && emailObj.subject.includes('confirmation code')) {
-                        const codeMatch = emailObj.subject.match(/(\d{5,6})/);
+                    const subject = (emailObj.subject || "").toLowerCase();
+                    const body = (emailObj.body || "").toLowerCase();
+                    
+                    if (subject.includes('facebook') || subject.includes('confirmation') || subject.includes('code')) {
+                        const codeMatch = subject.match(/(\d{5})/);
                         if (codeMatch) {
                             const code = codeMatch[1];
-                            console.log(`[✓] Verification code found: ${code}`);
+                            console.log(`[✓] Verification code found in subject: ${code}`);
                             return code;
                         }
                         
-                        if (emailObj.body) {
-                            const bodyCodeMatch = emailObj.body.match(/(\d{5,6})/);
-                            if (bodyCodeMatch) {
-                                const code = bodyCodeMatch[1];
-                                console.log(`[✓] Verification code found in body: ${code}`);
-                                return code;
-                            }
+                        const bodyCodeMatch = body.match(/(\d{5})/);
+                        if (bodyCodeMatch) {
+                            const code = bodyCodeMatch[1];
+                            console.log(`[✓] Verification code found in body: ${code}`);
+                            return code;
                         }
                     }
                 }
@@ -486,15 +487,16 @@ const loginToFacebookAndSolveCaptcha = async (email, password) => {
     }
 };
 
-const confirmFacebookAccount = async (code, userId) => {
+const confirmFacebookAccount = async (code, userId, email) => {
     const api_key = '882a8490361da98702bf97a021ddc14d';
     const secret = '62f8ce9f74b12f84c123cc23437a4a32';
     
     const req = {
         api_key: api_key,
+        c: email,
         code: code,
         format: 'json',
-        method: 'auth.confirmPhone',
+        method: 'user.confirm',
         uid: userId,
     };
     
@@ -502,11 +504,11 @@ const confirmFacebookAccount = async (code, userId) => {
     const ensig = crypto.createHash('md5').update(sig).digest('hex');
     req.sig = ensig;
 
-    const api_url = 'https://b-api.facebook.com/method/auth.confirmPhone';
+    const api_url = 'https://b-api.facebook.com/method/user.confirm';
     try {
         const response = await axios.post(api_url, new URLSearchParams(req), {
             headers: { 
-                'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBCR/;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]' 
+                'User-Agent': '[FBAN/FB4A;FBAV/445.0.0.34.118;FBBV/541253456;FBDM/{density=3.0,width=1080,height=2220};FBLC/fr_FR;FBCR/Orange;FBMF/samsung;FBBD/samsung;FBPN/com.facebook.katana;FBDV/SM-G960F;FBSV/9;FBOP/1;FBCA/arm64-v8a:;]' 
             }
         });
         console.log(`[✓] Account confirmed successfully`);
@@ -547,7 +549,7 @@ const registerFacebookAccount = async (email, password, firstName, lastName, bir
     try {
         const response = await axios.post(api_url, new URLSearchParams(req), {
             headers: { 
-                'User-Agent': '[FBAN/FB4A;FBAV/35.0.0.48.273;FBDM/{density=1.33125,width=800,height=1205};FBLC/en_US;FBCR/;FBPN/com.facebook.katana;FBDV/Nexus 7;FBSV/4.1.1;FBBK/0;]' 
+                'User-Agent': '[FBAN/FB4A;FBAV/445.0.0.34.118;FBBV/541253456;FBDM/{density=3.0,width=1080,height=2220};FBLC/fr_FR;FBCR/Orange;FBMF/samsung;FBBD/samsung;FBPN/com.facebook.katana;FBDV/SM-G960F;FBSV/9;FBOP/1;FBCA/arm64-v8a:;]' 
             }
         });
         const reg = response.data;
