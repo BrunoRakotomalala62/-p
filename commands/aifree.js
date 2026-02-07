@@ -119,40 +119,43 @@ module.exports = async (senderId, userText, api) => {
             'Content-Type': "application/json",
             'Accept': "application/json, text/plain, */*",
             'Origin': "https://aifreeforever.com",
-            'Referer': "https://aifreeforever.com/tools/free-chatgpt-no-login",
-            'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin'
+            'Referer': "https://aifreeforever.com/tools/free-chatgpt-no-login"
         };
 
-        const response = await axios.post(url, payload, { 
-            headers, 
-            timeout: 60000,
-            validateStatus: function (status) {
-                return status >= 200 && status < 500;
-            }
-        });
-        
-        if (response.status !== 200) {
-            throw new Error(`L'API a retourné un code d'erreur ${response.status}`);
-        }
-
         let aiResponse = "";
-        if (response.data && response.data.answer) {
-            aiResponse = response.data.answer;
-        } else if (response.data && response.data.response) {
-            aiResponse = response.data.response;
-        } else if (typeof response.data === 'string') {
-            aiResponse = response.data;
-        } else {
-            aiResponse = JSON.stringify(response.data);
+        
+        try {
+            // Tentative principale avec Axios
+            const response = await axios.post(url, payload, { 
+                headers, 
+                timeout: 45000
+            });
+            
+            if (response.data && response.data.answer) {
+                aiResponse = response.data.answer;
+            } else if (response.data && response.data.response) {
+                aiResponse = response.data.response;
+            } else {
+                aiResponse = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+            }
+        } catch (axiosError) {
+            console.error('Échec Axios, tentative avec fetch...');
+            // Fallback avec node-fetch (souvent plus stable pour les problèmes de certificats/headers)
+            const fetch = require('node-fetch');
+            const fetchResponse = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(payload),
+                timeout: 45000
+            });
+            
+            if (!fetchResponse.ok) throw new Error(`HTTP ${fetchResponse.status}`);
+            const data = await fetchResponse.json();
+            aiResponse = data.answer || data.response || JSON.stringify(data);
         }
 
         if (!aiResponse || aiResponse === "{}" || aiResponse.length < 2) {
-            throw new Error("Réponse vide ou invalide de l'API");
+            throw new Error("Réponse vide");
         }
 
         await splitAndSendMessage(senderId, aiResponse);
@@ -161,12 +164,10 @@ module.exports = async (senderId, userText, api) => {
         console.error('Erreur API AIFree:', error.message);
         let errorMsg = "❌ 𝗗𝗲́𝘀𝗼𝗹𝗲́, 𝘂𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝗲𝘀𝘁 𝘀𝘂𝗿𝘃𝗲𝗻𝘂𝗲 lors de la communication avec l'IA.\n\n";
         
-        if (error.response) {
-            errorMsg += `L'API a répondu avec une erreur (Code: ${error.response.status}).`;
-        } else if (error.code === 'ECONNABORTED') {
-            errorMsg += "Le délai d'attente de l'API a été dépassé. Veuillez réessayer.";
+        if (error.message.includes('timeout') || error.code === 'ECONNABORTED') {
+            errorMsg += "Le délai d'attente de l'IA a été dépassé. Veuillez réessayer.";
         } else {
-            errorMsg += "Impossible de contacter l'IA pour le moment. Réessayez dans quelques instants.";
+            errorMsg += "Impossible de contacter l'IA pour le moment. Veuillez vérifier la commande ou réessayer plus tard.";
         }
         
         await sendMessage(senderId, errorMsg);
