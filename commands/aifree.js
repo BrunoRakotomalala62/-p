@@ -12,8 +12,8 @@ function toBoldUnicode(text) {
         'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽',
         'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅',
         'y': '𝘆', 'z': '𝘇',
-        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛',
-        'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣',
+        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗴', 'H': '𝗵',
+        'I': '𝗶', 'J': '𝗷', 'K': '𝗸', 'L': '𝗹', 'M': '𝗺', 'N': '𝗻', 'O': '𝗼', 'P': '𝗽',
         'Q': '𝗤', 'R': '𝗿', 'S': '𝘀', 'T': '𝘁', 'U': '𝘂', 'V': '𝘃', 'W': '𝘄', 'X': '𝘅',
         '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳',
         '8': '𝟴', '9': '𝟵'
@@ -25,9 +25,6 @@ function toBoldUnicode(text) {
  * Ajoute des décorations et emojis au texte
  */
 function decorateText(text) {
-    const decorations = ['✨', '🚀', '💡', '🤖', '🌟', '💎', '🔥'];
-    const randomDecoration = decorations[Math.floor(Math.random() * decorations.length)];
-    
     // Remplacer les titres (Markdown #) par du gras unicode
     let lines = text.split('\n');
     let formattedLines = lines.map(line => {
@@ -108,7 +105,6 @@ module.exports = async (senderId, userText, api) => {
     }
 
     if (userText === 'RESET_CONVERSATION') {
-        // Pas de contexte stocké côté serveur pour cette API simple
         return;
     }
 
@@ -127,41 +123,34 @@ module.exports = async (senderId, userText, api) => {
 
         const headers = {
             'User-Agent': "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36",
-            // 'Accept-Encoding': "gzip, deflate, br, zstd",
             'Content-Type': "application/json",
-            'sec-ch-ua-platform': "\"Android\"",
-            'sec-ch-ua': "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Google Chrome\";v=\"144\"",
-            'sec-ch-ua-mobile': "?1",
-            'origin': "https://aifreeforever.com",
-            'sec-fetch-site': "same-origin",
-            'sec-fetch-mode': "cors",
-            'sec-fetch-dest': "empty",
-            'referer': "https://aifreeforever.com/tools/free-chatgpt-no-login",
-            'accept-language': "en-US,en;q=0.9,fil;q=0.8,pt;q=0.7,ar;q=0.6",
-            'priority': "u=1, i",
-            'Cookie': "_sharedID=bff0b1f3-c1c9-4cd3-b999-5b358abecde9; _sharedID_cst=zix7LPQsHA%3D%3D; hb_insticator_uid=3cf0b208-ab65-45af-8801-b79c9ecf1093; _ga=GA1.1.920126467.1770300742; panoramaId_expiry=1770905557013; _cc_id=64c944d51ed1f9f90e739b0ee4cbdbe0; panoramaId=35a6e7dea9a8ca24339ce98d1fde16d5393883130221597e0d9a4d6ba19fa80f; cf_clearance=WFC_QsqoTl68qTx38QlFwGd2knpSecsA5xm3SxzTzBg-1770300783-1.2.1.1-CRL.Jf0nlfSuOVovfIx.d_aFzOFVWKpWzCV5wPx8zZDTDZaw2kkG0K2QasiH3RMRblvpO26RwMLrJYG360ECezx5Ip_qMc9cgz_cM91gwd2gdGq0ewsIKIHVbIuhIpfbGRKmZbuP2A1B5v1vB4kUTFgb2plvZSMwgsiJQ2KTZRWhge4cqEtvRAsuU9mXZ1rgEc0P1M5tt1JWYDtkgDA6RGr86kDYFV0BhFDwxxLS5HI; _ga_WEFKCRPR2B=GS2.1.s1770300742$o1$g1$t1770300934$j60$l0$h0; cto_bundle=hKEurF9PWnpOM0p3ckVQQlVqaW1BWXdhdWRPSkdvdUdIbTVnOURZUkJPUmROVHROYyUyQklFUHlIRTZPVW53eERud0IlMkJ0Wm85RCUyRmZkJTJCR0NubFFubGl4UiUyQnlVbXY5bXBPNEFHeHZ1RllpVjhoYVo4ZEc3Qk14NDYxRVdzNEFualg5WFpBSjcwZzB1SW5Sa0ZFZyUyRjdEVnF1Z2hJMWclM0QlM0Q"
+            'Origin': "https://aifreeforever.com",
+            'Referer': "https://aifreeforever.com/tools/free-chatgpt-no-login",
+            'Accept': "application/json, text/plain, */*"
         };
 
-        const response = await axios.post(url, payload, { headers });
+        const response = await axios.post(url, payload, { headers, timeout: 30000 });
         
-        // L'API renvoie souvent du texte brut ou un objet avec le texte
         let aiResponse = "";
-        if (typeof response.data === 'string') {
-            aiResponse = response.data;
-        } else if (response.data && response.data.answer) {
+        if (response.data && response.data.answer) {
             aiResponse = response.data.answer;
         } else if (response.data && response.data.response) {
             aiResponse = response.data.response;
+        } else if (typeof response.data === 'string') {
+            aiResponse = response.data;
         } else {
-            // Fallback si la structure est différente
             aiResponse = JSON.stringify(response.data);
+        }
+
+        if (!aiResponse || aiResponse === "{}") {
+            throw new Error("Réponse vide de l'API");
         }
 
         await splitAndSendMessage(senderId, aiResponse);
 
     } catch (error) {
-        console.error('Erreur API AIFree:', error);
-        await sendMessage(senderId, "❌ 𝗗𝗲́𝘀𝗼𝗹𝗲́, 𝘂𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝗲𝘀𝘁 𝘀𝘂𝗿𝘃𝗲𝗻𝘂𝗲 lors de la communication avec l'IA. Veuillez réessayer plus tard.");
+        console.error('Erreur API AIFree:', error.message);
+        await sendMessage(senderId, "❌ 𝗗𝗲́𝘀𝗼𝗹𝗲́, 𝘂𝗻𝗲 𝗲𝗿𝗿𝗲𝘂𝗿 𝗲𝘀𝘁 𝘀𝘂𝗿𝘃𝗲𝗻𝘂𝗲 lors de la communication avec l'IA.\n\n" + (error.response ? "L'API a répondu avec une erreur." : "Vérifiez votre connexion ou réessayez plus tard."));
     }
 };
 
