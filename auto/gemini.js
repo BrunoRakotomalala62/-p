@@ -1,49 +1,16 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
-const fs = require('fs');
-const path = require('path');
-const FormData = require('form-data');
 
 // Mémorisation des images par utilisateur
 const userImageMemory = new Map();
 
 // Configuration des APIs
 const API_CONFIG = {
-    GEMINI_URL: "https://poe-mode.vercel.app/poe",
-    UPLOAD_URL: "https://image-upload-sigma-swart.vercel.app/upload",
+    GROQ_URL: "https://groqapi--h0kdld.replit.app/prompt",
     TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
 
-/**
- * Upload une image vers l'API d'hébergement spécifiée pour obtenir une URL publique stable
- */
-async function uploadImageToPublic(imageUrl) {
-    try {
-        console.log('📥 Upload de l\'image vers l\'API d\'hébergement:', imageUrl);
-
-        const response = await axios.get(API_CONFIG.UPLOAD_URL, {
-            params: { img: imageUrl },
-            timeout: 30000,
-            headers: {
-                'User-Agent': API_CONFIG.USER_AGENT
-            }
-        });
-
-        // La réponse attendue est {"image_direct":"https://i.ibb.co/..."}
-        if (response.data && response.data.image_direct) {
-            const publicUrl = response.data.image_direct;
-            console.log('✅ Image uploadée avec succès:', publicUrl);
-            return publicUrl;
-        } else {
-            console.error('❌ Réponse d\'upload invalide:', response.data);
-            throw new Error('Échec de l\'upload vers l\'API d\'hébergement');
-        }
-    } catch (error) {
-        console.error('❌ Erreur lors de l\'upload de l\'image:', error.message);
-        throw error;
-    }
-}
 
 // --- Fonctions de formatage de texte ---
 
@@ -188,37 +155,45 @@ function applyFinalStructure(responseBody) {
 // --- Fonctions d'appel API ---
 
 /**
- * Appelle l'API Poe (Claude)
+ * Appelle l'API Groq
  */
 async function callGeminiApi(params) {
-    let pro = params.prompt || params.pro || "décrivez bien cette photo?";
-    const image = params.image || null;
+    const prompt = params.prompt || params.pro || "décrivez bien cette photo?";
+    const image_url = params.image || null;
     const uid = params.uid || "123";
 
-    console.log(`🔗 Appel API Poe: ${API_CONFIG.GEMINI_URL}`);
+    console.log(`🔗 Appel API Groq: ${API_CONFIG.GROQ_URL}`);
 
     try {
         const queryParams = {
-            claude: pro,
+            prompt: prompt,
             uid: uid
         };
 
-        if (image) {
-            queryParams.image = image;
+        if (image_url) {
+            queryParams.image_url = image_url;
         }
 
-        const response = await axios.get(API_CONFIG.GEMINI_URL, {
+        const response = await axios.get(API_CONFIG.GROQ_URL, {
             params: queryParams,
             timeout: API_CONFIG.TIMEOUT,
-            headers: { 
+            headers: {
                 'User-Agent': API_CONFIG.USER_AGENT
             }
         });
 
         const result = response.data;
-        
-        // La nouvelle API renvoie la réponse dans le champ 'réponse'
-        const answer = result.réponse || result.response || result.answer || result;
+
+        // Extraction dynamique de la réponse selon les champs possibles
+        const answer =
+            result.response ||
+            result.réponse ||
+            result.answer ||
+            result.reply ||
+            result.message ||
+            result.text ||
+            result.content ||
+            (typeof result === 'string' ? result : null);
 
         if (!answer) {
             console.log('⚠️ Structure de réponse inhabituelle:', result);
@@ -228,7 +203,7 @@ async function callGeminiApi(params) {
         const finalAnswer = typeof answer === 'string' ? answer : JSON.stringify(answer);
         return applyFinalStructure(replaceBranding(finalAnswer));
     } catch (error) {
-        console.error('❌ Erreur API Poe:', error.message);
+        console.error('❌ Erreur API Groq:', error.message);
         throw error;
     }
 }
@@ -259,8 +234,8 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         uid: uid
     };
     if (imageUrls && imageUrls.length > 0) {
-        // Pour Gemini, on utilise l'upload dynamique
-        params.image = await uploadImageToPublic(imageUrls[0]);
+        // L'API Groq accepte directement l'URL de l'image
+        params.image = imageUrls[0];
     }
     return await callGeminiApi(params);
 }
