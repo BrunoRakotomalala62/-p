@@ -38,9 +38,11 @@ function convertToSuperscript(text) {
         '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
         '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ', 'i': 'ⁱ'
     };
-    return text.replace(/\^([0-9n+\-=()]+)/g, (match, p1) => {
-        return p1.split('').map(char => superscriptMap[char] || char).join('');
-    });
+    const convert = (str) => str.split('').map(char => superscriptMap[char] || char).join('');
+    // Gérer ^{...} avec accolades (LaTeX)
+    return text
+        .replace(/\^\{([0-9n+\-=()]+)\}/g, (match, p1) => convert(p1))
+        .replace(/\^([0-9n+\-=()]+)/g, (match, p1) => convert(p1));
 }
 
 /**
@@ -115,6 +117,11 @@ function cleanLatexSyntax(text) {
         .replace(/\\sqrt\{([^{}]+)\}/g, "√($1)")
         .replace(/\\boxed\{([^{}]+)\}/g, "【$1】")
         .replace(/\\quad/g, " ")
+        .replace(/\\,/g, " ")
+        .replace(/\\;/g, " ")
+        .replace(/\\:/g, " ")
+        .replace(/\\!/g, "")
+        .replace(/\\ /g, " ")
         .replace(/\\cdot/g, "·")
         .replace(/\\times/g, "×")
         .replace(/\\div/g, "÷")
@@ -180,9 +187,9 @@ function applyFinalStructure(responseBody) {
     const header = "✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬\n━━━━━━━━━━━━━━━━━━━━\n✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇";
     const footer = "\n━━━━━━━━━━━━━━━━━━━━\n🧠 𝙋𝙤𝙬𝙚𝙧𝙚𝙙 𝙗𝙮 👉 @Bruno | Ampinga AI";
     
-    // Formater le corps de la réponse dynamiquement
-    let formattedBody = formatText(responseBody);
-    formattedBody = cleanLatexSyntax(formattedBody);
+    // Nettoyer d'abord le LaTeX (retire {} et \commandes), puis formater
+    let formattedBody = cleanLatexSyntax(responseBody);
+    formattedBody = formatText(formattedBody);
     
     // Rendre le texte dynamique et intelligent (ex: numérotation en gras)
     formattedBody = formattedBody.replace(/^(\d+)\.\s+/gm, (match, num) => {
