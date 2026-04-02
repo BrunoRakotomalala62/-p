@@ -1,10 +1,8 @@
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+const FormData = require('form-data');
 const sendMessage = require('../handles/sendMessage');
 
-const BASE_URL = 'https://gemini-image-editor--monsieurtodisoa.replit.app';
-const API_ENDPOINT = `${BASE_URL}/api/nanobanana`;
+const API_ENDPOINT = 'https://gemini-image-editor--monsieurtodisoa.replit.app/api/nanobanana';
 
 const nanoSessions = {};
 
@@ -22,27 +20,7 @@ Je peux transformer vos images de façon intelligente :
 📸 Envoyez votre première image pour commencer !
 (Vous pourrez aussi envoyer une 2ème image pour des effets combinés)`;
 
-const getPublicImageUrl = (filename) => {
-    const domain = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_CLUSTER;
-    if (domain) {
-        return `https://${domain}/temp/${filename}`;
-    }
-    return null;
-};
-
-const saveImageBuffer = async (buffer, filename) => {
-    const filePath = path.join('/tmp', filename);
-    fs.writeFileSync(filePath, buffer);
-    return filePath;
-};
-
-const cleanupFile = (filename) => {
-    try {
-        const filePath = path.join('/tmp', filename);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch (e) {}
-};
-
+// Appel de la nouvelle API — retourne un buffer PNG directement
 const callNanoApi = async (prompt, imageUrl, imageUrl2 = null) => {
     let url = `${API_ENDPOINT}?prompt=${encodeURIComponent(prompt)}&image_url=${encodeURIComponent(imageUrl)}`;
     if (imageUrl2) {
@@ -60,15 +38,36 @@ const callNanoApi = async (prompt, imageUrl, imageUrl2 = null) => {
     return Buffer.from(response.data);
 };
 
+// Envoi du buffer image directement à Facebook via multipart upload
+const sendImageBuffer = async (senderId, imageBuffer) => {
+    const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+
+    const form = new FormData();
+    form.append('recipient', JSON.stringify({ id: senderId }));
+    form.append('message', JSON.stringify({
+        attachment: {
+            type: 'image',
+            payload: { is_reusable: true }
+        }
+    }));
+    form.append('filedata', imageBuffer, {
+        filename: 'result.png',
+        contentType: 'image/png'
+    });
+
+    const response = await axios.post(
+        `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+        form,
+        { headers: form.getHeaders(), timeout: 60000 }
+    );
+
+    return response.data;
+};
+
 module.exports = async (senderId, messageText, api, attachments) => {
 
     if (messageText === "RESET_CONVERSATION") {
-        if (nanoSessions[senderId]) {
-            cleanupFile(`nano_${senderId}_1.png`);
-            cleanupFile(`nano_${senderId}_2.png`);
-            cleanupFile(`nano_${senderId}_result.png`);
-            delete nanoSessions[senderId];
-        }
+        delete nanoSessions[senderId];
         return;
     }
 
@@ -88,9 +87,9 @@ module.exports = async (senderId, messageText, api, attachments) => {
                 `✅ Première image reçue et enregistrée !\n\n` +
                 `Que souhaitez-vous faire maintenant ?\n\n` +
                 `📌 Option 1 — Tapez directement votre instruction :\n` +
-                `_Ex : "Changer la couleur du vêtement en rouge"_\n\n` +
+                `Ex : "Changer la couleur du vêtement en rouge"\n\n` +
                 `📌 Option 2 — Envoyez une 2ème image pour un effet combiné :\n` +
-                `_Ex : mettre deux personnes côte à côte, fusionner des scènes, etc._`
+                `Ex : mettre deux personnes côte à côte, fusionner des scènes, etc.`
             );
             return;
         }
@@ -113,11 +112,8 @@ module.exports = async (senderId, messageText, api, attachments) => {
             return;
         }
 
-        // Cas où l'utilisateur envoie une image hors session
-        nanoSessions[senderId] = {
-            step: 'awaiting_decision',
-            imageUrl1: imageUrl
-        };
+        // Nouvelle image hors session active — redémarrer
+        nanoSessions[senderId] = { step: 'awaiting_decision', imageUrl1: imageUrl };
         await sendMessage(senderId,
             `✅ Image reçue !\n\nTapez votre instruction ou envoyez une 2ème image pour combiner.`
         );
@@ -133,7 +129,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         return;
     }
 
-    // Attente de la première image — l'utilisateur a tapé du texte
+    // Attente première image — texte reçu
     if (session.step === 'awaiting_first_image') {
         await sendMessage(senderId,
             `📸 Veuillez d'abord envoyer une image à transformer.\n` +
@@ -144,15 +140,12 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
     // Annulation
     if (messageText.trim().toLowerCase() === 'stop') {
-        cleanupFile(`nano_${senderId}_1.png`);
-        cleanupFile(`nano_${senderId}_2.png`);
-        cleanupFile(`nano_${senderId}_result.png`);
         delete nanoSessions[senderId];
         await sendMessage(senderId, `🛑 Session NANO annulée. Tapez "nano" pour recommencer.`);
         return;
     }
 
-    // Instruction pour une seule image
+    // ── Traitement : 1 seule image ────────────────────────────────────
     if (session.step === 'awaiting_decision' && session.imageUrl1) {
         const prompt = messageText.trim();
 
@@ -162,22 +155,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
         try {
             const imageBuffer = await callNanoApi(prompt, session.imageUrl1);
-            const filename = `nano_${senderId}_result_${Date.now()}.png`;
-            await saveImageBuffer(imageBuffer, filename);
-
-            const publicUrl = getPublicImageUrl(filename);
-
-            if (publicUrl) {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: { url: publicUrl, is_reusable: true }
-                    }
-                });
-                setTimeout(() => cleanupFile(filename), 60000);
-            } else {
-                await sendMessage(senderId, `⚠️ Image générée mais impossible de l'envoyer. Réessayez.`);
-            }
+            await sendImageBuffer(senderId, imageBuffer);
 
             await sendMessage(senderId,
                 `✅ Transformation réussie !\n\n` +
@@ -189,14 +167,14 @@ module.exports = async (senderId, messageText, api, attachments) => {
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
 
         } catch (error) {
-            console.error('Erreur NANO API (1 image):', error.message);
+            console.error('Erreur NANO (1 image):', error.message);
             await handleApiError(senderId, error);
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
         }
         return;
     }
 
-    // Instruction pour deux images
+    // ── Traitement : 2 images ─────────────────────────────────────────
     if (session.step === 'awaiting_prompt_two_images' && session.imageUrl1 && session.imageUrl2) {
         const prompt = messageText.trim();
 
@@ -206,22 +184,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
 
         try {
             const imageBuffer = await callNanoApi(prompt, session.imageUrl1, session.imageUrl2);
-            const filename = `nano_${senderId}_result_${Date.now()}.png`;
-            await saveImageBuffer(imageBuffer, filename);
-
-            const publicUrl = getPublicImageUrl(filename);
-
-            if (publicUrl) {
-                await sendMessage(senderId, {
-                    attachment: {
-                        type: 'image',
-                        payload: { url: publicUrl, is_reusable: true }
-                    }
-                });
-                setTimeout(() => cleanupFile(filename), 60000);
-            } else {
-                await sendMessage(senderId, `⚠️ Image générée mais impossible de l'envoyer. Réessayez.`);
-            }
+            await sendImageBuffer(senderId, imageBuffer);
 
             await sendMessage(senderId,
                 `✅ Combinaison réussie !\n\n` +
@@ -233,20 +196,20 @@ module.exports = async (senderId, messageText, api, attachments) => {
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
 
         } catch (error) {
-            console.error('Erreur NANO API (2 images):', error.message);
+            console.error('Erreur NANO (2 images):', error.message);
             await handleApiError(senderId, error);
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
         }
         return;
     }
 
-    // Fallback — relancer la session
+    // Fallback — relancer
     nanoSessions[senderId] = { step: 'awaiting_first_image' };
     await sendMessage(senderId, WELCOME_MSG);
 };
 
 const handleApiError = async (senderId, error) => {
-    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+    if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
         await sendMessage(senderId,
             `⏱️ Le traitement a pris trop de temps.\n` +
             `L'API est surchargée, réessayez dans quelques instants.`
