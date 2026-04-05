@@ -2,7 +2,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const sendMessage = require('../handles/sendMessage');
 
-const API_ENDPOINT = 'https://gemini-image-editor--monsieurtodisoa.replit.app/api/nanobanana';
+const API_ENDPOINT = 'https://gemini-image-editor--rakotomalalabr5.replit.app/api/nanobanana';
 
 const nanoSessions = {};
 
