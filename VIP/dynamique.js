@@ -6,6 +6,9 @@ const sendMessage = require('../handles/sendMessage');
 // Stockage temporaire des images en attente de question (par utilisateur)
 const pendingImages = {};
 
+// Stockage du modèle préféré par utilisateur ('edu' | 'claude')
+const userModels = {};
+
 const API_BASE = 'https://claude-46-replit--maevasoasarobid.replit.app/api';
 const MAX_MESSAGE_LENGTH = 1900;
 const API_TIMEOUT = 120000;
@@ -33,6 +36,14 @@ const LOADING_MESSAGES = [
     '💡 Synthèse des connaissances en cours...',
     '🎯 Formulation de la réponse parfaite...',
     '🔮 Traitement de ta requête pédagogique...'
+];
+
+const CLAUDE_LOADING_MESSAGES = [
+    '🤖 Claude analyse ta demande...',
+    '🧩 Réflexion en cours avec Claude...',
+    '🌐 Claude traite ta question...',
+    '⚡ Claude génère une réponse précise...',
+    '🔍 Analyse approfondie par Claude...'
 ];
 
 function getRandom(arr) {
@@ -143,10 +154,20 @@ async function sendFigureAsImage(senderId, figureSvgB64) {
     }
 }
 
+// ── API : /api/edu (modèle éducatif avec figures) ──
 async function callEduApi(prompt, uid, imageUrl = null) {
     const params = new URLSearchParams({ prompt, uid });
     if (imageUrl) params.append('image_url', imageUrl);
     const url = `${API_BASE}/edu?${params.toString()}`;
+    const response = await axios.get(url, { timeout: API_TIMEOUT });
+    return response.data;
+}
+
+// ── API : /api/claude (modèle Claude, vision + texte) ──
+async function callClaudeApi(prompt, uid, imageUrl = null) {
+    const params = new URLSearchParams({ prompt, uid });
+    if (imageUrl) params.append('image_url', imageUrl);
+    const url = `${API_BASE}/claude?${params.toString()}`;
     const response = await axios.get(url, { timeout: API_TIMEOUT });
     return response.data;
 }
@@ -163,7 +184,19 @@ async function deleteHistory(uid) {
     return response.data;
 }
 
+// ── Affiche le modèle actif de l'utilisateur ──
+function getUserModel(senderId) {
+    return userModels[senderId] || 'edu';
+}
+
+function getModelLabel(model) {
+    return model === 'claude'
+        ? '🤖 Claude AI'
+        : '🎓 Assistant Éducatif';
+}
+
 async function showWelcome(senderId) {
+    const currentModel = getUserModel(senderId);
     const welcome = `
 ${DECORATIONS.top}
 ║  🎓 𝗔𝗦𝗦𝗜𝗦𝗧𝗔𝗡𝗧 𝗗𝗬𝗡𝗔𝗠𝗜𝗤𝗨𝗘  🎓
@@ -182,12 +215,18 @@ ${DECORATIONS.divider}
 ${DECORATIONS.dotted}
 🎯 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝗲𝘀 𝗱𝗶𝘀𝗽𝗼𝗻𝗶𝗯𝗹𝗲𝘀 :
 ${DECORATIONS.divider}
-💬 dynamique <question>  → Poser une question
-🖼️ [Image + texte]       → Analyser une image
-📜 dynamique historique  → Voir l'historique
-🗑️ dynamique reset       → Effacer l'historique
-⛔ dynamique stop        → Terminer la session
+💬 dynamique <question>       → Poser une question
+🤖 dynamique claude <question> → Utiliser Claude AI
+🎓 dynamique edu <question>   → Utiliser l'assistant éducatif
+🖼️ [Image + texte]            → Analyser une image
+🔄 dynamique mode claude      → Passer en mode Claude
+🔄 dynamique mode edu         → Passer en mode Éducatif
+📜 dynamique historique       → Voir l'historique
+🗑️ dynamique reset            → Effacer l'historique
+⛔ dynamique stop             → Terminer la session
 
+${DECORATIONS.dotted}
+⚙️ 𝗠𝗼𝗱𝗲̀𝗹𝗲 𝗮𝗰𝘁𝘂𝗲𝗹 : ${getModelLabel(currentModel)}
 ${DECORATIONS.stars}
 💡 Pose-moi ta question !`.trim();
 
@@ -281,6 +320,35 @@ ${DECORATIONS.stars}
 👉 dynamique <ta question>`.trim());
 }
 
+// ── Gestion du changement de mode ──
+async function handleModeSwitch(senderId, newModel) {
+    const validModels = ['edu', 'claude'];
+    if (!validModels.includes(newModel)) {
+        await sendMessage(senderId, `
+⚠️ 𝗠𝗼𝗱𝗲̀𝗹𝗲 𝗶𝗻𝗰𝗼𝗻𝗻𝘂
+${DECORATIONS.divider}
+Modèles disponibles :
+🎓 edu    → Assistant Éducatif (figures, maths)
+🤖 claude → Claude AI (vision, général)
+
+💡 Exemple : dynamique mode claude`.trim());
+        return;
+    }
+
+    userModels[senderId] = newModel;
+    const label = getModelLabel(newModel);
+
+    await sendMessage(senderId, `
+✅ 𝗠𝗼𝗱𝗲̀𝗹𝗲 𝗰𝗵𝗮𝗻𝗴𝗲́ !
+${DECORATIONS.top}
+║  ⚙️ Modèle actif : ${label}
+${DECORATIONS.bot}
+
+💬 Tes prochaines questions utiliseront ${label}.
+👉 Pose ta question maintenant !`.trim());
+}
+
+// ── Question via /api/edu ──
 async function handleQuestion(senderId, question, imageUrl = null) {
     const isComplex = /courbe|trace|graphe|graph|dessin|repr[eé]sent|fonction|parabole|sinuso|cercle|droite/i.test(question);
 
@@ -334,16 +402,80 @@ ${DECORATIONS.stars}
 ${DECORATIONS.dotted}
 📝 Pose une autre question ou tape :
 ⛔ "stop" → Terminer | 📜 "historique" → Voir l'historique
-🗑️ "reset" → Effacer | ❓ "aide" → Guide`.trim();
+🗑️ "reset" → Effacer | 🔄 "mode claude" → Passer à Claude`.trim();
 
         await sendMessage(senderId, footer);
 
     } catch (error) {
-        console.error('Erreur API dynamique:', error.message, error.code);
+        console.error('Erreur API dynamique (edu):', error.message, error.code);
+        await sendMessage(senderId, buildErrorMessage(error));
+    }
+}
 
-        let errMsg;
-        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-            errMsg = `
+// ── Question via /api/claude ──
+async function handleClaudeQuestion(senderId, question, imageUrl = null) {
+    const loadingBubble = imageUrl
+        ? `🖼️ 𝗔𝗻𝗮𝗹𝘆𝘀𝗲 𝗶𝗺𝗮𝗴𝗲 𝗮𝘃𝗲𝗰 𝗖𝗹𝗮𝘂𝗱𝗲...\n${DECORATIONS.divider}\n🤖 Claude examine l'image...\n📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`
+        : `${getRandom(CLAUDE_LOADING_MESSAGES)}\n${DECORATIONS.divider}\n📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`;
+
+    await sendMessage(senderId, loadingBubble);
+
+    try {
+        const data = await callClaudeApi(question, senderId, imageUrl);
+
+        // Le champ principal peut être 'response' ou 'explanation' selon l'API
+        const responseText = data.response || data.explanation || data.text || data.answer || '';
+        const turnCount = data.turn_count || 1;
+
+        const header = `
+${DECORATIONS.top}
+║  🤖 𝗖𝗟𝗔𝗨𝗗𝗘 𝗔𝗜 • Tour n°${turnCount}
+║  🕐 ${getTimestamp()}
+${DECORATIONS.bot}`.trim();
+
+        await sendMessage(senderId, header);
+        await delay(300);
+
+        if (responseText) {
+            await sendSplit(senderId, responseText);
+        } else {
+            await sendMessage(senderId, `⚠️ Aucune réponse reçue de Claude.`);
+        }
+
+        await delay(300);
+        const footer = `
+${DECORATIONS.stars}
+🤖 Claude • Tour ${turnCount} terminé
+${DECORATIONS.dotted}
+📝 Pose une autre question ou tape :
+⛔ "stop" → Terminer | 🔄 "mode edu" → Passer à Éducatif
+🗑️ "reset" → Effacer | 📜 "historique" → Historique`.trim();
+
+        await sendMessage(senderId, footer);
+
+    } catch (error) {
+        console.error('Erreur API dynamique (claude):', error.message, error.code);
+
+        // Si Claude est indisponible, proposer le fallback vers edu
+        const isUnavailable = error.response?.status === 404 || error.response?.status === 503;
+        if (isUnavailable) {
+            await sendMessage(senderId, `
+⚠️ 𝗖𝗹𝗮𝘂𝗱𝗲 𝗶𝗻𝗱𝗶𝘀𝗽𝗼𝗻𝗶𝗯𝗹𝗲
+${DECORATIONS.divider}
+Le modèle Claude est temporairement inaccessible.
+
+🔄 Basculement automatique vers l'assistant éducatif...`.trim());
+            await delay(500);
+            await handleQuestion(senderId, question, imageUrl);
+        } else {
+            await sendMessage(senderId, buildErrorMessage(error));
+        }
+    }
+}
+
+function buildErrorMessage(error) {
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        return `
 ⏱️ 𝗧𝗲𝗺𝗽𝘀 𝗱𝗲 𝗿𝗲́𝗽𝗼𝗻𝘀𝗲 𝗱𝗲́𝗽𝗮𝘀𝘀𝗲́
 ${DECORATIONS.divider}
 Le serveur met trop de temps à répondre.
@@ -351,9 +483,9 @@ Le serveur met trop de temps à répondre.
 🔄 Réessaie dans quelques instants.
 💡 Si ça persiste, essaie une question
    plus simple.`.trim();
-        } else {
-            errMsg = `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗰𝗼𝗻𝗻𝗲𝘅𝗶𝗼𝗻
+    }
+    return `
+❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗰𝗼𝗻𝗻𝗲𝘃𝗶𝗼𝗻
 ${DECORATIONS.divider}
 Impossible de contacter l'assistant.
 
@@ -362,10 +494,6 @@ Impossible de contacter l'assistant.
 ◆ Serveur temporairement indisponible
 
 🔄 Réessaie dans quelques secondes.`.trim();
-        }
-
-        await sendMessage(senderId, errMsg);
-    }
 }
 
 module.exports = async (senderId, prompt, api, attachmentOrEvent) => {
@@ -434,6 +562,28 @@ ${DECORATIONS.divider}
             return;
         }
 
+        // ── Changement de modèle : "mode claude" / "mode edu" ──
+        const modeMatch = lowerInput.match(/^mode\s+(claude|edu)$/);
+        if (modeMatch) {
+            await handleModeSwitch(senderId, modeMatch[1]);
+            return;
+        }
+
+        // ── Préfixe de modèle explicite : "claude <question>" / "edu <question>" ──
+        let forcedModel = null;
+        let questionText = input;
+
+        const claudePrefix = input.match(/^claude\s+(.+)/i);
+        const eduPrefix = input.match(/^edu\s+(.+)/i);
+
+        if (claudePrefix) {
+            forcedModel = 'claude';
+            questionText = claudePrefix[1].trim();
+        } else if (eduPrefix) {
+            forcedModel = 'edu';
+            questionText = eduPrefix[1].trim();
+        }
+
         // ── CAS 2 : l'utilisateur envoie du texte avec une image en attente ──
         // On récupère l'image stockée et on la joint à la question
         if (!imageUrl && pendingImages[senderId]) {
@@ -441,11 +591,18 @@ ${DECORATIONS.divider}
             delete pendingImages[senderId];
         }
 
-        const questionText = imageUrl && !input
+        const finalQuestion = imageUrl && !questionText
             ? 'Analyse cette image et explique son contenu de façon détaillée.'
-            : input;
+            : questionText;
 
-        await handleQuestion(senderId, questionText, imageUrl);
+        // Détermination du modèle final
+        const activeModel = forcedModel || getUserModel(senderId);
+
+        if (activeModel === 'claude') {
+            await handleClaudeQuestion(senderId, finalQuestion, imageUrl);
+        } else {
+            await handleQuestion(senderId, finalQuestion, imageUrl);
+        }
 
     } catch (error) {
         console.error('Erreur commande dynamique:', error.message);
