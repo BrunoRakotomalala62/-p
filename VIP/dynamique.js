@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
+// Stockage temporaire des images en attente de question (par utilisateur)
+const pendingImages = {};
+
 const API_BASE = 'https://claude-46-replit--maevasoasarobid.replit.app/api';
 const MAX_MESSAGE_LENGTH = 1900;
 const API_TIMEOUT = 120000;
@@ -384,12 +387,33 @@ module.exports = async (senderId, prompt, api, attachmentOrEvent) => {
         const input = rawInput === 'IMAGE_ATTACHMENT' ? '' : rawInput;
         const lowerInput = input.toLowerCase();
 
+        // ── CAS 1 : l'utilisateur vient d'envoyer une image (pas de texte) ──
+        // On stocke l'URL et on demande sa question
+        if (imageUrl && !input) {
+            pendingImages[senderId] = imageUrl;
+            await sendMessage(senderId, `
+🖼️ 𝗜𝗺𝗮𝗴𝗲 𝗿𝗲𝗰̧𝘂𝗲 !
+${DECORATIONS.divider}
+✅ J'ai bien reçu votre image.
+
+❓ Quelle question avez-vous à poser concernant cette image ?
+
+💡 Exemples :
+◆ Fais cet exercice
+◆ Décris ce que tu vois
+◆ Explique ce schéma
+◆ Résous ce problème`.trim());
+            return;
+        }
+
         if (!input && !imageUrl) {
             await showWelcome(senderId);
             return;
         }
 
+        // Commandes spéciales — on efface aussi l'image en attente
         if (lowerInput === 'stop' || lowerInput === 'quitter' || lowerInput === 'exit') {
+            delete pendingImages[senderId];
             await handleStop(senderId);
             return;
         }
@@ -400,6 +424,7 @@ module.exports = async (senderId, prompt, api, attachmentOrEvent) => {
         }
 
         if (lowerInput === 'reset' || lowerInput === 'effacer' || lowerInput === 'reinitialiser') {
+            delete pendingImages[senderId];
             await handleReset(senderId, senderId);
             return;
         }
@@ -407,6 +432,13 @@ module.exports = async (senderId, prompt, api, attachmentOrEvent) => {
         if (lowerInput === 'aide' || lowerInput === 'help' || lowerInput === 'menu') {
             await showWelcome(senderId);
             return;
+        }
+
+        // ── CAS 2 : l'utilisateur envoie du texte avec une image en attente ──
+        // On récupère l'image stockée et on la joint à la question
+        if (!imageUrl && pendingImages[senderId]) {
+            imageUrl = pendingImages[senderId];
+            delete pendingImages[senderId];
         }
 
         const questionText = imageUrl && !input
