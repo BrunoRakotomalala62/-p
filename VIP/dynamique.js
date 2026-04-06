@@ -9,7 +9,7 @@ const pendingImages = {};
 // Stockage du modèle préféré par utilisateur ('edu' | 'claude')
 const userModels = {};
 
-const API_BASE = 'https://claude-46-replit--maevasoasarobid.replit.app/api';
+const API_BASE = 'https://claude-46-replit--lalaofano.replit.app/api';
 const MAX_MESSAGE_LENGTH = 1900;
 const API_TIMEOUT = 120000;
 
@@ -164,12 +164,34 @@ async function callEduApi(prompt, uid, imageUrl = null) {
 }
 
 // ── API : /api/claude (modèle Claude, vision + texte) ──
+// Retourne : { meta: {model, image_analyzed, turn_count, ...}, result: {title, sections, raw}, figures: [] }
 async function callClaudeApi(prompt, uid, imageUrl = null) {
     const params = new URLSearchParams({ prompt, uid });
     if (imageUrl) params.append('image_url', imageUrl);
     const url = `${API_BASE}/claude?${params.toString()}`;
     const response = await axios.get(url, { timeout: API_TIMEOUT });
     return response.data;
+}
+
+// ── Formatage de la réponse Claude en texte lisible ──
+function formatClaudeResponse(data) {
+    const result = data.result || {};
+    const meta   = data.meta   || {};
+
+    // Priorité : raw complet, sinon reconstituer depuis les sections
+    if (result.raw && result.raw.trim()) {
+        return result.raw.trim();
+    }
+
+    const sections = result.sections || [];
+    if (sections.length === 0) return '';
+
+    return sections.map(s => {
+        const heading = s.heading ? `**${s.heading}**\n` : '';
+        const content = s.content || '';
+        const bullets = (s.bullets || []).map(b => `• ${b}`).join('\n');
+        return [heading + content, bullets].filter(Boolean).join('\n');
+    }).join('\n\n').trim();
 }
 
 async function getHistory(uid) {
@@ -423,14 +445,16 @@ async function handleClaudeQuestion(senderId, question, imageUrl = null) {
     try {
         const data = await callClaudeApi(question, senderId, imageUrl);
 
-        // Le champ principal peut être 'response' ou 'explanation' selon l'API
-        const responseText = data.response || data.explanation || data.text || data.answer || '';
-        const turnCount = data.turn_count || 1;
+        // Structure réelle : { meta, result: {title, sections, raw}, figures }
+        const meta      = data.meta   || {};
+        const turnCount = meta.turn_count || data.turn_count || 1;
+        const title     = data.result?.title || '';
+        const responseText = formatClaudeResponse(data);
 
         const header = `
 ${DECORATIONS.top}
-║  🤖 𝗖𝗟𝗔𝗨𝗗𝗘 𝗔𝗜 • Tour n°${turnCount}
-║  🕐 ${getTimestamp()}
+║  🤖 𝗖𝗟𝗔𝗨𝗗𝗘 𝗔𝗜${title ? ' • ' + title.substring(0, 25) : ''} 
+║  💬 Tour n°${turnCount} • ${getTimestamp()}
 ${DECORATIONS.bot}`.trim();
 
         await sendMessage(senderId, header);
@@ -440,6 +464,17 @@ ${DECORATIONS.bot}`.trim();
             await sendSplit(senderId, responseText);
         } else {
             await sendMessage(senderId, `⚠️ Aucune réponse reçue de Claude.`);
+        }
+
+        // Afficher les figures si l'API en retourne
+        const figures = data.figures || [];
+        for (const fig of figures) {
+            if (fig.svg_b64 || fig.svg) {
+                await delay(400);
+                await sendMessage(senderId, `📊 Envoi de la figure...`);
+                const b64 = fig.svg_b64 || Buffer.from(fig.svg).toString('base64');
+                await sendFigureAsImage(senderId, b64);
+            }
         }
 
         await delay(300);
@@ -456,9 +491,9 @@ ${DECORATIONS.dotted}
     } catch (error) {
         console.error('Erreur API dynamique (claude):', error.message, error.code);
 
-        // Si Claude est indisponible, proposer le fallback vers edu
+        // Si Claude est indisponible, fallback vers edu (sans image car edu ne supporte pas les images)
         const isUnavailable = error.response?.status === 404 || error.response?.status === 503;
-        if (isUnavailable) {
+        if (isUnavailable && !imageUrl) {
             await sendMessage(senderId, `
 ⚠️ 𝗖𝗹𝗮𝘂𝗱𝗲 𝗶𝗻𝗱𝗶𝘀𝗽𝗼𝗻𝗶𝗯𝗹𝗲
 ${DECORATIONS.divider}
@@ -466,7 +501,7 @@ Le modèle Claude est temporairement inaccessible.
 
 🔄 Basculement automatique vers l'assistant éducatif...`.trim());
             await delay(500);
-            await handleQuestion(senderId, question, imageUrl);
+            await handleQuestion(senderId, question, null);
         } else {
             await sendMessage(senderId, buildErrorMessage(error));
         }
@@ -595,8 +630,16 @@ ${DECORATIONS.divider}
             ? 'Analyse cette image et explique son contenu de façon détaillée.'
             : questionText;
 
-        // Détermination du modèle final
-        const activeModel = forcedModel || getUserModel(senderId);
+        // ── Détermination du modèle final ──
+        // Si une image est présente : toujours utiliser Claude (/api/claude supporte les images,
+        // /api/edu échoue systématiquement avec image_url)
+        // Sinon : respecter le choix de l'utilisateur ou le modèle par défaut (edu)
+        let activeModel;
+        if (imageUrl) {
+            activeModel = 'claude';  // Claude gère les images correctement
+        } else {
+            activeModel = forcedModel || getUserModel(senderId);
+        }
 
         if (activeModel === 'claude') {
             await handleClaudeQuestion(senderId, finalQuestion, imageUrl);
