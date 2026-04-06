@@ -10,6 +10,7 @@
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
     "@google/generative-ai": "^0.22.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^18.19.130",
     "axios": "^1.13.4",
     "body-parser": "^1.20.4",

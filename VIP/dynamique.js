@@ -5,6 +5,7 @@ const sendMessage = require('../handles/sendMessage');
 
 const API_BASE = 'https://claude-46-replit--maevasoasarobid.replit.app/api';
 const MAX_MESSAGE_LENGTH = 1900;
+const API_TIMEOUT = 120000;
 
 const DECORATIONS = {
     top:       '╔══════════════════════════════╗',
@@ -12,17 +13,12 @@ const DECORATIONS = {
     bot:       '╚══════════════════════════════╝',
     divider:   '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     dotted:    '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈',
-    stars:     '✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦',
-    sparkles:  '✨ ✨ ✨ ✨ ✨ ✨ ✨ ✨ ✨ ✨ ✨'
+    stars:     '✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦'
 };
 
 const EMOJIS = {
-    brain:    ['🧠', '💡', '🔮', '⚡', '🌟', '✨', '🎯', '🚀'],
-    science:  ['🔬', '⚛️', '🧪', '📐', '📏', '🧮', '📊', '📈'],
-    loading:  ['⏳', '🔄', '⚙️', '💫', '🌀', '🕐', '🕑', '🕒'],
-    success:  ['✅', '🎉', '🏆', '💯', '👑', '🌈', '🎊', '⭐'],
-    error:    ['❌', '⚠️', '🚫', '💔', '😔'],
-    book:     ['📚', '📖', '📝', '📋', '📌', '🗒️', '✏️', '🖊️']
+    brain:   ['🧠', '💡', '🔮', '⚡', '🌟', '✨', '🎯', '🚀'],
+    science: ['🔬', '⚛️', '🧪', '📐', '📏', '🧮', '📊', '📈']
 };
 
 const LOADING_MESSAGES = [
@@ -36,20 +32,6 @@ const LOADING_MESSAGES = [
     '🔮 Traitement de ta requête pédagogique...'
 ];
 
-const WELCOME_MESSAGES = [
-    'Je suis prêt à t\'aider !',
-    'Pose-moi ta question !',
-    'En quoi puis-je t\'aider aujourd\'hui ?',
-    'Je suis là pour t\'accompagner !'
-];
-
-const FIGURE_MESSAGES = [
-    '📊 Une figure illustrative a été générée pour cette réponse.',
-    '📐 Un schéma accompagne cette explication.',
-    '🖼️ Une représentation visuelle est disponible pour cette question.',
-    '📈 Une figure a été créée pour mieux illustrer ce concept.'
-];
-
 function getRandom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -59,6 +41,12 @@ function getTimestamp() {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
     });
+}
+
+function getBaseUrl() {
+    if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
+    if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+    return `http://localhost:${process.env.PORT || 5000}`;
 }
 
 function splitMessage(text, maxLen = MAX_MESSAGE_LENGTH) {
@@ -97,9 +85,7 @@ async function sendSplit(senderId, text) {
     const parts = splitMessage(text);
     for (let i = 0; i < parts.length; i++) {
         await sendMessage(senderId, parts[i]);
-        if (i < parts.length - 1) {
-            await delay(350);
-        }
+        if (i < parts.length - 1) await delay(350);
     }
 }
 
@@ -107,23 +93,70 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function svgToPng(svgBuffer) {
+    const { Resvg } = require('@resvg/resvg-js');
+    const resvg = new Resvg(svgBuffer, {
+        fitTo: { mode: 'width', value: 900 },
+        background: 'white'
+    });
+    const rendered = resvg.render();
+    return rendered.asPng();
+}
+
+async function sendFigureAsImage(senderId, figureSvgB64) {
+    try {
+        const svgBuffer = Buffer.from(figureSvgB64, 'base64');
+        const pngBuffer = await svgToPng(svgBuffer);
+
+        const fileName = `figure_${senderId}_${Date.now()}.png`;
+        const tmpPath = path.join('/tmp', fileName);
+        fs.writeFileSync(tmpPath, pngBuffer);
+
+        const baseUrl = getBaseUrl();
+        const imageUrl = `${baseUrl}/temp/${fileName}`;
+
+        await sendMessage(senderId, {
+            attachment: {
+                type: 'image',
+                payload: {
+                    url: imageUrl,
+                    is_reusable: false
+                }
+            }
+        });
+
+        setTimeout(() => {
+            try {
+                if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+            } catch (e) {
+                console.error('Erreur suppression figure PNG:', e.message);
+            }
+        }, 300000);
+
+        return true;
+    } catch (err) {
+        console.error('Erreur conversion SVG→PNG:', err.message);
+        return false;
+    }
+}
+
 async function callEduApi(prompt, uid, imageUrl = null) {
     const params = new URLSearchParams({ prompt, uid });
     if (imageUrl) params.append('image_url', imageUrl);
     const url = `${API_BASE}/edu?${params.toString()}`;
-    const response = await axios.get(url, { timeout: 60000 });
+    const response = await axios.get(url, { timeout: API_TIMEOUT });
     return response.data;
 }
 
 async function getHistory(uid) {
     const url = `${API_BASE}/edu/history?uid=${encodeURIComponent(uid)}`;
-    const response = await axios.get(url, { timeout: 15000 });
+    const response = await axios.get(url, { timeout: 20000 });
     return response.data;
 }
 
 async function deleteHistory(uid) {
     const url = `${API_BASE}/edu/history?uid=${encodeURIComponent(uid)}`;
-    const response = await axios.delete(url, { timeout: 15000 });
+    const response = await axios.delete(url, { timeout: 20000 });
     return response.data;
 }
 
@@ -138,8 +171,8 @@ ${getRandom(EMOJIS.brain)} 𝗖𝗮𝗽𝗮𝗯𝗶𝗹𝗶𝘁𝗲́𝘀 :
 ${DECORATIONS.divider}
 📐 Résolution d'exercices de maths
 ⚛️ Explication de physique & chimie
-📊 Analyse de graphiques & figures
-🖼️ Analyse d'images de sujets (envoie une image !)
+📊 Tracé de courbes avec figure envoyée
+🖼️ Analyse d'images de sujets
 🔢 Arithmétique & algèbre avancée
 📈 Statistiques & probabilités
 
@@ -153,17 +186,14 @@ ${DECORATIONS.divider}
 ⛔ dynamique stop        → Terminer la session
 
 ${DECORATIONS.stars}
-💡 ${getRandom(WELCOME_MESSAGES)}`.trim();
+💡 Pose-moi ta question !`.trim();
 
     await sendMessage(senderId, welcome);
 }
 
 async function showHistory(senderId, uid) {
     try {
-        await sendMessage(senderId, `
-📜 𝗥𝗲́𝗰𝘂𝗽𝗲́𝗿𝗮𝘁𝗶𝗼𝗻 𝗱𝗲 𝗹'𝗵𝗶𝘀𝘁𝗼𝗿𝗶𝗾𝘂𝗲...
-${DECORATIONS.divider}
-⏳ Connexion au serveur en cours...`.trim());
+        await sendMessage(senderId, `📜 Récupération de l'historique...\n${DECORATIONS.divider}\n⏳ Connexion au serveur...`);
 
         const data = await getHistory(uid);
         const messages = data.messages || [];
@@ -183,9 +213,8 @@ Aucune conversation enregistrée.
         const header = `
 📜 𝗛𝗜𝗦𝗧𝗢𝗥𝗜𝗤𝗨𝗘 𝗗𝗘 𝗖𝗢𝗡𝗩𝗘𝗥𝗦𝗔𝗧𝗜𝗢𝗡
 ${DECORATIONS.top}
-║ 👤 Utilisateur : ${uid.substring(0, 10)}...
-║ 💬 Tours de conversation : ${turnCount}
-║ 📅 Créé le : ${data.created_at ? new Date(data.created_at).toLocaleString('fr-FR') : 'N/A'}
+║ 💬 Tours : ${turnCount}
+║ 📅 Créé : ${data.created_at ? new Date(data.created_at).toLocaleString('fr-FR') : 'N/A'}
 ${DECORATIONS.bot}`.trim();
 
         await sendMessage(senderId, header);
@@ -197,45 +226,24 @@ ${DECORATIONS.bot}`.trim();
             const role = msg.role === 'user' ? '👤 Toi' : '🤖 Assistant';
             const content = msg.content || msg.text || '(vide)';
             const preview = content.length > 300 ? content.substring(0, 300) + '...' : content;
-
-            const card = `
-${DECORATIONS.dotted}
-${role} :
-${preview}`.trim();
-
-            await sendSplit(senderId, card);
+            await sendSplit(senderId, `${DECORATIONS.dotted}\n${role} :\n${preview}`);
             await delay(250);
         }
 
-        if (messages.length > 6) {
-            await sendMessage(senderId, `
-${DECORATIONS.divider}
-📊 ${messages.length - 6} message(s) plus anciens non affichés.
-💡 Tape "dynamique reset" pour effacer l'historique.`.trim());
-        } else {
-            await sendMessage(senderId, `
+        await sendMessage(senderId, `
 ${DECORATIONS.divider}
 ✅ Fin de l'historique (${messages.length} message(s))
-🔄 Continue ou tape "dynamique reset" pour effacer.`.trim());
-        }
+🗑️ Tape "reset" pour effacer.`.trim());
 
     } catch (error) {
         console.error('Erreur getHistory dynamique:', error.message);
-        await sendMessage(senderId, `
-❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗵𝗶𝘀𝘁𝗼𝗿𝗶𝗾𝘂𝗲
-${DECORATIONS.divider}
-Impossible de récupérer l'historique.
-🔄 Réessaie dans quelques instants.`.trim());
+        await sendMessage(senderId, `❌ Impossible de récupérer l'historique.\n🔄 Réessaie dans quelques instants.`);
     }
 }
 
 async function handleReset(senderId, uid) {
     try {
-        await sendMessage(senderId, `
-🗑️ 𝗦𝘂𝗽𝗽𝗿𝗲𝘀𝘀𝗶𝗼𝗻 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...
-${DECORATIONS.divider}
-⏳ Effacement de l'historique...`.trim());
-
+        await sendMessage(senderId, `🗑️ Effacement de l'historique...\n${DECORATIONS.divider}\n⏳ En cours...`);
         const result = await deleteHistory(uid);
 
         if (result.deleted) {
@@ -249,15 +257,11 @@ ${DECORATIONS.bot}
 💬 Pose ta prochaine question :
 👉 dynamique <ta question>`.trim());
         } else {
-            await sendMessage(senderId, `
-⚠️ Aucun historique à supprimer.
-💡 Commence une nouvelle conversation !`.trim());
+            await sendMessage(senderId, `⚠️ Aucun historique à supprimer.\n💡 Commence une nouvelle conversation !`);
         }
     } catch (error) {
         console.error('Erreur reset dynamique:', error.message);
-        await sendMessage(senderId, `
-❌ Erreur lors de la suppression.
-🔄 Réessaie dans quelques instants.`.trim());
+        await sendMessage(senderId, `❌ Erreur lors de la suppression.\n🔄 Réessaie dans quelques instants.`);
     }
 }
 
@@ -275,16 +279,13 @@ ${DECORATIONS.stars}
 }
 
 async function handleQuestion(senderId, question, imageUrl = null) {
-    const loadingMsg = getRandom(LOADING_MESSAGES);
+    const isComplex = /courbe|trace|graphe|graph|dessin|repr[eé]sent|fonction|parabole|sinuso|cercle|droite/i.test(question);
 
     const loadingBubble = imageUrl
-        ? `🖼️ 𝗔𝗻𝗮𝗹𝘆𝘀𝗲 𝗱'𝗶𝗺𝗮𝗴𝗲 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...
-${DECORATIONS.divider}
-🔬 Examen visuel de l'image...
-📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`.trim()
-        : `${loadingMsg}
-${DECORATIONS.divider}
-📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`.trim();
+        ? `🖼️ 𝗔𝗻𝗮𝗹𝘆𝘀𝗲 𝗱'𝗶𝗺𝗮𝗴𝗲 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...\n${DECORATIONS.divider}\n🔬 Examen visuel de l'image...\n📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`
+        : isComplex
+            ? `📊 𝗚𝗲́𝗻𝗲́𝗿𝗮𝘁𝗶𝗼𝗻 𝗱𝗲 𝗳𝗶𝗴𝘂𝗿𝗲 𝗲𝗻 𝗰𝗼𝘂𝗿𝘀...\n${DECORATIONS.divider}\n✏️ Tracé de la courbe...\n⏳ Cette opération peut prendre ~1 minute.\n📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`
+            : `${getRandom(LOADING_MESSAGES)}\n${DECORATIONS.divider}\n📝 "${question.substring(0, 80)}${question.length > 80 ? '...' : ''}"`;
 
     await sendMessage(senderId, loadingBubble);
 
@@ -311,41 +312,15 @@ ${DECORATIONS.bot}`.trim();
 
         if (hasFigure && figureSvgB64) {
             await delay(400);
-            try {
-                const svgContent = Buffer.from(figureSvgB64, 'base64').toString('utf8');
-                const fileName = `figure_${senderId}_${Date.now()}.svg`;
-                const tmpPath = path.join('/tmp', fileName);
-                fs.writeFileSync(tmpPath, svgContent);
+            await sendMessage(senderId, `📊 Génération de l'image de la figure...`);
 
-                const baseUrl = process.env.REPLIT_DEV_DOMAIN
-                    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-                    : process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 5000}`;
-                const figureUrl = `${baseUrl}/temp/${fileName}`;
+            const sent = await sendFigureAsImage(senderId, figureSvgB64);
 
+            if (!sent) {
                 await sendMessage(senderId, `
 ${DECORATIONS.dotted}
-${getRandom(FIGURE_MESSAGES)}
-${DECORATIONS.divider}
-🔗 Figure disponible ici :
-${figureUrl}
-
-💡 Ouvre ce lien dans ton navigateur
-   pour voir la figure interactive.`.trim());
-
-                setTimeout(() => {
-                    try {
-                        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-                    } catch (e) {
-                        console.error('Erreur suppression figure:', e.message);
-                    }
-                }, 300000);
-
-            } catch (figErr) {
-                console.error('Erreur figure SVG:', figErr.message);
-                await sendMessage(senderId, `
-${DECORATIONS.dotted}
-📊 Une figure illustrative accompagne cette réponse.
-(Non disponible pour affichage direct)`.trim());
+⚠️ La figure n'a pas pu être envoyée en image.
+💡 L'explication ci-dessus reste complète.`.trim());
             }
         }
 
@@ -361,9 +336,20 @@ ${DECORATIONS.dotted}
         await sendMessage(senderId, footer);
 
     } catch (error) {
-        console.error('Erreur API dynamique:', error.message);
+        console.error('Erreur API dynamique:', error.message, error.code);
 
-        let errMsg = `
+        let errMsg;
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            errMsg = `
+⏱️ 𝗧𝗲𝗺𝗽𝘀 𝗱𝗲 𝗿𝗲́𝗽𝗼𝗻𝘀𝗲 𝗱𝗲́𝗽𝗮𝘀𝘀𝗲́
+${DECORATIONS.divider}
+Le serveur met trop de temps à répondre.
+
+🔄 Réessaie dans quelques instants.
+💡 Si ça persiste, essaie une question
+   plus simple.`.trim();
+        } else {
+            errMsg = `
 ❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝗰𝗼𝗻𝗻𝗲𝘅𝗶𝗼𝗻
 ${DECORATIONS.divider}
 Impossible de contacter l'assistant.
@@ -371,18 +357,8 @@ Impossible de contacter l'assistant.
 💡 Causes possibles :
 ◆ Connexion instable
 ◆ Serveur temporairement indisponible
-◆ Question trop longue
 
 🔄 Réessaie dans quelques secondes.`.trim();
-
-        if (error.code === 'ECONNABORTED') {
-            errMsg = `
-⏱️ 𝗧𝗲𝗺𝗽𝘀 𝗱𝗲 𝗿𝗲́𝗽𝗼𝗻𝘀𝗲 𝗱𝗲́𝗽𝗮𝘀𝘀𝗲́
-${DECORATIONS.divider}
-L'assistant prend plus de temps que prévu.
-
-💡 Essaie avec une question plus courte
-   ou réessaie dans un instant.`.trim();
         }
 
         await sendMessage(senderId, errMsg);
