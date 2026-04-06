@@ -198,6 +198,31 @@ const handleMessage = async (event, api) => {
                 return;
             }
 
+            // Si aucune commande active, vérifier si le texte du message déclenche une commande VIP
+            // Cas : l'utilisateur envoie "dynamique [question]" + image dans le même message
+            if (message.text) {
+                const attachTextLower = message.text.trim().toLowerCase();
+                const sortedVIPKeys = Object.keys(vipCommands).sort((a, b) => b.length - a.length);
+                for (const cmdName of sortedVIPKeys) {
+                    const matchExact = attachTextLower === cmdName || attachTextLower.startsWith(cmdName + ' ');
+                    if (matchExact) {
+                        const canAccessVIP = !controle.isAccessRestricted() || vipStatus.isVIP;
+                        if (canAccessVIP) {
+                            activeVIPCommands[senderId] = cmdName;
+                            activeCommands[senderId] = null;
+                            const cmdPrompt = message.text.trim().slice(cmdName.length).trim() || 'IMAGE_ATTACHMENT';
+                            try {
+                                await vipCommands[cmdName](senderId, cmdPrompt, api, imageAttachments);
+                            } catch (err) {
+                                console.error(`Erreur commande VIP ${cmdName} avec image:`, err);
+                            }
+                            return;
+                        }
+                        break;
+                    }
+                }
+            }
+
             // Si aucune commande active, utiliser auto/gemini.js pour les images
             for (const image of imageAttachments) {
                 const imageUrl = image.payload.url;
