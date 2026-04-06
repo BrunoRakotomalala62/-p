@@ -365,15 +365,24 @@ Impossible de contacter l'assistant.
     }
 }
 
-module.exports = async (senderId, prompt, api, event) => {
+module.exports = async (senderId, prompt, api, attachmentOrEvent) => {
     try {
-        const input = (typeof prompt === 'string' ? prompt : '').trim();
-        const lowerInput = input.toLowerCase();
+        const rawInput = (typeof prompt === 'string' ? prompt : '').trim();
 
-        const imageAttachment = event && event.message && event.message.attachments
-            ? event.message.attachments.find(a => a.type === 'image')
-            : null;
-        const imageUrl = imageAttachment ? imageAttachment.payload.url : null;
+        // handleMessage.js passe les images en 4ème param sous forme de tableau
+        // ex: [{type:'image', payload:{url:'...'}}]
+        let imageUrl = null;
+        if (Array.isArray(attachmentOrEvent) && attachmentOrEvent.length > 0) {
+            const imgAttach = attachmentOrEvent.find(a => a.type === 'image');
+            if (imgAttach) imageUrl = imgAttach.payload.url;
+        } else if (attachmentOrEvent && attachmentOrEvent.message && attachmentOrEvent.message.attachments) {
+            const imgAttach = attachmentOrEvent.message.attachments.find(a => a.type === 'image');
+            if (imgAttach) imageUrl = imgAttach.payload.url;
+        }
+
+        // Quand une image est envoyée, prompt vaut "IMAGE_ATTACHMENT" — on l'ignore
+        const input = rawInput === 'IMAGE_ATTACHMENT' ? '' : rawInput;
+        const lowerInput = input.toLowerCase();
 
         if (!input && !imageUrl) {
             await showWelcome(senderId);
