@@ -371,6 +371,39 @@ ${DECORATIONS.bot}
 }
 
 // ── Question via /api/edu ──
+// ── Extrait les blocs <SVG_FIGURE>...</SVG_FIGURE> du texte explanation ──
+// Retourne { cleanText, svgList } où svgList est un tableau de base64 SVG
+function extractSvgFromText(text) {
+    const svgList = [];
+    // Capturer tout contenu entre <SVG_FIGURE> et </SVG_FIGURE> (ou <svg> seul)
+    const tagRegex = /<SVG_FIGURE>([\s\S]*?)<\/SVG_FIGURE>/gi;
+    const rawSvgRegex = /(<svg[\s\S]*?<\/svg>)/gi;
+
+    let cleanText = text.replace(tagRegex, (match, svgContent) => {
+        const b64 = Buffer.from(svgContent.trim()).toString('base64');
+        svgList.push(b64);
+        return '';
+    });
+
+    // Si pas de balises SVG_FIGURE mais du SVG brut dans le texte
+    if (svgList.length === 0) {
+        cleanText = cleanText.replace(rawSvgRegex, (match) => {
+            const b64 = Buffer.from(match.trim()).toString('base64');
+            svgList.push(b64);
+            return '';
+        });
+    }
+
+    // Nettoyer les lignes vides excessives laissées par l'extraction
+    cleanText = cleanText.replace(/\n{3,}/g, '\n\n').trim();
+    return { cleanText, svgList };
+}
+
+// ── Supprime les placeholders [FIGURE:Fx] du texte Claude ──
+function stripFigurePlaceholders(text) {
+    return text.replace(/\[FIGURE:[^\]]+\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 async function handleQuestion(senderId, question, imageUrl = null) {
     const isComplex = /courbe|trace|graphe|graph|dessin|repr[eé]sent|fonction|parabole|sinuso|cercle|droite/i.test(question);
 
@@ -385,10 +418,19 @@ async function handleQuestion(senderId, question, imageUrl = null) {
     try {
         const data = await callEduApi(question, senderId, imageUrl);
 
-        const explanation = data.explanation || '';
-        const hasFigure = data.has_figure || false;
-        const turnCount = data.turn_count || 1;
-        const figureSvgB64 = data.figure_svg_b64 || null;
+        const rawExplanation = data.explanation || '';
+        const hasFigure      = data.has_figure || false;
+        const turnCount      = data.turn_count || 1;
+        let   figureSvgB64   = data.figure_svg_b64 || null;
+
+        // ── Extraire les SVG embarqués dans le texte explanation ──
+        const { cleanText, svgList } = extractSvgFromText(rawExplanation);
+        const explanation = cleanText;
+
+        // Si l'API n'a pas fourni figure_svg_b64 mais qu'on a extrait du SVG du texte
+        if (!figureSvgB64 && svgList.length > 0) {
+            figureSvgB64 = svgList[0];
+        }
 
         const header = `
 ${DECORATIONS.top}
@@ -403,7 +445,8 @@ ${DECORATIONS.bot}`.trim();
             await sendSplit(senderId, explanation);
         }
 
-        if (hasFigure && figureSvgB64) {
+        // Envoyer la figure principale (figure_svg_b64 ou extraite du texte)
+        if ((hasFigure || figureSvgB64) && figureSvgB64) {
             await delay(400);
             await sendMessage(senderId, `📊 Génération de l'image de la figure...`);
 
@@ -415,6 +458,12 @@ ${DECORATIONS.dotted}
 ⚠️ La figure n'a pas pu être envoyée en image.
 💡 L'explication ci-dessus reste complète.`.trim());
             }
+        }
+
+        // Envoyer les figures supplémentaires extraites du texte (s'il y en a plusieurs)
+        for (let i = 1; i < svgList.length; i++) {
+            await delay(400);
+            await sendFigureAsImage(senderId, svgList[i]);
         }
 
         await delay(300);
@@ -460,8 +509,11 @@ ${DECORATIONS.bot}`.trim();
         await sendMessage(senderId, header);
         await delay(300);
 
-        if (responseText) {
-            await sendSplit(senderId, responseText);
+        // Nettoyer les placeholders [FIGURE:Fx] du texte avant envoi
+        const cleanResponseText = stripFigurePlaceholders(responseText);
+
+        if (cleanResponseText) {
+            await sendSplit(senderId, cleanResponseText);
         } else {
             await sendMessage(senderId, `⚠️ Aucune réponse reçue de Claude.`);
         }
@@ -469,11 +521,18 @@ ${DECORATIONS.bot}`.trim();
         // Afficher les figures si l'API en retourne
         const figures = data.figures || [];
         for (const fig of figures) {
-            if (fig.svg_b64 || fig.svg) {
+            const svgRaw = fig.svg_b64 || fig.svg || fig.data || '';
+            if (svgRaw) {
                 await delay(400);
-                await sendMessage(senderId, `📊 Envoi de la figure...`);
-                const b64 = fig.svg_b64 || Buffer.from(fig.svg).toString('base64');
-                await sendFigureAsImage(senderId, b64);
+                await sendMessage(senderId, `📊 Génération de l'image de la figure...`);
+                // svg_b64 est déjà en base64 ; fig.svg est du SVG brut à convertir
+                const b64 = fig.svg_b64
+                    ? fig.svg_b64
+                    : Buffer.from(fig.svg || fig.data).toString('base64');
+                const sent = await sendFigureAsImage(senderId, b64);
+                if (!sent) {
+                    await sendMessage(senderId, `⚠️ La figure n'a pas pu être envoyée en image.`);
+                }
             }
         }
 
