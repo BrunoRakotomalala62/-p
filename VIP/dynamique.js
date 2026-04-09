@@ -9,7 +9,7 @@ const pendingImages = {};
 // Stockage du modèle préféré par utilisateur ('edu' | 'claude')
 const userModels = {};
 
-const API_BASE = 'https://claude-46-replit--lalaofano.replit.app/api';
+const API_BASE = 'https://claude-46-replit--mitiasoa.replit.app/api';
 const MAX_MESSAGE_LENGTH = 1900;
 const API_TIMEOUT = 120000;
 
