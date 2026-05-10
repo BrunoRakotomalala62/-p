@@ -1,0 +1,49 @@
+✅ 𝐀𝐌𝐏𝐈𝐍𝐆𝐀 𝐃'𝐎𝐑 𝐀𝐈 🇲🇬
+━━━━━━━━━━━━━━━━━━━━
+✍️ 𝐑é𝐩𝐨𝐧𝐬𝐞 👇
+Description de l'image
+
+L'image présente un problème de mathématiques, apparemment destiné à des élèves de niveau lycée ou université, rédigé en français. Le problème est divisé en plusieurs sections et comporte des équations, des questions théoriques et des demandes de calculs précis.
+
+
+▸ 𝟏. 𝐈𝐧𝐟𝐨𝐫𝐦𝐚𝐭𝐢𝐨𝐧𝐬 𝐆é𝐧é𝐫𝐚𝐥𝐞𝐬
+- 𝐓𝐢𝐭𝐫𝐞 : Le problème est intitulé "PROBLÈME" et vaut 10 points.
+- 𝐅𝐨𝐧𝐜𝐭𝐢𝐨𝐧 : La fonction numérique  f  est définie sur [0; +∞[ par  f(x) = 1 - x - e⁻x .
+- 𝐂𝐨𝐮𝐫𝐛𝐞 𝐫𝐞𝐩𝐫é𝐬𝐞𝐧𝐭𝐚𝐭𝐢𝐯𝐞 : La courbe (C) de  f  est à représenter dans un repère orthonormé (O; i, j) avec une unité graphique de 2 cm.
+
+
+▸ 𝟐. 𝐐𝐮𝐞𝐬𝐭𝐢𝐨𝐧𝐬
+
+𝐏𝐚𝐫𝐭𝐢𝐞 𝟏 : 𝐋𝐢𝐦𝐢𝐭𝐞𝐬 𝐞𝐭 𝐀𝐬𝐲𝐦𝐩𝐭𝐨𝐭𝐞𝐬 (𝟑 𝐩𝐨𝐢𝐧𝐭𝐬)
+
+▸ 𝟏. 𝐚. Déterminer ₓ  +∞ f(x).  
+   *Réponse :*  
+   ₓ  +∞ f(x) = 1 - ₓ  +∞ x - ₓ  +∞ e⁻x = -∞  
+   *Interprétation :* La fonction  f  tend vers  -∞  quand  x  tend vers  +∞ .
+
+
+▸ 𝟐. 𝐛. Montrer que la droite (D) d'équation  y = 1 - x  est asymptote à (C).  
+   *Réponse :*  
+   ₓ  +∞ [f(x) - (1 - x)] = ₓ  +∞ (1 - x - e⁻x - 1 + x) = ₓ  +∞ (-e⁻x) = 0  
+   *Interprétation :* La droite  y = 1 - x  est bien asymptote à (C) en  +∞ .
+
+𝐏𝐚𝐫𝐭𝐢𝐞 𝟐 : 𝐃é𝐫𝐢𝐯é𝐞 𝐞𝐭 𝐕𝐚𝐫𝐢𝐚𝐭𝐢𝐨𝐧𝐬 (𝟒 𝐩𝐨𝐢𝐧𝐭𝐬)
+
+▸ 𝟏. 𝐚. Montrer que  f'(x) = -1 + e⁻x .  
+   *Réponse :*  
+    f'(x) = -1 - (-e⁻x) = -1 + e⁻x .
+
+
+▸ 𝟐. 𝐛. Dresser le tableau de variation de  f  sur [0; +∞[.  
+   *Réponse :*  
+     - Pour  x = 0 ,  f'(0) = -1 + 1 = 0 .  
+     -  f'(x) = 0  quand  e⁻x = 1  soit  x = 0 .  
+     -  f'(x) > 0  pour  x < 0  et  f'(x) < 0  pour  x > 0 .  
+   *Tableau de variation :*  
+   La fonction  f  est croissante sur [0; +∞[ puis décroissante.
+
+𝐏𝐚𝐫𝐭𝐢𝐞 𝟑 : 𝐂𝐚𝐥𝐜𝐮𝐥𝐬 𝐞𝐭 𝐑𝐞𝐩𝐫é𝐬𝐞𝐧𝐭𝐚𝐭𝐢𝐨𝐧 (𝟒 𝐩𝐨𝐢𝐧𝐭𝐬)
+
+▸ 𝟏. 𝐚. Compléter le tableau de valeurs (arrondir à  10⁻² ).  
+   *Réponse :*  
+     |  x  |  0  |  1  |  2  |  3  |  4  | ...
