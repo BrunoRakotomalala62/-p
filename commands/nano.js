@@ -1,10 +1,39 @@
 const axios = require('axios');
 const FormData = require('form-data');
+const fs = require('fs');
+const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
 const API_ENDPOINT = 'https://gemini-image-editor--brunorakotoma12.replit.app/api/nanobanana';
 
 const nanoSessions = {};
+
+const downloadAndServeImage = async (facebookUrl) => {
+    const response = await axios.get(facebookUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+    });
+
+    const ext = '.jpg';
+    const uniqueName = `nano_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
+    const tempPath = path.join('/tmp', uniqueName);
+    fs.writeFileSync(tempPath, Buffer.from(response.data));
+
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : `http://localhost:${process.env.PORT || 5000}`;
+
+    const publicUrl = `${baseUrl}/temp/${uniqueName}`;
+
+    setTimeout(() => {
+        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (e) {}
+    }, 300000);
+
+    return publicUrl;
+};
 
 const WELCOME_MSG = `🎨 *Bienvenue dans NANO — Éditeur d'images IA* ✨
 
@@ -78,9 +107,10 @@ module.exports = async (senderId, messageText, api, attachments) => {
         const imageUrl = attachments[0].payload.url;
 
         if (session.step === 'idle' || session.step === 'awaiting_first_image') {
+            const publicUrl1 = await downloadAndServeImage(imageUrl);
             nanoSessions[senderId] = {
                 step: 'awaiting_decision',
-                imageUrl1: imageUrl
+                imageUrl1: publicUrl1
             };
 
             await sendMessage(senderId,
@@ -95,10 +125,11 @@ module.exports = async (senderId, messageText, api, attachments) => {
         }
 
         if (session.step === 'awaiting_decision' && session.imageUrl1) {
+            const publicUrl2 = await downloadAndServeImage(imageUrl);
             nanoSessions[senderId] = {
                 ...session,
                 step: 'awaiting_prompt_two_images',
-                imageUrl2: imageUrl
+                imageUrl2: publicUrl2
             };
 
             await sendMessage(senderId,
@@ -113,7 +144,8 @@ module.exports = async (senderId, messageText, api, attachments) => {
         }
 
         // Nouvelle image hors session active — redémarrer
-        nanoSessions[senderId] = { step: 'awaiting_decision', imageUrl1: imageUrl };
+        const publicUrlFallback = await downloadAndServeImage(imageUrl);
+        nanoSessions[senderId] = { step: 'awaiting_decision', imageUrl1: publicUrlFallback };
         await sendMessage(senderId,
             `✅ Image reçue !\n\nTapez votre instruction ou envoyez une 2ème image pour combiner.`
         );
