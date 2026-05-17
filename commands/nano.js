@@ -1,15 +1,13 @@
 const axios = require('axios');
 const FormData = require('form-data');
-const fs = require('fs');
-const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
 const API_ENDPOINT = 'https://gemini-image-editor--brunorakotoma12.replit.app/api/nanobanana';
 
 const nanoSessions = {};
 
-const downloadAndServeImage = async (facebookUrl) => {
-    const response = await axios.get(facebookUrl, {
+const uploadToCatbox = async (facebookUrl) => {
+    const imageResponse = await axios.get(facebookUrl, {
         responseType: 'arraybuffer',
         timeout: 30000,
         headers: {
@@ -17,20 +15,27 @@ const downloadAndServeImage = async (facebookUrl) => {
         }
     });
 
-    const ext = '.jpg';
-    const uniqueName = `nano_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-    const tempPath = path.join('/tmp', uniqueName);
-    fs.writeFileSync(tempPath, Buffer.from(response.data));
+    const imageBuffer = Buffer.from(imageResponse.data);
+    const contentType = imageResponse.headers['content-type'] || 'image/jpeg';
 
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : `http://localhost:${process.env.PORT || 5000}`;
+    const formData = new FormData();
+    formData.append('reqtype', 'fileupload');
+    formData.append('fileToUpload', imageBuffer, {
+        filename: 'image.jpg',
+        contentType
+    });
 
-    const publicUrl = `${baseUrl}/temp/${uniqueName}`;
+    const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
+        headers: formData.getHeaders(),
+        timeout: 30000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+    });
 
-    setTimeout(() => {
-        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (e) {}
-    }, 300000);
+    const publicUrl = uploadResponse.data.trim();
+    if (!publicUrl.startsWith('https://')) {
+        throw new Error('Catbox upload échoué : ' + publicUrl);
+    }
 
     return publicUrl;
 };
@@ -107,7 +112,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         const imageUrl = attachments[0].payload.url;
 
         if (session.step === 'idle' || session.step === 'awaiting_first_image') {
-            const publicUrl1 = await downloadAndServeImage(imageUrl);
+            const publicUrl1 = await uploadToCatbox(imageUrl);
             nanoSessions[senderId] = {
                 step: 'awaiting_decision',
                 imageUrl1: publicUrl1
@@ -125,7 +130,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         }
 
         if (session.step === 'awaiting_decision' && session.imageUrl1) {
-            const publicUrl2 = await downloadAndServeImage(imageUrl);
+            const publicUrl2 = await uploadToCatbox(imageUrl);
             nanoSessions[senderId] = {
                 ...session,
                 step: 'awaiting_prompt_two_images',
@@ -144,7 +149,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         }
 
         // Nouvelle image hors session active — redémarrer
-        const publicUrlFallback = await downloadAndServeImage(imageUrl);
+        const publicUrlFallback = await uploadToCatbox(imageUrl);
         nanoSessions[senderId] = { step: 'awaiting_decision', imageUrl1: publicUrlFallback };
         await sendMessage(senderId,
             `✅ Image reçue !\n\nTapez votre instruction ou envoyez une 2ème image pour combiner.`
