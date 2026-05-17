@@ -6,7 +6,7 @@ const API_ENDPOINT = 'https://gemini-image-editor--brunorakotoma12.replit.app/ap
 
 const nanoSessions = {};
 
-const uploadToCatbox = async (facebookUrl) => {
+const uploadToFreeImage = async (facebookUrl) => {
     const imageResponse = await axios.get(facebookUrl, {
         responseType: 'arraybuffer',
         timeout: 30000,
@@ -19,22 +19,26 @@ const uploadToCatbox = async (facebookUrl) => {
     const contentType = imageResponse.headers['content-type'] || 'image/jpeg';
 
     const formData = new FormData();
-    formData.append('reqtype', 'fileupload');
-    formData.append('fileToUpload', imageBuffer, {
+    formData.append('source', imageBuffer, {
         filename: 'image.jpg',
         contentType
     });
+    formData.append('type', 'file');
 
-    const uploadResponse = await axios.post('https://catbox.moe/user/api.php', formData, {
-        headers: formData.getHeaders(),
-        timeout: 30000,
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity
-    });
+    const uploadResponse = await axios.post(
+        'https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5',
+        formData,
+        {
+            headers: formData.getHeaders(),
+            timeout: 30000,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity
+        }
+    );
 
-    const publicUrl = uploadResponse.data.trim();
-    if (!publicUrl.startsWith('https://')) {
-        throw new Error('Catbox upload échoué : ' + publicUrl);
+    const publicUrl = uploadResponse.data?.image?.url;
+    if (!publicUrl || !publicUrl.startsWith('https://')) {
+        throw new Error('freeimage.host upload échoué');
     }
 
     return publicUrl;
@@ -112,7 +116,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         const imageUrl = attachments[0].payload.url;
 
         if (session.step === 'idle' || session.step === 'awaiting_first_image') {
-            const publicUrl1 = await uploadToCatbox(imageUrl);
+            const publicUrl1 = await uploadToFreeImage(imageUrl);
             nanoSessions[senderId] = {
                 step: 'awaiting_decision',
                 imageUrl1: publicUrl1
@@ -130,7 +134,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         }
 
         if (session.step === 'awaiting_decision' && session.imageUrl1) {
-            const publicUrl2 = await uploadToCatbox(imageUrl);
+            const publicUrl2 = await uploadToFreeImage(imageUrl);
             nanoSessions[senderId] = {
                 ...session,
                 step: 'awaiting_prompt_two_images',
@@ -149,7 +153,7 @@ module.exports = async (senderId, messageText, api, attachments) => {
         }
 
         // Nouvelle image hors session active — redémarrer
-        const publicUrlFallback = await uploadToCatbox(imageUrl);
+        const publicUrlFallback = await uploadToFreeImage(imageUrl);
         nanoSessions[senderId] = { step: 'awaiting_decision', imageUrl1: publicUrlFallback };
         await sendMessage(senderId,
             `✅ Image reçue !\n\nTapez votre instruction ou envoyez une 2ème image pour combiner.`
