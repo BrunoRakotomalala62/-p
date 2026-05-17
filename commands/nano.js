@@ -62,13 +62,18 @@ Je peux transformer vos images de façon intelligente :
 (Vous pourrez aussi envoyer une 2ème image pour des effets combinés)`;
 
 // Appel de la nouvelle API — retourne { type: 'image', buffer } ou { type: 'text', text }
-const callNanoApi = async (prompt, imageUrl, imageUrl2 = null) => {
-    let url = `${API_ENDPOINT}?prompt=${encodeURIComponent(prompt)}&image_url=${encodeURIComponent(imageUrl)}`;
+const callNanoApi = async (prompt, imageUrl, imageUrl2 = null, isRetry = false) => {
+    // Au 2ème essai, on renforce le prompt pour forcer Gemini à générer une image
+    const finalPrompt = isRetry
+        ? `Modifie cette image en appliquant exactement cette transformation : "${prompt}". Retourne uniquement l'image modifiée.`
+        : prompt;
+
+    let url = `${API_ENDPOINT}?prompt=${encodeURIComponent(finalPrompt)}&image_url=${encodeURIComponent(imageUrl)}`;
     if (imageUrl2) {
         url += `&image_url2=${encodeURIComponent(imageUrl2)}`;
     }
 
-    console.log('[NANO] Appel API:', url);
+    console.log(`[NANO] Appel API (essai ${isRetry ? 2 : 1}):`, finalPrompt.substring(0, 80));
 
     const response = await axios.get(url, {
         responseType: 'arraybuffer',
@@ -85,6 +90,13 @@ const callNanoApi = async (prompt, imageUrl, imageUrl2 = null) => {
     if (contentType.includes('application/json')) {
         const jsonText = Buffer.from(response.data).toString('utf8');
         console.log('[NANO] Réponse JSON:', jsonText.substring(0, 200));
+
+        // Retry automatique avec prompt renforcé si c'est le 1er essai
+        if (!isRetry) {
+            console.log('[NANO] Gemini a retourné du texte, retry avec prompt renforcé...');
+            return callNanoApi(prompt, imageUrl, imageUrl2, true);
+        }
+
         let parsed = {};
         try { parsed = JSON.parse(jsonText); } catch(e) {}
         return { type: 'text', text: parsed.text || parsed.note || 'Gemini n\'a pas pu modifier cette image.' };
