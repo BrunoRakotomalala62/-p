@@ -7,6 +7,7 @@ const API_ENDPOINT = 'https://gemini-image-editor--brunorakotoma12.replit.app/ap
 const nanoSessions = {};
 
 const uploadToFreeImage = async (facebookUrl) => {
+    console.log('[NANO] Téléchargement image Facebook:', facebookUrl.substring(0, 80));
     const imageResponse = await axios.get(facebookUrl, {
         responseType: 'arraybuffer',
         timeout: 30000,
@@ -17,6 +18,7 @@ const uploadToFreeImage = async (facebookUrl) => {
 
     const imageBuffer = Buffer.from(imageResponse.data);
     const contentType = imageResponse.headers['content-type'] || 'image/jpeg';
+    console.log('[NANO] Image téléchargée:', imageBuffer.length, 'bytes, type:', contentType);
 
     const formData = new FormData();
     formData.append('source', imageBuffer, {
@@ -37,8 +39,9 @@ const uploadToFreeImage = async (facebookUrl) => {
     );
 
     const publicUrl = uploadResponse.data?.image?.url;
+    console.log('[NANO] URL publique freeimage.host:', publicUrl);
     if (!publicUrl || !publicUrl.startsWith('https://')) {
-        throw new Error('freeimage.host upload échoué');
+        throw new Error('freeimage.host upload échoué: ' + JSON.stringify(uploadResponse.data));
     }
 
     return publicUrl;
@@ -58,12 +61,14 @@ Je peux transformer vos images de façon intelligente :
 📸 Envoyez votre première image pour commencer !
 (Vous pourrez aussi envoyer une 2ème image pour des effets combinés)`;
 
-// Appel de la nouvelle API — retourne un buffer PNG directement
+// Appel de la nouvelle API — retourne { type: 'image', buffer } ou { type: 'text', text }
 const callNanoApi = async (prompt, imageUrl, imageUrl2 = null) => {
     let url = `${API_ENDPOINT}?prompt=${encodeURIComponent(prompt)}&image_url=${encodeURIComponent(imageUrl)}`;
     if (imageUrl2) {
         url += `&image_url2=${encodeURIComponent(imageUrl2)}`;
     }
+
+    console.log('[NANO] Appel API:', url);
 
     const response = await axios.get(url, {
         responseType: 'arraybuffer',
@@ -73,33 +78,43 @@ const callNanoApi = async (prompt, imageUrl, imageUrl2 = null) => {
         }
     });
 
-    return Buffer.from(response.data);
+    const contentType = response.headers['content-type'] || '';
+    console.log('[NANO] Réponse status:', response.status, '| content-type:', contentType);
+
+    // Si la réponse est du JSON (Gemini a retourné du texte, pas une image)
+    if (contentType.includes('application/json')) {
+        const jsonText = Buffer.from(response.data).toString('utf8');
+        console.log('[NANO] Réponse JSON:', jsonText.substring(0, 200));
+        let parsed = {};
+        try { parsed = JSON.parse(jsonText); } catch(e) {}
+        return { type: 'text', text: parsed.text || parsed.note || 'Gemini n\'a pas pu modifier cette image.' };
+    }
+
+    // Réponse binaire (image PNG)
+    return { type: 'image', buffer: Buffer.from(response.data) };
 };
 
-// Envoi du buffer image directement à Facebook via multipart upload
+// Upload du buffer résultat vers freeimage.host et envoi via sendMessage
 const sendImageBuffer = async (senderId, imageBuffer) => {
-    const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+    console.log('[NANO] Upload résultat PNG vers freeimage.host, taille:', imageBuffer.length, 'bytes');
 
     const form = new FormData();
-    form.append('recipient', JSON.stringify({ id: senderId }));
-    form.append('message', JSON.stringify({
-        attachment: {
-            type: 'image',
-            payload: { is_reusable: true }
-        }
-    }));
-    form.append('filedata', imageBuffer, {
-        filename: 'result.png',
-        contentType: 'image/png'
-    });
+    form.append('source', imageBuffer, { filename: 'result.png', contentType: 'image/png' });
+    form.append('type', 'file');
 
-    const response = await axios.post(
-        `https://graph.facebook.com/v16.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+    const uploadResponse = await axios.post(
+        'https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5',
         form,
-        { headers: form.getHeaders(), timeout: 60000 }
+        { headers: form.getHeaders(), timeout: 60000, maxBodyLength: Infinity, maxContentLength: Infinity }
     );
 
-    return response.data;
+    const resultUrl = uploadResponse.data?.image?.url;
+    console.log('[NANO] URL résultat:', resultUrl);
+    if (!resultUrl || !resultUrl.startsWith('https://')) {
+        throw new Error('Upload résultat échoué: ' + JSON.stringify(uploadResponse.data));
+    }
+
+    await sendMessage(senderId, { files: [resultUrl], type: 'image' });
 };
 
 module.exports = async (senderId, messageText, api, attachments) => {
@@ -195,20 +210,29 @@ module.exports = async (senderId, messageText, api, attachments) => {
         );
 
         try {
-            const imageBuffer = await callNanoApi(prompt, session.imageUrl1);
-            await sendImageBuffer(senderId, imageBuffer);
+            const result = await callNanoApi(prompt, session.imageUrl1);
 
-            await sendMessage(senderId,
-                `✅ Transformation réussie !\n\n` +
-                `🔄 Voulez-vous faire une autre modification ?\n` +
-                `• Envoyez une nouvelle image pour recommencer\n` +
-                `• Tapez "stop" pour quitter`
-            );
+            if (result.type === 'text') {
+                await sendMessage(senderId,
+                    `⚠️ Gemini n'a pas pu modifier cette image.\n\n` +
+                    `💡 Essayez avec une instruction plus précise,\n` +
+                    `par exemple : "Rendre le vêtement entièrement rouge"\n\n` +
+                    `Ou renvoyez une autre image.`
+                );
+            } else {
+                await sendImageBuffer(senderId, result.buffer);
+                await sendMessage(senderId,
+                    `✅ Transformation réussie !\n\n` +
+                    `🔄 Voulez-vous faire une autre modification ?\n` +
+                    `• Envoyez une nouvelle image pour recommencer\n` +
+                    `• Tapez "stop" pour quitter`
+                );
+            }
 
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
 
         } catch (error) {
-            console.error('Erreur NANO (1 image):', error.message);
+            console.error('[NANO] Erreur (1 image):', error.message, error.response?.status, error.response?.data?.toString?.().substring(0, 200));
             await handleApiError(senderId, error);
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
         }
@@ -224,20 +248,28 @@ module.exports = async (senderId, messageText, api, attachments) => {
         );
 
         try {
-            const imageBuffer = await callNanoApi(prompt, session.imageUrl1, session.imageUrl2);
-            await sendImageBuffer(senderId, imageBuffer);
+            const result = await callNanoApi(prompt, session.imageUrl1, session.imageUrl2);
 
-            await sendMessage(senderId,
-                `✅ Combinaison réussie !\n\n` +
-                `🔄 Voulez-vous continuer ?\n` +
-                `• Envoyez une nouvelle image pour recommencer\n` +
-                `• Tapez "stop" pour quitter`
-            );
+            if (result.type === 'text') {
+                await sendMessage(senderId,
+                    `⚠️ Gemini n'a pas pu combiner ces images.\n\n` +
+                    `💡 Essayez avec une instruction plus précise.\n\n` +
+                    `Ou renvoyez les images.`
+                );
+            } else {
+                await sendImageBuffer(senderId, result.buffer);
+                await sendMessage(senderId,
+                    `✅ Combinaison réussie !\n\n` +
+                    `🔄 Voulez-vous continuer ?\n` +
+                    `• Envoyez une nouvelle image pour recommencer\n` +
+                    `• Tapez "stop" pour quitter`
+                );
+            }
 
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
 
         } catch (error) {
-            console.error('Erreur NANO (2 images):', error.message);
+            console.error('[NANO] Erreur (2 images):', error.message, error.response?.status, error.response?.data?.toString?.().substring(0, 200));
             await handleApiError(senderId, error);
             nanoSessions[senderId] = { step: 'awaiting_first_image' };
         }
