@@ -195,15 +195,18 @@ function predictTour(refMult, refTour, refTime, hexStr, decimal) {
     const fine   = (sC ^ sD ^ hx.s1)   >>> 0;
     const zone   = (sA ^ sC ^ hx.s2)   >>> 0;
 
-    // ── Nombre de tours avant le prochain 3×+ ──
-    // Proba 3×+ = 32.33% → E[tours] = 3.1
-    // Distribution géométrique : tirée entre 1 et 9
-    const toursBase  = randIn(master, 1, 8);
-    const toursFine  = randIn(fine,   0, 2);
+    // ── Nombre de tours avant le prochain 2×+ ──
+    // Gaps observés réels : 5, 6, 8, 11 → plage 1-14
+    const toursBase  = randIn(master, 1, 12);
+    const toursFine  = randIn(fine,   0, 3);
     const toursAhead = Math.max(1, toursBase + toursFine);
 
     // Tour prédit (principal)
     const predictedTour = refTour + toursAhead;
+
+    // Tour alternatif : ~5 tours après le principal (filet de sécurité)
+    const altGap  = randIn(master ^ fine, 4, 7);
+    const tourAlt = predictedTour + altGap;
 
     // Tours alternatifs (fenêtre de confiance ±1)
     const tourEarly = predictedTour - 1;
@@ -278,7 +281,7 @@ function predictTour(refMult, refTour, refTime, hexStr, decimal) {
 
     return {
         formulaMult, formulaOK, ecart, refZone,
-        predictedTour, tourEarly, tourLate,
+        predictedTour, tourEarly, tourLate, tourAlt, altGap,
         predictedCote, coteZone,
         tBet, tLaunch, tCash,
         flightSec, delayLabel, toursAhead,
@@ -355,7 +358,7 @@ module.exports = async (senderId, prompt) => {
     const res = predictTour(refMult, refTour, refTime, hexStr, decimal);
     const {
         formulaMult, formulaOK, ecart, refZone,
-        predictedTour, tourEarly, tourLate,
+        predictedTour, tourEarly, tourLate, tourAlt, altGap,
         predictedCote, coteZone,
         tBet, tLaunch, tCash,
         flightSec, delayLabel, toursAhead,
@@ -372,8 +375,10 @@ module.exports = async (senderId, prompt) => {
 
     const response =
         `✅ Voici votre prédiction premium\n\n` +
-        `🎰 Tour : ${predictedTour}\n` +
-        `⏱️ Heure : ${tBet}`;
+        `🎰 Tour 1 : ${predictedTour}\n` +
+        `⏱️ Heure : ${tBet}\n\n` +
+        `🎰 Tour 2 : ${tourAlt}\n` +
+        `⏱️ Heure : ${fmtTime(refTime.ts + Math.round((toursAhead + altGap) * 30))}`;
 
     await sendMessage(senderId, response);
 };
