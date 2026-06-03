@@ -371,76 +371,9 @@ module.exports = async (senderId, prompt) => {
         '░'.repeat(Math.max(0, 10 - Math.round(p / max)));
 
     const response =
-        `${DECO.top}\n` +
-        `${DECO.line}  ${DECO.premium} PRÉDICTION TOUR PREMIUM ${DECO.check}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.math} VÉRIFICATION RÉFÉRENCE\n` +
-        `${DECO.line}  Tour réf  : ${refTour.toLocaleString()}\n` +
-        `${DECO.line}  Mult calc : ${formulaDisp}  ${matchEmoji}\n` +
-        `${DECO.line}  Heure réf : ${refTimeStr}\n` +
-        `${DECO.line}  HEX réf   : ${hexStr}\n` +
-        `${DECO.line}  Decimal   : ${decimal.toLocaleString()}\n` +
-        `${DECO.line}  Zone réf  : ${refZone}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.num} TOUR CIBLE PRÉDIT\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ┌────────────────────────┐\n` +
-        `${DECO.line}  │  ${DECO.star} TOUR PRINCIPAL       │\n` +
-        `${DECO.line}  │                        │\n` +
-        `${DECO.line}  │  🎰 ${String(predictedTour).padEnd(20)}│\n` +
-        `${DECO.line}  │  (+${String(toursAhead + ' tours').padEnd(19)}│\n` +
-        `${DECO.line}  └────────────────────────┘\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.pin} Tours alternatifs :\n` +
-        `${DECO.line}  Tôt  : ${tourEarly.toLocaleString()}\n` +
-        `${DECO.line}  Tard : ${tourLate.toLocaleString()}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.comet} MULTIPLICATEUR PRÉDIT\n` +
-        `${DECO.line}  ┌────────────────────────┐\n` +
-        `${DECO.line}  │  ${coteDisplay.padEnd(22)}│\n` +
-        `${DECO.line}  │  ${coteZone.padEnd(22)}│\n` +
-        `${DECO.line}  └────────────────────────┘\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.clock} FENÊTRES DE MISE\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.bell} PLACER MISE\n` +
-        `${DECO.line}  ┌────────────────────────┐\n` +
-        `${DECO.line}  │  ${tBet.padEnd(22)}│\n` +
-        `${DECO.line}  │  ≈ dans ${delayLabel.padEnd(15)}│\n` +
-        `${DECO.line}  └────────────────────────┘\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.rocket} DÉCOLLAGE DU TOUR\n` +
-        `${DECO.line}  ┌────────────────────────┐\n` +
-        `${DECO.line}  │  ${tLaunch.padEnd(22)}│\n` +
-        `${DECO.line}  │  (${BETTING_SEC} sec après mise)       │\n` +
-        `${DECO.line}  └────────────────────────┘\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.cut} ENCAISSER / CASSER À\n` +
-        `${DECO.line}  ┌────────────────────────┐\n` +
-        `${DECO.line}  │  ${tCash.padEnd(22)}│\n` +
-        `${DECO.line}  │  Vol: ~${String(flightSec + ' sec').padEnd(16)}│\n` +
-        `${DECO.line}  └────────────────────────┘\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.atom} SEUILS RAPPEL\n` +
-        `${DECO.line}   3×+ ${buildBar(32.33)} 32.3%\n` +
-        `${DECO.line}   5×+ ${buildBar(19.40)} 19.4%\n` +
-        `${DECO.line}  10×+ ${buildBar(9.70)}  9.7%\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.shield} SCORE DE CONFIANCE\n` +
-        `${DECO.line}  ${confLevel.bar}  ${confidence}%\n` +
-        `${DECO.line}  ${confLevel.label}\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${confLevel.note}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.bolt} STRATÉGIE\n` +
-        `${DECO.line}  1. Atteindre le tour ${predictedTour}\n` +
-        `${DECO.line}  2. Miser à l'heure "PLACER MISE"\n` +
-        `${DECO.line}  3. Casser à l'heure "ENCAISSER" ✂️\n` +
-        `${DECO.line}  4. Si raté → essayer tour ${tourLate}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.lock} Tour Crash Premium v1\n` +
-        `${DECO.line}  Formule : (2³²/dec) × 0.97\n` +
-        `${DECO.bot}`;
+        `✅ Voici votre prédiction premium\n\n` +
+        `🎰 Tour : ${predictedTour}\n` +
+        `⏱️ Heure : ${tBet}`;
 
     await sendMessage(senderId, response);
 };
