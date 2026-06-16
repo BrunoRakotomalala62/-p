@@ -4,311 +4,263 @@ const sendMessage = require('../handles/sendMessage');
 const userSessions = new Map();
 
 // ─── Décoration visuelle ──────────────────────────────────────────────────────
-const DECO = {
-    top:     '╔══════════════════════════════╗',
-    mid:     '╠══════════════════════════════╣',
-    bot:     '╚══════════════════════════════╝',
-    line:    '║',
-    div:     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    dot:     '┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈',
-    cosmos:  '🌌',
-    star4:   '✦',
-    rocket:  '🚀',
-    fire:    '🔥',
-    target:  '🎯',
-    chart:   '📊',
-    clock:   '⏱️',
-    premium: '👑',
-    shield:  '🛡️',
-    bolt:    '⚡',
-    gem:     '💎',
-    check:   '✅',
-    warn:    '⚠️',
-    lock:    '🔐',
-    planet:  '🪐',
-    comet:   '☄️',
-    atom:    '⚛️',
-    scan:    '🔍',
-    key:     '🔑',
-    trophy:  '🏆',
-    dna:     '🧬'
+const D = {
+    top:  '╔════════════════════════════════════╗',
+    mid:  '╠════════════════════════════════════╣',
+    bot:  '╚════════════════════════════════════╝',
+    sep:  '║────────────────────────────────────║',
+    ln:   '║',
 };
 
-// ─── Messages de chargement ───────────────────────────────────────────────────
-const LOADING_MESSAGES = [
-    '🌌 Analyse du signal cosmique en cours...',
-    '⚛️ Déchiffrage du code décimal de référence...',
-    '🪐 Synchronisation avec les cycles CosmosX...',
-    '🔍 Calcul de l\'entropie numérique...',
-    '☄️ Traitement des données temporelles...',
-    '🧬 Modélisation de la séquence décimale...',
-    '🚀 Algorithme prédictif cosmique en action...',
-    '🎯 Calibration de la fenêtre de miser...'
-];
+// ─── Constantes CosmosX ───────────────────────────────────────────────────────
+const ROUND_MIN_SEC  = 20;   // durée minimale d'un round (secondes)
+const ROUND_MAX_SEC  = 38;   // durée maximale d'un round
+const TARGET_MIN_X   = 5.0;  // cible minimale (≥ 5×)
 
-// ─── Niveaux de confiance ─────────────────────────────────────────────────────
-const CONFIDENCE_LEVELS = [
-    { min: 93, label: '🌌 COSMIQUE MAXIMAL',  bar: '██████████', desc: 'Signal décimal parfait — fenêtre optimale confirmée' },
-    { min: 83, label: '🔥 ULTRA HAUTE',        bar: '█████████░', desc: 'Séquence décimale alignée — probabilité maximale' },
-    { min: 73, label: '⚡ TRÈS HAUTE',          bar: '████████░░', desc: 'Corrélation forte — signal fiable sur ce cycle' },
-    { min: 63, label: '✅ HAUTE',               bar: '███████░░░', desc: 'Données stables — miser en confiance' },
-    { min: 52, label: '📊 MODÉRÉE-HAUTE',       bar: '██████░░░░', desc: 'Signal partiel — respecter la fenêtre indiquée' },
-    { min: 0,  label: '⚠️ NORMALE',             bar: '█████░░░░░', desc: 'Cycle en formation — surveiller l\'évolution' }
-];
-
-// ─── Hachage FNV-1a 32-bit déterministe ──────────────────────────────────────
+// ─── Hachage FNV-1a 32-bit ───────────────────────────────────────────────────
 function fnv32(value) {
     let h = 0x811c9dc5 >>> 0;
-    const str = String(value);
-    for (let i = 0; i < str.length; i++) {
-        h ^= str.charCodeAt(i);
+    const s = String(value);
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
         h = Math.imul(h, 0x01000193) >>> 0;
     }
     return h;
 }
 
-// Flottant [0,1) depuis un seed entier
-function seedFloat(seed) {
-    const x = Math.sin((seed >>> 0) + 1.7182818) * 43758.5453123;
-    return x - Math.floor(x);
+// Flottant déterministe [0, 1) depuis un seed
+function sf(seed) {
+    const x = Math.sin((seed >>> 0) * 1.6180339887 + 2.7182818284) * 9301.0 + 49297.0;
+    return (x - Math.floor(x));
 }
 
-// Flottant dans [min, max) depuis un seed
-function randFloat(seed, min, max) {
-    return min + seedFloat(seed) * (max - min);
+// Flottant dans [lo, hi) depuis un seed
+function rf(seed, lo, hi) {
+    return lo + sf(seed) * (hi - lo);
 }
 
-// ─── Décomposition du nombre décimal ─────────────────────────────────────────
-function decimalEntropy(decStr) {
-    const clean = decStr.replace(/\D/g, '');
+// ─── Analyse de la valeur hex ─────────────────────────────────────────────────
+function analyzeHex(hexStr) {
+    const clean = hexStr.replace(/[^0-9a-fA-F]/g, '');
     if (clean.length === 0) return { valid: false };
 
-    const num = parseInt(clean, 10);
-    if (isNaN(num)) return { valid: false };
+    const dec      = parseInt(clean, 16);
+    const bits     = dec.toString(2);
+    const ones     = (bits.match(/1/g) || []).length;
+    const zeros    = bits.length - ones;
+    const balance  = ones / bits.length;           // ratio de 1 binaires
+    const nibbles  = clean.split('').map(c => parseInt(c, 16));
+    const nibSum   = nibbles.reduce((a, v) => a + v, 0);
+    const nibAlt   = nibbles.reduce((a, v, i) => a + (i % 2 === 0 ? v : -v), 0);
 
-    // Décomposition en blocs de 3 chiffres
-    const digits = clean.split('').map(Number);
-    const len    = digits.length;
-
-    // Somme, produit partiel (modulo), alternance
-    let digitSum = digits.reduce((a, d) => a + d, 0);
-    let altSum   = digits.reduce((a, d, i) => a + (i % 2 === 0 ? d : -d), 0);
-
-    // Fréquence des chiffres (0–9)
-    const freq = new Array(10).fill(0);
-    for (const d of digits) freq[d]++;
-    const totalD = digits.length;
-
-    // Entropie de Shannon
+    // Entropie de Shannon sur nibbles
+    const freq = new Array(16).fill(0);
+    nibbles.forEach(n => freq[n]++);
     let entropy = 0;
-    for (const f of freq) {
-        if (f > 0) {
-            const p = f / totalD;
-            entropy -= p * Math.log2(p);
-        }
-    }
-    const maxEntropy   = Math.log2(10);
-    const entropyRatio = entropy / maxEntropy;
+    nibbles.forEach(n => {
+        const p = freq[n] / nibbles.length;
+        if (p > 0) entropy -= p * Math.log2(p);
+    });
+    const entropyRatio = entropy / Math.log2(16);   // [0, 1]
 
-    // Seed dérivés
-    const s1 = fnv32(num);
-    const s2 = fnv32(digitSum * 97 + altSum);
-    const s3 = fnv32(clean.slice(0, Math.ceil(len / 2)));
-    const s4 = fnv32(clean.slice(Math.ceil(len / 2)));
-    const fold = (s1 ^ s2 ^ s3 ^ s4) >>> 0;
+    // Seeds dérivés du hex
+    const h1 = fnv32(dec);
+    const h2 = fnv32(nibSum * 31 + nibAlt);
+    const h3 = fnv32(clean.slice(0, Math.ceil(clean.length / 2)));
+    const h4 = fnv32(clean.slice(Math.ceil(clean.length / 2)));
+    const fold = (h1 ^ h2 ^ h3 ^ h4) >>> 0;
 
-    // Parité (nombre de chiffres pairs)
-    const evenCount  = digits.filter(d => d % 2 === 0).length;
-    const evenRatio  = evenCount / len;
-
-    return {
-        valid: true,
-        num,
-        s1, s2, s3, s4, fold,
-        digitSum,
-        altSum,
-        entropyRatio,
-        evenRatio,
-        numLen: len
-    };
+    return { valid: true, dec, h1, h2, h3, h4, fold, nibSum, nibAlt, balance, entropyRatio };
 }
 
 // ─── Parseur du temps ─────────────────────────────────────────────────────────
-function parseTime(timeStr) {
-    const parts = timeStr.trim().split(':');
-    if (parts.length < 2) return null;
-    const h = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10);
-    const s = parts[2] !== undefined ? parseInt(parts[2], 10) : 0;
-    if (isNaN(h) || isNaN(m) || isNaN(s)) return null;
-    if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return null;
-    return { h, m, s, totalSeconds: h * 3600 + m * 60 + s };
+function parseTime(s) {
+    const p = s.trim().split(':');
+    if (p.length < 2) return null;
+    const h = parseInt(p[0], 10), m = parseInt(p[1], 10), sec = p[2] !== undefined ? parseInt(p[2], 10) : 0;
+    if ([h, m, sec].some(isNaN)) return null;
+    if (h < 0 || h > 23 || m < 0 || m > 59 || sec < 0 || sec > 59) return null;
+    return { h, m, s: sec, ts: h * 3600 + m * 60 + sec };
 }
 
-// ─── Formatage du temps ───────────────────────────────────────────────────────
-function formatTime(totalSeconds) {
-    const n = ((totalSeconds % 86400) + 86400) % 86400;
-    const h = Math.floor(n / 3600);
-    const m = Math.floor((n % 3600) / 60);
-    const s = n % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+function formatTime(totalSec) {
+    const n = ((totalSec % 86400) + 86400) % 86400;
+    const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), s = n % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// ─── Parseur de l'entrée utilisateur ─────────────────────────────────────────
-// Format : COTE HEURE DECIMAL
-// Exemple : 3.98 21:58:02 135118418
-function parseInput(input) {
-    const parts = input.trim().split(/\s+/);
-    if (parts.length < 3) return null;
+// ─── Parseur du format étiqueté ──────────────────────────────────────────────
+// Accepte :
+//   Multiplicateur : 3.75
+//   Tour : 8419176
+//   Heure : 08:14:57
+//   Hex : 421cd5a4
+// OU compact : 3.75 8419176 08:14:57 421cd5a4
+function parseInput(raw) {
+    const text = raw.trim();
 
-    const cote    = parseFloat(parts[0].replace(',', '.'));
-    const time    = parseTime(parts[1]);
-    const decStr  = parts[2];
-
-    if (isNaN(cote) || cote < 3.0) return null;
-    if (!time) return null;
-    if (!/^\d{4,}$/.test(decStr)) return null;
-
-    return { cote, time, decStr };
-}
-
-// ─── Algorithme de prédiction principal ──────────────────────────────────────
-function predictCosmosX(refCote, refTime, decStr) {
-    const ts = refTime.totalSeconds;
-
-    // Seeds de base
-    const coteSeed  = fnv32(Math.round(refCote * 100));
-    const timeSeed  = fnv32(ts);
-    const phaseSeed = fnv32(refTime.h * 100 + refTime.m + refTime.s);
-
-    // Entropie décimale
-    const dec = decimalEntropy(decStr);
-
-    const decFold = dec.valid ? dec.fold : fnv32(decStr);
-    const s1      = dec.valid ? dec.s1 : fnv32(decStr + '1');
-    const s2      = dec.valid ? dec.s2 : fnv32(decStr + '2');
-    const s3      = dec.valid ? dec.s3 : fnv32(decStr + '3');
-    const s4      = dec.valid ? dec.s4 : fnv32(decStr + '4');
-
-    // Seeds composites
-    const masterSeed = (coteSeed ^ timeSeed ^ decFold) >>> 0;
-    const fineSeed   = (phaseSeed ^ s1 ^ s2) >>> 0;
-    const zoneSeed   = (s3 ^ s4 ^ coteSeed) >>> 0;
-
-    // ── Prédiction de la côte ──
-    // Référence ≥ 3× → cibles plus hautes que aviator/jetx
-    const entropyBoost = dec.valid ? dec.entropyRatio : 0.5;
-    const evenBoost    = dec.valid ? dec.evenRatio : 0.5;
-    const zoneRoll     = seedFloat(zoneSeed);
-
-    // Seuils : référence 3× donc on vise plus haut
-    const t1 = 0.45 - entropyBoost * 0.06;
-    const t2 = 0.78 - evenBoost * 0.04;
-
-    let predictedCote;
-    if (zoneRoll < t1) {
-        predictedCote = randFloat(masterSeed, 3.00, 5.49);
-    } else if (zoneRoll < t2) {
-        predictedCote = randFloat(fineSeed, 5.50, 9.99);
-    } else {
-        predictedCote = randFloat(zoneSeed ^ masterSeed, 10.00, 22.00);
+    // ── Format étiqueté ──
+    const labeledPattern = /multiplicateur\s*[:=]\s*([\d.,]+)[\s\S]*?tour\s*[:=]\s*(\d+)[\s\S]*?heure\s*[:=]\s*([\d:]+)[\s\S]*?hex\s*[:=]\s*([0-9a-fA-F]+)/i;
+    const lm = text.match(labeledPattern);
+    if (lm) {
+        const mult = parseFloat(lm[1].replace(',', '.'));
+        const tour = parseInt(lm[2], 10);
+        const time = parseTime(lm[3]);
+        const hex  = lm[4];
+        if (!isNaN(mult) && mult >= 1.0 && !isNaN(tour) && time && /^[0-9a-fA-F]{4,}$/i.test(hex)) {
+            return { mult, tour, time, hex };
+        }
     }
 
-    // Boost depuis la côte de référence (ref ≥ 3× → boost plus fort)
-    const coteBoostAmt = (refCote - 3.0) * 0.20 + entropyBoost * 0.30;
-    predictedCote = Math.min(predictedCote + coteBoostAmt, 28.00);
-    predictedCote = Math.round(predictedCote * 100) / 100;
+    // ── Format compact : mult tour heure hex ──
+    const parts = text.split(/\s+/);
+    if (parts.length >= 4) {
+        const mult = parseFloat(parts[0].replace(',', '.'));
+        const tour = parseInt(parts[1], 10);
+        const time = parseTime(parts[2]);
+        const hex  = parts[3];
+        if (!isNaN(mult) && mult >= 1.0 && !isNaN(tour) && time && /^[0-9a-fA-F]{4,}$/i.test(hex)) {
+            return { mult, tour, time, hex };
+        }
+    }
 
-    // ── Prédiction de l'offset temporel ──
-    // CosmosX rounds : 22–48 sec/round, 3–7 rounds en avance
-    const numMod     = dec.valid ? (dec.num % 30) : 15;
-    const roundLen   = 22 + numMod;                     // 22–52 sec
-    const roundCount = 3 + (masterSeed % 5);             // 3–7 rounds
+    return null;
+}
 
-    const baseDelay  = roundLen * roundCount;
-    // Offset décimal fin : utilise la somme des chiffres
-    const decOffset  = dec.valid ? ((dec.digitSum % 21) - 10) : 0; // ±10 sec
-    const totalDelay = Math.max(baseDelay + decOffset, 60);
+// ─── Algorithme de prédiction CosmosX ────────────────────────────────────────
+// Données : mult (dernier multiplicateur connu), tour (numéro du round),
+//           time (heure du round), hex (valeur hash du round)
+//
+// Principe mathématique :
+//   1. L'entropie du hash hex mesure la dispersion du signal aléatoire.
+//   2. Le numéro de tour module des cycles de longueur variable.
+//   3. La combinaison FNV croise les quatre dimensions pour un seed stable.
+//   4. On génère N fenêtres (tours à venir) et sélectionne celle où le
+//      multiplicateur calculé dépasse TARGET_MIN_X (≥ 5×).
+function predictCosmosX(mult, tour, time, hexStr) {
+    const hex     = analyzeHex(hexStr);
+    const hexFold = hex.valid ? hex.fold : fnv32(hexStr);
+    const h1      = hex.valid ? hex.h1 : fnv32(hexStr + '1');
+    const h2      = hex.valid ? hex.h2 : fnv32(hexStr + '2');
+    const h3      = hex.valid ? hex.h3 : fnv32(hexStr + '3');
+    const entrRatio = hex.valid ? hex.entropyRatio : 0.5;
+    const nibSum    = hex.valid ? hex.nibSum : 20;
 
-    const predictedTime = formatTime(ts + totalDelay);
+    // Seeds composites croisant tour + temps + hex + multiplicateur
+    const tourSeed  = fnv32(tour);
+    const timeSeed  = fnv32(time.ts);
+    const multSeed  = fnv32(Math.round(mult * 100));
+    const master    = (tourSeed ^ timeSeed ^ hexFold ^ multSeed) >>> 0;
+    const phase     = (h1 ^ h2 ^ h3) >>> 0;
 
-    // ── Délai lisible ──
-    const minutesDelay = Math.floor(totalDelay / 60);
-    const secondsDelay = totalDelay % 60;
-    const delayLabel   = minutesDelay > 0
-        ? `${minutesDelay} min ${secondsDelay} sec`
-        : `${secondsDelay} sec`;
+    // Durée d'un round en secondes : dépend du cycle hex
+    // Plus l'entropie est haute, plus les rounds sont courts (marché actif)
+    const roundDur  = Math.round(ROUND_MIN_SEC + (1 - entrRatio) * (ROUND_MAX_SEC - ROUND_MIN_SEC));
+
+    // ── Génération de 12 rounds candidats ──
+    // Pour chaque round futur k, on calcule un seed croisé et un multiplicateur candidat.
+    const candidates = [];
+
+    for (let k = 1; k <= 12; k++) {
+        // Seed du round k : combine le numéro de tour, k, et le master
+        const kSeed  = fnv32(tour + k);
+        const xSeed  = (master ^ kSeed ^ (phase * k)) >>> 0;
+        const ySeed  = fnv32(nibSum * k + time.ts);
+
+        // Calcul du multiplicateur par distribution log-normale déterministe :
+        //   ln(X) ~ N(μ, σ)  ⟹  X = exp(μ + σ * Z)
+        // Z approché par transformation de Box-Muller déterministe :
+        const u1 = sf(xSeed) || 1e-10;
+        const u2 = sf(ySeed) || 1e-10;
+        const zNorm = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+
+        // Paramètres ajustés : mu et sigma dépendent de l'entropie du hex et du mult de référence
+        const mu    = 1.4 + entrRatio * 0.6 + Math.log(Math.max(mult, 1.0)) * 0.15;
+        const sigma = 0.8 + (1 - entrRatio) * 0.4;
+        let predictedMult = Math.exp(mu + sigma * zNorm);
+        predictedMult = Math.max(1.01, Math.round(predictedMult * 100) / 100);
+
+        const predictedTour = tour + k;
+        const predictedTime = formatTime(time.ts + k * roundDur);
+
+        candidates.push({ k, predictedMult, predictedTour, predictedTime, xSeed });
+    }
+
+    // ── Sélectionner la meilleure fenêtre ≥ 5× ──
+    // On prend le premier round où mult ≥ TARGET_MIN_X dans les 12 candidats
+    let bestWindow = candidates.find(c => c.predictedMult >= TARGET_MIN_X);
+
+    // Si aucun ne dépasse 5× dans les 12 tours, on prend le maximum
+    if (!bestWindow) {
+        bestWindow = candidates.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b);
+    }
 
     // ── Score de confiance ──
-    const decLenBonus    = dec.valid ? Math.min(dec.numLen * 1.5, 14) : 0;
-    const entropyBonus   = dec.valid ? Math.round(dec.entropyRatio * 20) : 5;
-    const evenBonus      = dec.valid ? Math.round(dec.evenRatio * 8) : 0;
-    const coteRefBonus   = Math.min((refCote - 3.0) * 9, 20);
-    const phaseBonus     = (refTime.h >= 7 && refTime.h <= 23) ? 9 : 2;
-    const secBonus       = (refTime.s % 2 === 0) ? 6 : 2;
-    const baseConfidence = 48;
+    // Construit à partir de facteurs mesurables
+    const hexEntrBonus  = Math.round(entrRatio * 25);           // 0–25
+    const tourCycleBonus = ((tour % 100) < 50) ? 8 : 4;         // Parité de cycle
+    const timePeakBonus  = (time.h >= 7 && time.h <= 23) ? 10 : 3; // Heure active
+    const multBonus      = Math.min(Math.round((mult - 1) * 3), 15); // Mult de référence
+    const hexLenBonus    = Math.min((hexStr.replace(/[^0-9a-fA-F]/gi, '').length) * 2, 12);
+    const baseConf       = 50;
+    const confidence     = Math.min(baseConf + hexEntrBonus + tourCycleBonus + timePeakBonus + multBonus + hexLenBonus, 97);
 
-    const confidence = Math.min(
-        Math.round(baseConfidence + decLenBonus + entropyBonus + evenBonus + coteRefBonus + phaseBonus + secBonus),
-        98
-    );
+    // Niveau de confiance
+    let confLabel, confBar;
+    if      (confidence >= 90) { confLabel = '🌌 COSMIQUE MAXIMAL';  confBar = '██████████'; }
+    else if (confidence >= 80) { confLabel = '🔥 ULTRA HAUTE';        confBar = '█████████░'; }
+    else if (confidence >= 70) { confLabel = '⚡ TRÈS HAUTE';          confBar = '████████░░'; }
+    else if (confidence >= 60) { confLabel = '✅ HAUTE';               confBar = '███████░░░'; }
+    else if (confidence >= 50) { confLabel = '📊 MODÉRÉE';             confBar = '██████░░░░'; }
+    else                       { confLabel = '⚠️ NORMALE';             confBar = '█████░░░░░'; }
 
-    const confLevel = CONFIDENCE_LEVELS.find(l => confidence >= l.min);
-
-    // ── Zone de la côte ──
-    let coteZone;
-    if (predictedCote >= 15)       coteZone = '🏆 JACKPOT COSMIQUE';
-    else if (predictedCote >= 10)  coteZone = '🌌 ULTRA ÉLEVÉ';
-    else if (predictedCote >= 6)   coteZone = '🔥 TRÈS ÉLEVÉ';
-    else if (predictedCote >= 4)   coteZone = '⚡ ÉLEVÉ';
-    else                           coteZone = '✅ STANDARD 3×+';
-
-    // ── Score décimal ──
-    const decScore = dec.valid ? Math.round(dec.entropyRatio * 100) : 0;
+    // Zone multiplicateur
+    let multZone;
+    if      (bestWindow.predictedMult >= 20) multZone = '🏆 JACKPOT ×20+';
+    else if (bestWindow.predictedMult >= 15) multZone = '🌌 EXPLOSION ×15+';
+    else if (bestWindow.predictedMult >= 10) multZone = '🔥 ULTRA ×10+';
+    else if (bestWindow.predictedMult >= 7)  multZone = '⚡ TRÈS ÉLEVÉ ×7+';
+    else if (bestWindow.predictedMult >= 5)  multZone = '🎯 CIBLE ×5+';
+    else                                      multZone = '📊 STANDARD';
 
     return {
-        predictedCote,
-        predictedTime,
+        ...bestWindow,
+        candidates,
         confidence,
-        confLevel,
-        roundCount,
-        roundLen,
-        delayLabel,
-        coteZone,
-        decScore,
-        digitSum: dec.valid ? dec.digitSum : 0,
-        numLen:   dec.valid ? dec.numLen : 0
+        confLabel,
+        confBar,
+        multZone,
+        roundDur,
+        entrRatio: Math.round(entrRatio * 100),
     };
 }
 
-// ─── Affichage de l'aide ──────────────────────────────────────────────────────
+// ─── Aide ─────────────────────────────────────────────────────────────────────
 async function sendHelp(senderId) {
     const msg =
-        `${DECO.top}\n` +
-        `${DECO.line} ${DECO.cosmos} COSMOSX BET261 — GUIDE ${DECO.premium}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line} Comment utiliser :\n` +
-        `${DECO.line}\n` +
-        `${DECO.line} Envoyez : [CÔTE] [HEURE] [DECIMAL]\n` +
-        `${DECO.line}\n` +
-        `${DECO.line} ${DECO.target} CÔTE : valeur ≥ 3.00×\n` +
-        `${DECO.line}   (la côte du round de référence)\n` +
-        `${DECO.line}\n` +
-        `${DECO.line} ${DECO.clock} HEURE : HH:MM:SS\n` +
-        `${DECO.line}   (heure exacte de ce round)\n` +
-        `${DECO.line}\n` +
-        `${DECO.line} ${DECO.key} DECIMAL : nombre décimal\n` +
-        `${DECO.line}   (ex: 135118418)\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line} ${DECO.bolt} Exemple :\n` +
-        `${DECO.line}   3.98 21:58:02 135118418\n` +
-        `${DECO.line}   5.12 14:22:10 987654321\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line} ${DECO.shield} Résultat :\n` +
-        `${DECO.line}   → Côte prédite ≥ 3.00×\n` +
-        `${DECO.line}   → Heure précise pour miser\n` +
-        `${DECO.line}   → Score de confiance\n` +
-        `${DECO.bot}`;
+        `${D.top}\n` +
+        `${D.ln}  👑 COSMOSX — GUIDE D'UTILISATION\n` +
+        `${D.mid}\n` +
+        `${D.ln}  📋 Format d'entrée :\n` +
+        `${D.ln}\n` +
+        `${D.ln}  Multiplicateur : [valeur]\n` +
+        `${D.ln}  Tour : [numéro]\n` +
+        `${D.ln}  Heure : [HH:MM:SS]\n` +
+        `${D.ln}  Hex : [valeur hex]\n` +
+        `${D.mid}\n` +
+        `${D.ln}  💡 Exemple :\n` +
+        `${D.ln}\n` +
+        `${D.ln}  Multiplicateur : 3.75\n` +
+        `${D.ln}  Tour : 8419176\n` +
+        `${D.ln}  Heure : 08:14:57\n` +
+        `${D.ln}  Hex : 421cd5a4\n` +
+        `${D.mid}\n` +
+        `${D.ln}  🎯 Résultat :\n` +
+        `${D.ln}  → Tour prédit (≥ 5×)\n` +
+        `${D.ln}  → Heure exacte pour miser\n` +
+        `${D.ln}  → Multiplicateur prédit\n` +
+        `${D.ln}  → Score de confiance\n` +
+        `${D.bot}`;
     await sendMessage(senderId, msg);
 }
 
@@ -316,7 +268,7 @@ async function sendHelp(senderId) {
 module.exports = async (senderId, prompt) => {
     const input = (prompt || '').trim();
 
-    if (!input || ['aide', 'help', '?', 'info'].includes(input.toLowerCase())) {
+    if (!input || ['aide', 'help', '?', 'info', 'guide'].includes(input.toLowerCase())) {
         await sendHelp(senderId);
         return;
     }
@@ -325,99 +277,102 @@ module.exports = async (senderId, prompt) => {
 
     if (!parsed) {
         await sendMessage(senderId,
-            `${DECO.warn} Format invalide !\n\n` +
-            `${DECO.bolt} Envoyez : CÔTE HEURE DECIMAL\n\n` +
-            `${DECO.target} Exemple :\n` +
-            `3.98 21:58:02 135118418\n\n` +
-            `${DECO.chart} Règles :\n` +
-            `• Côte ≥ 3.00×\n` +
-            `• Heure : HH:MM:SS\n` +
-            `• Decimal : nombre entier (ex: 135118418)\n\n` +
+            `⚠️ Format non reconnu.\n\n` +
+            `📋 Envoyez les données dans ce format :\n\n` +
+            `Multiplicateur : 3.75\n` +
+            `Tour : 8419176\n` +
+            `Heure : 08:14:57\n` +
+            `Hex : 421cd5a4\n\n` +
             `Tapez "aide" pour le guide complet.`
         );
         return;
     }
 
-    const { cote: refCote, time: refTime, decStr } = parsed;
+    const { mult, tour, time, hex } = parsed;
 
     // ── Message de chargement ──
-    const loadMsg = LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)];
+    const loadMsgs = [
+        '🔍 Déchiffrage du signal Hex en cours...',
+        '⚛️ Analyse du cycle de tour...',
+        '🧬 Calcul de l\'entropie binaire...',
+        '🪐 Modélisation de la fenêtre temporelle...',
+        '🚀 Algorithme prédictif actif...',
+    ];
+    const loadMsg = loadMsgs[Math.floor(Math.random() * loadMsgs.length)];
+
     await sendMessage(senderId,
-        `${DECO.cosmos} Prédiction CosmosX en cours...\n` +
-        `${DECO.dot}\n` +
-        `${loadMsg}\n` +
-        `${DECO.key} Décimal : ${decStr}`
+        `🌌 CosmosX — Analyse en cours...\n` +
+        `${loadMsg}\n\n` +
+        `🔑 Hex analysé : ${hex}\n` +
+        `📍 Tour de référence : ${tour}`
     );
 
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 2200));
 
     // ── Calcul ──
-    const result = predictCosmosX(refCote, refTime, decStr);
-    const {
-        predictedCote,
-        predictedTime,
-        confidence,
-        confLevel,
-        roundCount,
-        roundLen,
-        delayLabel,
-        coteZone,
-        decScore,
-        digitSum,
-        numLen
-    } = result;
+    const result = predictCosmosX(mult, tour, time, hex);
 
-    const coteDisplay = predictedCote.toFixed(2) + '×';
-    const refDisplay  = refCote.toFixed(2) + '×';
-    const refTimeStr  = `${String(refTime.h).padStart(2,'0')}:${String(refTime.m).padStart(2,'0')}:${String(refTime.s).padStart(2,'0')}`;
+    const refTimeStr = formatTime(time.ts);
+    const multRef    = mult.toFixed(2);
+    const multPred   = result.predictedMult.toFixed(2);
 
-    // Barre de score décimal
-    const decBarFilled = Math.round(decScore / 10);
-    const decBar = '█'.repeat(decBarFilled) + '░'.repeat(10 - decBarFilled);
+    // ── Top 3 prochaines fenêtres ≥ 5× ──
+    const top3 = result.candidates
+        .filter(c => c.predictedMult >= TARGET_MIN_X)
+        .slice(0, 3);
+
+    let windowsBlock = '';
+    if (top3.length > 0) {
+        windowsBlock =
+            `${D.sep}\n` +
+            `${D.ln}  📡 FENÊTRES DÉTECTÉES (≥ 5×)\n` +
+            `${D.ln}\n`;
+        top3.forEach((w, i) => {
+            const label = i === 0 ? '🎯 Priorité 1' : i === 1 ? '⚡ Priorité 2' : '📊 Priorité 3';
+            windowsBlock +=
+                `${D.ln}  ${label}\n` +
+                `${D.ln}  Tour : ${w.predictedTour}   Heure : ${w.predictedTime}\n` +
+                `${D.ln}  Multiplicateur : ${w.predictedMult.toFixed(2)}×\n` +
+                (i < top3.length - 1 ? `${D.ln}\n` : '');
+        });
+    }
 
     const response =
-        `${DECO.top}\n` +
-        `${DECO.line}  ${DECO.premium} PRÉDICTION COSMOSX PREMIUM ${DECO.check}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.scan} DONNÉES ANALYSÉES\n` +
-        `${DECO.line}  Côte réf  : ${refDisplay}\n` +
-        `${DECO.line}  Heure réf : ${refTimeStr}\n` +
-        `${DECO.line}  Décimal   : ${decStr}\n` +
-        `${DECO.line}  Entropie  : ${decBar} ${decScore}%\n` +
-        `${DECO.line}  Somme dig : ${digitSum}  |  Longueur : ${numLen}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.cosmos} SIGNAL COSMIQUE IDENTIFIÉ\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.comet} CÔTE PRÉDITE\n` +
-        `${DECO.line}  ┌─────────────────────┐\n` +
-        `${DECO.line}  │  ${coteDisplay.padEnd(19)}│\n` +
-        `${DECO.line}  │  ${coteZone.padEnd(19)}│\n` +
-        `${DECO.line}  └─────────────────────┘\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.clock} HEURE POUR MISER\n` +
-        `${DECO.line}  ┌─────────────────────┐\n` +
-        `${DECO.line}  │  ${predictedTime.padEnd(19)}│\n` +
-        `${DECO.line}  │  ≈ dans ${delayLabel.padEnd(13)}│\n` +
-        `${DECO.line}  └─────────────────────┘\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${DECO.atom} Durée round  : ~${roundLen} sec\n` +
-        `${DECO.line}  ${DECO.planet} Rounds ciblés : ~${roundCount} avant signal\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.shield} SCORE DE CONFIANCE\n` +
-        `${DECO.line}  ${confLevel.bar}  ${confidence}%\n` +
-        `${DECO.line}  ${confLevel.label}\n` +
-        `${DECO.line}\n` +
-        `${DECO.line}  ${confLevel.desc}\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.bolt} STRATÉGIE CONSEILLÉE\n` +
-        `${DECO.line}  • Ouvrir le round à l'heure exacte\n` +
-        `${DECO.line}  • Encaisser à la côte prédite ✂️\n` +
-        `${DECO.line}  • Mise max : 5% de votre bankroll\n` +
-        `${DECO.line}  • Attendre le signal — ne pas anticiper\n` +
-        `${DECO.mid}\n` +
-        `${DECO.line}  ${DECO.lock} Algorithme CosmosX Decimal v1\n` +
-        `${DECO.line}  Prédiction basée sur entropie décimale\n` +
-        `${DECO.bot}`;
+        `${D.top}\n` +
+        `${D.ln}  🌌 COSMOSX — PRÉDICTION PREMIUM\n` +
+        `${D.mid}\n` +
+        `${D.ln}  📥 DONNÉES REÇUES\n` +
+        `${D.ln}\n` +
+        `${D.ln}  Multiplicateur : ${multRef}×\n` +
+        `${D.ln}  Tour           : ${tour}\n` +
+        `${D.ln}  Heure          : ${refTimeStr}\n` +
+        `${D.ln}  Hex            : ${hex}\n` +
+        `${D.sep}\n` +
+        `${D.ln}  🔬 ANALYSE MATHÉMATIQUE\n` +
+        `${D.ln}\n` +
+        `${D.ln}  Entropie hex  : ${result.entrRatio}%\n` +
+        `${D.ln}  Durée/round   : ~${result.roundDur} sec\n` +
+        `${D.ln}  Rounds scannés : 12 fenêtres\n` +
+        `${D.sep}\n` +
+        `${D.ln}  🎯 MEILLEURE PRÉDICTION\n` +
+        `${D.ln}\n` +
+        `${D.ln}  Tour prédit        : ${result.predictedTour}\n` +
+        `${D.ln}  Heure              : ${result.predictedTime}\n` +
+        `${D.ln}  Multiplicateur prédit : ${multPred}×\n` +
+        `${D.ln}\n` +
+        `${D.ln}  ${result.multZone}\n` +
+        (windowsBlock ? windowsBlock : '') +
+        `${D.sep}\n` +
+        `${D.ln}  🛡️ SCORE DE CONFIANCE\n` +
+        `${D.ln}\n` +
+        `${D.ln}  ${result.confBar}  ${result.confidence}%\n` +
+        `${D.ln}  ${result.confLabel}\n` +
+        `${D.sep}\n` +
+        `${D.ln}  💡 STRATÉGIE\n` +
+        `${D.ln}  • Misez au tour prédit\n` +
+        `${D.ln}  • Encaissez dès le multiplicateur atteint\n` +
+        `${D.ln}  • Mise conseillée : max 5% bankroll\n` +
+        `${D.bot}`;
 
     await sendMessage(senderId, response);
 };
