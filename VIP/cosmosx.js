@@ -1,8 +1,8 @@
 const sendMessage = require('../handles/sendMessage');
 const axios = require('axios');
 
-// ─── Clé Groq intégrée ────────────────────────────────────────────────────────
-const GROQ_API_KEY = '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';
+// ─── Groq ─────────────────────────────────────────────────────────────────────
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL   = 'llama-3.3-70b-versatile';
 
