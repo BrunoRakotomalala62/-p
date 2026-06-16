@@ -94,33 +94,86 @@ function parseInput(raw) {
 }
 
 // ─── Algorithme de prédiction ─────────────────────────────────────────────────
+//
+// PRINCIPE : chaque round k reçoit un score de "chaleur" (heat ∈ [0,1))
+// dérivé des 4 données d'entrée via FNV + mixing Knuth.
+// Seuls les rounds dont heat > seuil (≈25%) ont un mu élevé → mult ≥ 5×.
+// Le seuil lui-même dépend des données → le k sélectionné varie vraiment.
+//
 function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
     const hex       = analyzeHex(hexStr);
     const hexFold   = hex.valid ? hex.fold   : fnv32(hexStr);
     const h1        = hex.valid ? hex.h1     : fnv32(hexStr + '1');
     const h2        = hex.valid ? hex.h2     : fnv32(hexStr + '2');
     const h3        = hex.valid ? hex.h3     : fnv32(hexStr + '3');
+    const h4        = hex.valid ? hex.h4     : fnv32(hexStr + '4');
     const entrRatio = hex.valid ? hex.entropyRatio : 0.5;
     const nibSum    = hex.valid ? hex.nibSum : 20;
 
-    const master = (fnv32(tour) ^ fnv32(time.ts) ^ hexFold ^ fnv32(Math.round(mult * 100))) >>> 0;
-    const phase  = (h1 ^ h2 ^ h3) >>> 0;
-    const roundDur = Math.round(ROUND_MIN_SEC + (1 - entrRatio) * (ROUND_MAX_SEC - ROUND_MIN_SEC));
+    // ── Seeds maîtres — croisement des 4 dimensions ──
+    const master  = (fnv32(tour) ^ fnv32(time.ts) ^ hexFold ^ fnv32(Math.round(mult * 100))) >>> 0;
+    const phase   = (h1 ^ h2 ^ h3 ^ h4) >>> 0;
+    const timeMod = fnv32(time.ts ^ (tour * 0x9e3779b9)) >>> 0;  // mixing Knuth
+
+    // ── Seuil de chaleur variable selon les données ──
+    // Entre 0.60 et 0.82 → environ 1-3 rounds "chauds" sur 12
+    const threshSeed = fnv32(master ^ timeMod);
+    const HOT_THRESH = 0.60 + sf(threshSeed) * 0.22;   // [0.60, 0.82)
 
     const candidates = [];
     for (let k = 1; k <= 12; k++) {
-        const xSeed = (master ^ fnv32(tour + k) ^ (phase * k)) >>> 0;
-        const ySeed = fnv32(nibSum * k + time.ts);
-        const u1 = sf(xSeed) || 1e-10, u2 = sf(ySeed) || 1e-10;
-        const zNorm = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-        const mu    = 1.4 + entrRatio * 0.6 + Math.log(Math.max(mult, 1.0)) * 0.15;
-        const sigma = 0.8 + (1 - entrRatio) * 0.4;
-        let pm = Math.max(1.01, Math.round(Math.exp(mu + sigma * zNorm) * calibFactor * 100) / 100);
-        candidates.push({ k, predictedMult: pm, predictedTour: tour + k, predictedTime: formatTime(time.ts + k * roundDur) });
+        // ── Score de chaleur unique par round ──
+        // Mixing de Knuth sur k pour maximiser la sensibilité aux données
+        const kMix    = Math.imul((k * 0x9e3779b9) >>> 0, master) >>> 0;
+        const heatA   = fnv32(kMix ^ phase ^ fnv32(k + nibSum));
+        const heatB   = fnv32(timeMod ^ fnv32(tour + k * 7919));  // 7919 = premier
+        const heat    = sf((heatA ^ heatB) >>> 0);                // [0, 1) — propre à chaque (k, données)
+
+        // ── mu varie fortement avec la chaleur ──
+        // Chaud (heat > HOT_THRESH)  : mu ≈ 2.2-2.8 → E[X] ≈ 15-30×
+        // Tiède (heat > HOT_THRESH-0.20) : mu ≈ 1.5-1.9 → E[X] ≈ 5-10×
+        // Froid  : mu ≈ 0.3-0.8 → E[X] ≈ 1.3-2.5×
+        let mu, sigma;
+        if (heat > HOT_THRESH) {
+            mu    = 2.2 + entrRatio * 0.7 + Math.log(Math.max(mult, 1)) * 0.20;
+            sigma = 0.30 + (1 - entrRatio) * 0.20;
+        } else if (heat > HOT_THRESH - 0.20) {
+            mu    = 1.45 + entrRatio * 0.45;
+            sigma = 0.35 + (1 - entrRatio) * 0.15;
+        } else {
+            mu    = 0.25 + entrRatio * 0.30;
+            sigma = 0.40 + (1 - entrRatio) * 0.20;
+        }
+
+        // ── Box-Muller déterministe ──
+        const xSeed = fnv32(heatA ^ fnv32(k * 31337));
+        const ySeed = fnv32(heatB ^ fnv32(k * 73856));
+        const u1    = sf(xSeed) || 1e-10;
+        const u2    = sf(ySeed) || 1e-10;
+        const z     = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+
+        let pm = Math.exp(mu + sigma * z) * calibFactor;
+        pm = Math.max(1.01, Math.round(pm * 100) / 100);
+
+        // ── Durée de round variable par k (plus réaliste) ──
+        const durSeed = fnv32(master ^ (k * 0xdeadbeef));
+        const kDur    = ROUND_MIN_SEC + Math.round(sf(durSeed) * (ROUND_MAX_SEC - ROUND_MIN_SEC));
+
+        candidates.push({
+            k,
+            heat: Math.round(heat * 100),   // garder pour debug
+            predictedMult: pm,
+            predictedTour: tour + k,
+            predictedTime: formatTime(time.ts + k * kDur),
+        });
     }
 
-    const best = candidates.find(c => c.predictedMult >= TARGET_MIN_X)
-              || candidates.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b);
+    // ── Meilleur candidat = le plus haut multiplicateur ≥ 5× ──
+    // (pas le premier — on veut le plus fort signal)
+    const above5   = candidates.filter(c => c.predictedMult >= TARGET_MIN_X);
+    const best     = above5.length > 0
+        ? above5.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b)
+        : candidates.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b);
 
     const calibBonus    = Math.round(Math.max(0, 10 - Math.abs(calibFactor - 1) * 30));
     const hexEntrBonus  = Math.round(entrRatio * 25);
