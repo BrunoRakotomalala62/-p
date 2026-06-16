@@ -2,9 +2,10 @@ const sendMessage = require('../handles/sendMessage');
 const axios = require('axios');
 
 // ─── Groq ─────────────────────────────────────────────────────────────────────
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL   = 'llama-3.3-70b-versatile';
+const GROQ_API_KEY    = process.env.GROQ_API_KEY;
+const GROQ_URL        = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL      = 'llama-3.3-70b-versatile';
+const GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 // ─── Décoration visuelle ──────────────────────────────────────────────────────
 const D = {
@@ -203,6 +204,69 @@ function computeStats(history) {
         if (r > o) tendance = '📈 EN HAUSSE'; else if (r < o) tendance = '📉 EN BAISSE';
     }
     return { total: history.length, nConf: confirmed.length, hits, hitRate, avgErrPct: Math.round(avgErr * 100), precision, best, tendance };
+}
+
+// ─── Extraction des données depuis une capture d'écran (Vision) ──────────────
+async function extractDataFromImage(imageUrl) {
+    try {
+        const response = await axios.post(GROQ_URL, {
+            model: GROQ_VISION_MODEL,
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image_url',
+                            image_url: { url: imageUrl }
+                        },
+                        {
+                            type: 'text',
+                            text: `Analyse cette capture d'écran du jeu CosmosX et extrait exactement ces 4 données. Retourne UNIQUEMENT un JSON valide, rien d'autre :
+{
+  "multiplicateur": <nombre décimal, ex: 3.84>,
+  "tour": <entier, ex: 8420302>,
+  "heure": "<HH:MM:SS, ex: 15:03:58>",
+  "hex": "<code hexadécimal, ex: 4098bf16>"
+}
+
+Indications :
+- Le TOUR est le grand numéro en haut (ex: "TOUR 8420302")
+- Le MULTIPLICATEUR est à côté du tour (ex: "3.84x")
+- L'HEURE est l'heure affichée en haut (ex: "15:03:58")
+- Le HEX est la valeur "HEX" en bas de l'écran (ex: "4098bf16")
+Si une valeur est introuvable, mets null.`
+                        }
+                    ]
+                }
+            ],
+            temperature: 0.1,
+            max_tokens: 200
+        }, {
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 20000
+        });
+
+        const raw = response.data.choices[0].message.content.trim();
+        // Extraire le JSON même si du texte entoure la réponse
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return null;
+
+        const data = JSON.parse(jsonMatch[0]);
+        if (!data.multiplicateur || !data.tour || !data.heure || !data.hex) return null;
+
+        return {
+            mult: parseFloat(data.multiplicateur),
+            tour: parseInt(data.tour),
+            time: parseTime(String(data.heure)),
+            hex:  String(data.hex).replace(/[^0-9a-fA-F]/g, '')
+        };
+    } catch (err) {
+        console.error('[CosmoX Vision] Erreur extraction image:', err.message);
+        return null;
+    }
 }
 
 // ─── Appel Groq AI ────────────────────────────────────────────────────────────
@@ -663,10 +727,53 @@ async function sendHelp(sid) {
 }
 
 // ─── MODULE PRINCIPAL ─────────────────────────────────────────────────────────
-module.exports = async (senderId, prompt) => {
+module.exports = async (senderId, prompt, api, imageAttachments) => {
+    const store = getStore(senderId);
+
+    // ── Gestion de la capture d'écran ─────────────────────────────────────────
+    if (prompt === 'IMAGE_ATTACHMENT' && imageAttachments && imageAttachments.length > 0) {
+        const imageUrl = imageAttachments[0].payload.url;
+
+        await sendMessage(senderId,
+            `📸 Capture d'écran reçue !\n` +
+            `🔍 Groq Vision analyse l'image...\n` +
+            `⏳ Extraction des données CosmosX en cours...`
+        );
+
+        const extracted = await extractDataFromImage(imageUrl);
+
+        if (!extracted || !extracted.time || isNaN(extracted.mult) || isNaN(extracted.tour) || !extracted.hex) {
+            await sendMessage(senderId,
+                `⚠️ Impossible d'extraire les données de cette image.\n\n` +
+                `Assurez-vous que la capture montre clairement :\n` +
+                `• Le numéro de TOUR (ex: TOUR 8420302)\n` +
+                `• Le MULTIPLICATEUR (ex: 3.84×)\n` +
+                `• L'HEURE (ex: 15:03:58)\n` +
+                `• Le HEX (ex: 4098bf16)\n\n` +
+                `Ou envoyez les données en texte :\n` +
+                `Multiplicateur : 3.84\nTour : 8420302\nHeure : 15:03:58\nHex : 4098bf16`
+            );
+            return;
+        }
+
+        // Confirmer l'extraction
+        await sendMessage(senderId,
+            `✅ Données extraites avec succès !\n\n` +
+            `📊 Tour         : ${extracted.tour}\n` +
+            `✖️ Multiplicateur : ${extracted.mult.toFixed(2)}×\n` +
+            `🕐 Heure        : ${formatTime(extracted.time.ts)}\n` +
+            `🔑 Hex          : ${extracted.hex}\n\n` +
+            `🌌 Lancement de la prédiction...`
+        );
+        await new Promise(r => setTimeout(r, 800));
+
+        // Relancer le flux de prédiction avec les données extraites
+        const fakeText = `Multiplicateur : ${extracted.mult}\nTour : ${extracted.tour}\nHeure : ${formatTime(extracted.time.ts)}\nHex : ${extracted.hex}`;
+        return module.exports(senderId, fakeText, api, null);
+    }
+
     const input = (prompt || '').trim();
     const lower = input.toLowerCase();
-    const store = getStore(senderId);
 
     // ── 1. Commandes globales ─────────────────────────────────────────────────
     if (!input || ['aide', 'help', '?', 'info', 'guide'].includes(lower)) {
