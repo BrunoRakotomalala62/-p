@@ -1,4 +1,10 @@
 const sendMessage = require('../handles/sendMessage');
+const axios = require('axios');
+
+// ─── Clé Groq intégrée ────────────────────────────────────────────────────────
+const GROQ_API_KEY = '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';
+const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL   = 'llama-3.3-70b-versatile';
 
 // ─── Décoration visuelle ──────────────────────────────────────────────────────
 const D = {
@@ -13,17 +19,18 @@ const D = {
 const ROUND_MIN_SEC = 20;
 const ROUND_MAX_SEC = 38;
 const TARGET_MIN_X  = 5.0;
-const MAX_HISTORY   = 20;
+const MAX_HISTORY   = 50;
 
 // ─── Stockage par utilisateur ─────────────────────────────────────────────────
-// { history[], calibration, awaitingResult: null | { entryIdx, predictedTour, predictedMult } }
 const userStore = new Map();
 
 function getStore(sid) {
     if (!userStore.has(sid)) {
-        userStore.set(sid, { history: [], calibration: 1.0, awaitingResult: null });
+        userStore.set(sid, { history: [], calibration: 1.0, awaitingResult: null, groqMessages: [] });
     }
-    return userStore.get(sid);
+    const s = userStore.get(sid);
+    if (!s.groqMessages) s.groqMessages = [];
+    return s;
 }
 
 // ─── FNV-1a 32-bit ───────────────────────────────────────────────────────────
@@ -93,13 +100,7 @@ function parseInput(raw) {
     return null;
 }
 
-// ─── Algorithme de prédiction ─────────────────────────────────────────────────
-//
-// PRINCIPE : chaque round k reçoit un score de "chaleur" (heat ∈ [0,1))
-// dérivé des 4 données d'entrée via FNV + mixing Knuth.
-// Seuls les rounds dont heat > seuil (≈25%) ont un mu élevé → mult ≥ 5×.
-// Le seuil lui-même dépend des données → le k sélectionné varie vraiment.
-//
+// ─── Algorithme de prédiction mathématique ────────────────────────────────────
 function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
     const hex       = analyzeHex(hexStr);
     const hexFold   = hex.valid ? hex.fold   : fnv32(hexStr);
@@ -110,29 +111,20 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
     const entrRatio = hex.valid ? hex.entropyRatio : 0.5;
     const nibSum    = hex.valid ? hex.nibSum : 20;
 
-    // ── Seeds maîtres — croisement des 4 dimensions ──
     const master  = (fnv32(tour) ^ fnv32(time.ts) ^ hexFold ^ fnv32(Math.round(mult * 100))) >>> 0;
     const phase   = (h1 ^ h2 ^ h3 ^ h4) >>> 0;
-    const timeMod = fnv32(time.ts ^ (tour * 0x9e3779b9)) >>> 0;  // mixing Knuth
+    const timeMod = fnv32(time.ts ^ (tour * 0x9e3779b9)) >>> 0;
 
-    // ── Seuil de chaleur variable selon les données ──
-    // Entre 0.60 et 0.82 → environ 1-3 rounds "chauds" sur 12
     const threshSeed = fnv32(master ^ timeMod);
-    const HOT_THRESH = 0.60 + sf(threshSeed) * 0.22;   // [0.60, 0.82)
+    const HOT_THRESH = 0.60 + sf(threshSeed) * 0.22;
 
     const candidates = [];
     for (let k = 1; k <= 12; k++) {
-        // ── Score de chaleur unique par round ──
-        // Mixing de Knuth sur k pour maximiser la sensibilité aux données
         const kMix    = Math.imul((k * 0x9e3779b9) >>> 0, master) >>> 0;
         const heatA   = fnv32(kMix ^ phase ^ fnv32(k + nibSum));
-        const heatB   = fnv32(timeMod ^ fnv32(tour + k * 7919));  // 7919 = premier
-        const heat    = sf((heatA ^ heatB) >>> 0);                // [0, 1) — propre à chaque (k, données)
+        const heatB   = fnv32(timeMod ^ fnv32(tour + k * 7919));
+        const heat    = sf((heatA ^ heatB) >>> 0);
 
-        // ── mu varie fortement avec la chaleur ──
-        // Chaud (heat > HOT_THRESH)  : mu ≈ 2.2-2.8 → E[X] ≈ 15-30×
-        // Tiède (heat > HOT_THRESH-0.20) : mu ≈ 1.5-1.9 → E[X] ≈ 5-10×
-        // Froid  : mu ≈ 0.3-0.8 → E[X] ≈ 1.3-2.5×
         let mu, sigma;
         if (heat > HOT_THRESH) {
             mu    = 2.2 + entrRatio * 0.7 + Math.log(Math.max(mult, 1)) * 0.20;
@@ -145,7 +137,6 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
             sigma = 0.40 + (1 - entrRatio) * 0.20;
         }
 
-        // ── Box-Muller déterministe ──
         const xSeed = fnv32(heatA ^ fnv32(k * 31337));
         const ySeed = fnv32(heatB ^ fnv32(k * 73856));
         const u1    = sf(xSeed) || 1e-10;
@@ -155,13 +146,12 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
         let pm = Math.exp(mu + sigma * z) * calibFactor;
         pm = Math.max(1.01, Math.round(pm * 100) / 100);
 
-        // ── Durée de round variable par k (plus réaliste) ──
         const durSeed = fnv32(master ^ (k * 0xdeadbeef));
         const kDur    = ROUND_MIN_SEC + Math.round(sf(durSeed) * (ROUND_MAX_SEC - ROUND_MIN_SEC));
 
         candidates.push({
             k,
-            heat: Math.round(heat * 100),   // garder pour debug
+            heat: Math.round(heat * 100),
             predictedMult: pm,
             predictedTour: tour + k,
             predictedTime: formatTime(time.ts + k * kDur),
@@ -169,8 +159,6 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
         });
     }
 
-    // ── Meilleur candidat = le plus haut multiplicateur ≥ 5× ──
-    // (pas le premier — on veut le plus fort signal)
     const above5   = candidates.filter(c => c.predictedMult >= TARGET_MIN_X);
     const best     = above5.length > 0
         ? above5.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b)
@@ -186,23 +174,7 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
                             + Math.min((hexStr.replace(/[^0-9a-fA-F]/gi, '').length) * 2, 12)
                             + calibBonus, 97);
 
-    let confLabel, confBar;
-    if      (confidence >= 90) { confLabel = '🌌 COSMIQUE MAXIMAL'; confBar = '██████████'; }
-    else if (confidence >= 80) { confLabel = '🔥 ULTRA HAUTE';       confBar = '█████████░'; }
-    else if (confidence >= 70) { confLabel = '⚡ TRÈS HAUTE';         confBar = '████████░░'; }
-    else if (confidence >= 60) { confLabel = '✅ HAUTE';              confBar = '███████░░░'; }
-    else if (confidence >= 50) { confLabel = '📊 MODÉRÉE';            confBar = '██████░░░░'; }
-    else                       { confLabel = '⚠️ NORMALE';            confBar = '█████░░░░░'; }
-
-    let multZone;
-    if      (best.predictedMult >= 20) multZone = '🏆 JACKPOT ×20+';
-    else if (best.predictedMult >= 15) multZone = '🌌 EXPLOSION ×15+';
-    else if (best.predictedMult >= 10) multZone = '🔥 ULTRA ×10+';
-    else if (best.predictedMult >= 7)  multZone = '⚡ TRÈS ÉLEVÉ ×7+';
-    else if (best.predictedMult >= 5)  multZone = '🎯 CIBLE ×5+';
-    else                                multZone = '📊 STANDARD';
-
-    return { ...best, candidates, confidence, confLabel, confBar, multZone, roundDur, entrRatio: Math.round(entrRatio * 100) };
+    return { ...best, candidates, confidence, roundDur, entrRatio: Math.round(entrRatio * 100) };
 }
 
 // ─── Calibrage ────────────────────────────────────────────────────────────────
@@ -233,8 +205,239 @@ function computeStats(history) {
     return { total: history.length, nConf: confirmed.length, hits, hitRate, avgErrPct: Math.round(avgErr * 100), precision, best, tendance };
 }
 
-// ─── Enregistrer résultat réel (logique partagée) ────────────────────────────
-// Renvoie { ok, msg } — msg est le texte à envoyer
+// ─── Appel Groq AI ────────────────────────────────────────────────────────────
+// Construit le contexte historique, appelle Groq et retourne la prédiction affinée
+async function callGroqPrediction(store, currentInput, mathResult) {
+    try {
+        // ── Construire le résumé historique pour le contexte ──
+        const confirmed = store.history.filter(h => h.actual !== null).slice(-20);
+        let historyContext = '';
+        if (confirmed.length > 0) {
+            historyContext = '\n\nHISTORIQUE DES TOURS CONFIRMÉS (du plus ancien au plus récent) :\n';
+            confirmed.forEach((h, i) => {
+                const ecart = Math.round(Math.abs(h.actual - h.predictedMult) / h.predictedMult * 100);
+                const ok = h.actual >= TARGET_MIN_X ? 'CIBLE_OK' : 'SOUS_CIBLE';
+                historyContext += `[${i+1}] TourRef:${h.tour} | TourPrédit:${h.predictedTour} | PréditMult:${h.predictedMult.toFixed(2)}x | RéelMult:${h.actual.toFixed(2)}x | Écart:${ecart}% | ${ok}\n`;
+            });
+            const stats = computeStats(store.history);
+            if (stats) {
+                historyContext += `\nSTATISTIQUES SESSION : TauxRéussite=${stats.hitRate}% | PrécisionMoy=±${stats.avgErrPct}% | Calibrage=${store.calibration.toFixed(3)} | Tendance=${stats.tendance}`;
+            }
+        }
+
+        // ── Top 3 fenêtres candidates de l'algorithme mathématique ──
+        const top3 = mathResult.candidates
+            .sort((a, b) => b.predictedMult - a.predictedMult)
+            .slice(0, 3);
+        const candidatesStr = top3.map((c, i) =>
+            `Candidat${i+1}: Tour=${c.predictedTour} | Mult=${c.predictedMult.toFixed(2)}x | Heure=${c.predictedTime}`
+        ).join('\n');
+
+        // ── Message utilisateur pour cette prédiction ──
+        const userMsg = `NOUVELLE DONNÉE À ANALYSER :
+Multiplicateur actuel : ${currentInput.mult.toFixed(2)}x
+Tour de référence     : ${currentInput.tour}
+Heure                 : ${formatTime(currentInput.time.ts)}
+Hex                   : ${currentInput.hex}
+Entropie hex          : ${mathResult.entrRatio}%
+
+RÉSULTAT ALGORITHME MATHÉMATIQUE :
+Meilleure prédiction  : Tour ${mathResult.predictedTour} | Mult ${mathResult.predictedMult.toFixed(2)}x | Heure ${mathResult.predictedTime}
+Confiance algorithme  : ${mathResult.confidence}%
+Top 3 candidats :
+${candidatesStr}
+${historyContext}
+
+Affine cette prédiction avec ton analyse. Retourne UNIQUEMENT un JSON valide avec ce format exact :
+{
+  "tourPredit": <numéro entier>,
+  "heurePredit": "<HH:MM:SS>",
+  "multPredit": <nombre décimal>,
+  "multMin": <nombre décimal>,
+  "multMax": <nombre décimal>,
+  "confiance": <entier 0-100>,
+  "signal": "<COSMIQUE|ULTRA|TRÈS ÉLEVÉ|ÉLEVÉ|MODÉRÉ>",
+  "tendanceHex": "<CHAUD|NEUTRE|FROID>",
+  "patternDetecte": "<description courte du pattern en français, max 60 chars>",
+  "conseil": "<conseil stratégique court en français, max 80 chars>",
+  "ajustement": "<HAUSSE|STABLE|BAISSE>"
+}`;
+
+        // ── Construire les messages pour Groq (historique de conversation) ──
+        // On garde max 10 échanges pour éviter de dépasser les tokens
+        const trimmedHistory = store.groqMessages.slice(-20);
+
+        const messages = [
+            {
+                role: 'system',
+                content: `Tu es CosmosX AI, un moteur d'analyse prédictif de haute précision pour le jeu CosmosX. 
+Ton rôle UNIQUE est d'analyser les données cryptographiques (multiplicateur, tour, heure, hash hex) et l'historique complet de la session pour affiner les prédictions mathématiques et trouver le prochain tour avec multiplicateur élevé (≥5x).
+
+RÈGLES ABSOLUES :
+1. Tu réponds TOUJOURS et UNIQUEMENT avec un JSON valide, aucun texte autour.
+2. Tu analyses les patterns dans l'historique : séquences hex, cycles de tours, tendances temporelles.
+3. Tu tiens compte du calibrage actuel (${store.calibration.toFixed(3)}) pour ajuster tes prédictions.
+4. Le champ "multPredit" doit toujours être ≥ 5.0 si le signal est favorable, sinon tu indiques le meilleur multiplicateur probable.
+5. Tu es déterministe : pour les mêmes données + historique, tu retournes la même prédiction.
+6. Analyse l'entropie hex pour détecter les patterns chauds (entropie > 70% = signal fort).
+7. Si l'historique montre une tendance haussière récente, boost la confiance de +5 à +10.
+8. Le "tourPredit" doit être dans les 12 prochains tours du tour de référence.`
+            },
+            ...trimmedHistory,
+            { role: 'user', content: userMsg }
+        ];
+
+        const response = await axios.post(GROQ_URL, {
+            model: GROQ_MODEL,
+            messages,
+            temperature: 0.2,
+            max_tokens: 400,
+            response_format: { type: 'json_object' }
+        }, {
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 25000
+        });
+
+        const rawContent = response.data.choices[0].message.content.trim();
+
+        // ── Sauvegarder l'échange dans l'historique Groq ──
+        store.groqMessages.push({ role: 'user', content: userMsg });
+        store.groqMessages.push({ role: 'assistant', content: rawContent });
+        if (store.groqMessages.length > 40) store.groqMessages = store.groqMessages.slice(-40);
+
+        const parsed = JSON.parse(rawContent);
+
+        // Valider les champs essentiels
+        if (!parsed.tourPredit || !parsed.multPredit || !parsed.confiance) return null;
+
+        return {
+            tourPredit:      parseInt(parsed.tourPredit) || mathResult.predictedTour,
+            heurePredit:     parsed.heurePredit || mathResult.predictedTime,
+            multPredit:      parseFloat(parsed.multPredit) || mathResult.predictedMult,
+            multMin:         parseFloat(parsed.multMin) || Math.max(1.5, parseFloat(parsed.multPredit) * 0.6),
+            multMax:         parseFloat(parsed.multMax) || parseFloat(parsed.multPredit) * 1.8,
+            confiance:       Math.min(99, Math.max(0, parseInt(parsed.confiance))),
+            signal:          parsed.signal || 'MODÉRÉ',
+            tendanceHex:     parsed.tendanceHex || 'NEUTRE',
+            patternDetecte:  parsed.patternDetecte || 'Pattern standard détecté',
+            conseil:         parsed.conseil || 'Mise prudente recommandée',
+            ajustement:      parsed.ajustement || 'STABLE',
+        };
+    } catch (err) {
+        console.error('[CosmoX Groq] Erreur:', err.message);
+        return null;
+    }
+}
+
+// ─── Formateur de la réponse enrichie ─────────────────────────────────────────
+function buildEnrichedResponse(input, mathResult, groq, store) {
+    const { mult, tour, time, hex } = input;
+
+    // Choisir la source de vérité : Groq si disponible, sinon mathématique
+    const tourFinal  = groq ? groq.tourPredit   : mathResult.predictedTour;
+    const heureFinal = groq ? groq.heurePredit  : mathResult.predictedTime;
+    const multFinal  = groq ? groq.multPredit   : mathResult.predictedMult;
+    const confFinal  = groq ? groq.confiance    : mathResult.confidence;
+
+    // Labels dynamiques selon Groq
+    let confLabel, confBar;
+    if      (confFinal >= 93) { confLabel = '🌌 COSMIQUE MAXIMAL';  confBar = '██████████'; }
+    else if (confFinal >= 85) { confLabel = '🔥 ULTRA HAUTE';       confBar = '█████████░'; }
+    else if (confFinal >= 75) { confLabel = '⚡ TRÈS HAUTE';         confBar = '████████░░'; }
+    else if (confFinal >= 65) { confLabel = '✅ HAUTE';              confBar = '███████░░░'; }
+    else if (confFinal >= 55) { confLabel = '📊 MODÉRÉE';            confBar = '██████░░░░'; }
+    else                       { confLabel = '⚠️ NORMALE';           confBar = '█████░░░░░'; }
+
+    let multZone;
+    if      (multFinal >= 20) multZone = '🏆 JACKPOT ×20+';
+    else if (multFinal >= 15) multZone = '🌌 EXPLOSION ×15+';
+    else if (multFinal >= 10) multZone = '🔥 ULTRA ×10+';
+    else if (multFinal >= 7)  multZone = '⚡ TRÈS ÉLEVÉ ×7+';
+    else if (multFinal >= 5)  multZone = '🎯 CIBLE ×5+';
+    else                       multZone = '📊 STANDARD';
+
+    const ajustIcon = groq
+        ? (groq.ajustement === 'HAUSSE' ? '▲ GROQ +' : groq.ajustement === 'BAISSE' ? '▼ GROQ -' : '● GROQ ≈')
+        : '● ALGO';
+    const calibLine = store.calibration !== 1.0
+        ? `${D.ln}  Calibrage actif : ${store.calibration.toFixed(3)}\n`
+        : '';
+
+    // Top 3 fenêtres candidates
+    const top3 = mathResult.candidates
+        .filter(c => c.predictedMult >= TARGET_MIN_X)
+        .sort((a, b) => b.predictedMult - a.predictedMult)
+        .slice(0, 3);
+    let windowsBlock = '';
+    if (top3.length > 0) {
+        windowsBlock = `${D.sep}\n${D.ln}  📡 FENÊTRES DÉTECTÉES (≥ 5×)\n${D.ln}\n`;
+        top3.forEach((w, i) => {
+            const lbl = i === 0 ? '🎯 Priorité 1' : i === 1 ? '⚡ Priorité 2' : '📊 Priorité 3';
+            windowsBlock += `${D.ln}  ${lbl}\n${D.ln}  Tour : ${w.predictedTour}   Heure : ${w.predictedTime}\n${D.ln}  Multiplicateur : ${w.predictedMult.toFixed(2)}×\n` + (i < top3.length - 1 ? `${D.ln}\n` : '');
+        });
+    }
+
+    // Bloc Groq AI (uniquement si disponible)
+    let groqBlock = '';
+    if (groq) {
+        const tendHexIcon = groq.tendanceHex === 'CHAUD' ? '🔥' : groq.tendanceHex === 'FROID' ? '❄️' : '〰️';
+        groqBlock =
+            `${D.sep}\n` +
+            `${D.ln}  🤖 ANALYSE GROQ AI (Llama 3.3-70B)\n${D.ln}\n` +
+            `${D.ln}  Pattern    : ${groq.patternDetecte}\n` +
+            `${D.ln}  Hex trend  : ${tendHexIcon} ${groq.tendanceHex}\n` +
+            `${D.ln}  Signal     : ${groq.signal}\n` +
+            `${D.ln}  Fourchette : ${groq.multMin.toFixed(2)}× → ${groq.multMax.toFixed(2)}×\n` +
+            `${D.ln}  Ajustement : ${ajustIcon}\n` +
+            `${D.ln}  Conseil    : ${groq.conseil}\n`;
+    }
+
+    const nConf = store.history.filter(h => h.actual !== null).length;
+    const sessionLine = nConf > 0
+        ? `${D.ln}  Session : ${store.history.length} prédictions | ${nConf} confirmées\n`
+        : '';
+
+    return (
+        `${D.top}\n` +
+        `${D.ln}  🌌 COSMOSX — PRÉDICTION IA PREMIUM\n` +
+        `${D.mid}\n` +
+        `${D.ln}  📥 DONNÉES REÇUES\n${D.ln}\n` +
+        `${D.ln}  Multiplicateur : ${mult.toFixed(2)}×\n` +
+        `${D.ln}  Tour           : ${tour}\n` +
+        `${D.ln}  Heure          : ${formatTime(time.ts)}\n` +
+        `${D.ln}  Hex            : ${hex}\n` +
+        `${D.sep}\n` +
+        `${D.ln}  🔬 ANALYSE MATHÉMATIQUE\n${D.ln}\n` +
+        `${D.ln}  Entropie hex   : ${mathResult.entrRatio}%\n` +
+        `${D.ln}  Durée/round    : ~${mathResult.roundDur} sec\n` +
+        calibLine +
+        sessionLine +
+        `${D.ln}  Rounds scannés : 12 fenêtres\n` +
+        groqBlock +
+        `${D.sep}\n` +
+        `${D.ln}  🎯 PRÉDICTION FINALE (IA + ALGO)\n${D.ln}\n` +
+        `${D.ln}  Tour prédit           : ${tourFinal}\n` +
+        `${D.ln}  Heure                 : ${heureFinal}\n` +
+        `${D.ln}  Multiplicateur prédit : ${multFinal.toFixed(2)}×\n${D.ln}\n` +
+        `${D.ln}  ${multZone}\n` +
+        windowsBlock +
+        `${D.sep}\n` +
+        `${D.ln}  🛡️ SCORE DE CONFIANCE\n${D.ln}\n` +
+        `${D.ln}  ${confBar}  ${confFinal}%\n` +
+        `${D.ln}  ${confLabel}\n` +
+        `${D.sep}\n` +
+        `${D.ln}  💡 STRATÉGIE\n` +
+        `${D.ln}  • Misez au tour prédit\n` +
+        `${D.ln}  • Encaissez dès la cible atteinte\n` +
+        `${D.ln}  • Mise conseillée : max 5% bankroll\n` +
+        D.bot
+    );
+}
+
+// ─── Enregistrer résultat réel ────────────────────────────────────────────────
 function applyResult(store, tourNum, actualMx) {
     const idx = store.history.findLastIndex(h => h.predictedTour === tourNum && h.actual === null);
     if (idx === -1) return { ok: false };
@@ -254,7 +457,6 @@ function applyResult(store, tourNum, actualMx) {
         ? `${oldCalib.toFixed(3)} → ${store.calibration.toFixed(3)} ${calibDelta > 0 ? '▲' : '▼'}`
         : `stable (${store.calibration.toFixed(3)})`;
 
-    // Indice de qualité de la prédiction
     let qualité;
     if      (errPct <= 10) qualité = '🌌 Précision parfaite';
     else if (errPct <= 25) qualité = '🔥 Très bonne précision';
@@ -275,7 +477,7 @@ function applyResult(store, tourNum, actualMx) {
         `${D.sep}\n` +
         `${D.ln}  🧬 APPRENTISSAGE AUTO\n` +
         `${D.ln}  Calibrage : ${calibInfo}\n` +
-        `${D.ln}  Prochaine prédiction affinée !\n` +
+        `${D.ln}  Groq affinera la prochaine prédiction !\n` +
         `${D.bot}`;
 
     return { ok: true, msg };
@@ -358,16 +560,18 @@ async function handleStats(sid) {
         `${D.ln}  Réel : ${stats.best.actual.toFixed(2)}×  Écart : ±${Math.round(Math.abs(stats.best.actual - stats.best.predictedMult) / stats.best.predictedMult * 100)}%\n` +
         `${D.sep}\n${D.ln}  🧬 CALIBRAGE AUTO\n` +
         `${D.ln}  Facteur : ${cf.toFixed(3)}  ${cfDesc}\n` +
+        `${D.sep}\n${D.ln}  🤖 Groq AI actif — ${store.groqMessages.length / 2 | 0} analyses en mémoire\n` +
         D.bot
     );
 }
 
 async function handleReset(sid) {
-    userStore.set(sid, { history: [], calibration: 1.0, awaitingResult: null });
+    userStore.set(sid, { history: [], calibration: 1.0, awaitingResult: null, groqMessages: [] });
     await sendMessage(sid,
         `${D.top}\n${D.ln}  🔄 RÉINITIALISATION COMPLÈTE\n${D.mid}\n` +
         `${D.ln}  Historique effacé ✅\n` +
         `${D.ln}  Calibrage remis à 1.000 ✅\n` +
+        `${D.ln}  Mémoire Groq AI effacée ✅\n` +
         `${D.ln}  Session réinitialisée ✅\n${D.sep}\n` +
         `${D.ln}  L'algorithme repart de zéro.\n` +
         `${D.ln}  Faites une nouvelle prédiction !\n` +
@@ -375,8 +579,6 @@ async function handleReset(sid) {
     );
 }
 
-// ─── Commande comparer ────────────────────────────────────────────────────────
-// Format : plusieurs blocs séparés par "---" ou par une ligne vide double
 async function handleComparer(sid, raw) {
     const store  = getStore(sid);
     const blocks = raw.trim().split(/\n\s*---\s*\n|\n{2,}/);
@@ -401,7 +603,6 @@ async function handleComparer(sid, raw) {
         result: predictCosmosX(p.mult, p.tour, p.time, p.hex, store.calibration)
     }));
 
-    // Trier par multiplicateur prédit décroissant
     results.sort((a, b) => b.result.predictedMult - a.result.predictedMult);
 
     let body = '';
@@ -414,8 +615,7 @@ async function handleComparer(sid, raw) {
             `${D.ln}  Tour prédit  : ${r.result.predictedTour}\n` +
             `${D.ln}  Heure        : ${r.result.predictedTime}\n` +
             `${D.ln}  Multiplicateur : ${r.result.predictedMult.toFixed(2)}×\n` +
-            `${D.ln}  Confiance    : ${r.result.confidence}%  ${r.result.confBar}\n` +
-            `${D.ln}  ${r.result.multZone}\n`;
+            `${D.ln}  Confiance    : ${r.result.confidence}%\n`;
     });
 
     await sendMessage(sid,
@@ -431,7 +631,6 @@ async function handleComparer(sid, raw) {
     );
 }
 
-// ─── Aide ─────────────────────────────────────────────────────────────────────
 async function sendHelp(sid) {
     await sendMessage(sid,
         `${D.top}\n${D.ln}  👑 COSMOSX — GUIDE COMPLET\n${D.mid}\n` +
@@ -441,9 +640,13 @@ async function sendHelp(sid) {
         `${D.ln}  Heure : 08:14:57\n` +
         `${D.ln}  Hex : 421cd5a4\n` +
         `${D.sep}\n` +
+        `${D.ln}  🤖 GROQ AI (Llama 3.3-70B) :\n` +
+        `${D.ln}  Analyse l'historique complet\n` +
+        `${D.ln}  et affine chaque prédiction.\n` +
+        `${D.ln}  Plus vous utilisez, plus il\n` +
+        `${D.ln}  apprend vos patterns.\n` +
+        `${D.sep}\n` +
         `${D.ln}  🔁 APRÈS CHAQUE PRÉDICTION :\n` +
-        `${D.ln}  Le bot vous demande le vrai\n` +
-        `${D.ln}  résultat ≥ 5× pour calibrer.\n` +
         `${D.ln}  Répondez : [mult_réel] [tour_réel]\n` +
         `${D.ln}  Exemple  : 12.40 8419185\n` +
         `${D.ln}  Ou tapez : skip  (pour ignorer)\n` +
@@ -453,8 +656,8 @@ async function sendHelp(sid) {
         `${D.ln}  🔬 comparer    — comparer 2+ rounds\n` +
         `${D.ln}  🔄 reset       — réinitialiser tout\n` +
         `${D.sep}\n` +
-        `${D.ln}  🧬 L'algo apprend de vos retours\n` +
-        `${D.ln}  et s'affine automatiquement.\n` +
+        `${D.ln}  🧬 L'algo + Groq apprennent\n` +
+        `${D.ln}  et s'affinent automatiquement.\n` +
         D.bot
     );
 }
@@ -465,7 +668,7 @@ module.exports = async (senderId, prompt) => {
     const lower = input.toLowerCase();
     const store = getStore(senderId);
 
-    // ── 1. Commandes globales (priorité absolue) ──────────────────────────────
+    // ── 1. Commandes globales ─────────────────────────────────────────────────
     if (!input || ['aide', 'help', '?', 'info', 'guide'].includes(lower)) {
         await sendHelp(senderId); return;
     }
@@ -488,24 +691,16 @@ module.exports = async (senderId, prompt) => {
         await handleResult(senderId, resultMatch[1]); return;
     }
 
-    // ── 2. Réponse à la question de calibrage (état awaitingResult) ───────────
-    //    Le bot est en attente du vrai résultat après une prédiction.
-    //    L'utilisateur répond : "12.40 8419185"  ou juste "12.40"  ou "skip"
+    // ── 2. Réponse calibrage en attente ───────────────────────────────────────
     if (store.awaitingResult) {
         const aw = store.awaitingResult;
 
-        // Annulation explicite
         if (['skip', 'passer', 'non', 'no', 'annuler', 'cancel', 'ignorer'].includes(lower)) {
             store.awaitingResult = null;
-            await sendMessage(senderId,
-                `⏭️ Résultat ignoré.\n\nEnvoyez de nouvelles données pour une prochaine prédiction.`
-            );
+            await sendMessage(senderId, `⏭️ Résultat ignoré.\n\nEnvoyez de nouvelles données pour une prochaine prédiction.`);
             return;
         }
 
-        // Essayer de parser la réponse rapide :
-        //   Format A : "12.40 8419185" (mult + tour)
-        //   Format B : "12.40"          (mult seulement → utilise le tour prédit)
         const parts = input.trim().split(/\s+/);
         const mx1   = parseFloat(parts[0].replace(',', '.'));
         const mx2   = parts.length >= 2 ? parseFloat(parts[1].replace(',', '.')) : NaN;
@@ -513,31 +708,19 @@ module.exports = async (senderId, prompt) => {
         let tourNum, actualMx;
 
         if (!isNaN(mx1) && mx1 >= 1.0 && !isNaN(mx2) && Number.isInteger(mx2) && mx2 > 1000) {
-            // Format A : premier = multiplicateur, second = numéro de tour
-            actualMx = mx1;
-            tourNum  = Math.round(mx2);
+            actualMx = mx1; tourNum = Math.round(mx2);
         } else if (!isNaN(mx1) && mx1 >= 1.0 && parts.length === 1) {
-            // Format B : seulement le multiplicateur → tour = celui prédit
-            actualMx = mx1;
-            tourNum  = aw.predictedTour;
+            actualMx = mx1; tourNum = aw.predictedTour;
         } else if (!isNaN(mx1) && mx1 >= 1.0 && !isNaN(mx2) && mx2 >= 1.0 && mx2 < 1000) {
-            // Format C : "12.40 5.20" → les deux ressemblent à des multiplicateurs
-            // On prend le plus grand comme multiplicateur réel et le tour prédit
-            actualMx = Math.max(mx1, mx2);
-            tourNum  = aw.predictedTour;
+            actualMx = Math.max(mx1, mx2); tourNum = aw.predictedTour;
         } else {
-            // Pas reconnu — vérifier si c'est une nouvelle entrée de prédiction
-            // On laisse passer vers le bloc de prédiction ci-dessous
             store.awaitingResult = null;
-            // (fall-through vers parseInput)
         }
 
-        // Si on a extrait les valeurs → enregistrer
         if (tourNum !== undefined && actualMx !== undefined) {
             const { ok, msg } = applyResult(store, tourNum, actualMx);
             if (ok) {
                 await sendMessage(senderId, msg);
-                // Afficher les stats rapides si on a 3+ confirmations
                 const confirmed = store.history.filter(h => h.actual !== null).length;
                 if (confirmed >= 3 && confirmed % 3 === 0) {
                     await new Promise(r => setTimeout(r, 800));
@@ -547,32 +730,29 @@ module.exports = async (senderId, prompt) => {
                             `📈 Mise à jour rapide :\n` +
                             `Taux de réussite : ${s.hitRate}%  (${s.hits}/${s.nConf})\n` +
                             `Précision moyenne : ±${s.avgErrPct}%\n` +
-                            `Calibrage actuel : ${store.calibration.toFixed(3)}\n\n` +
+                            `Calibrage actuel : ${store.calibration.toFixed(3)}\n` +
+                            `🤖 Groq a ${store.groqMessages.length / 2 | 0} analyses en mémoire\n\n` +
                             `Tapez "stats" pour le rapport complet.`
                         );
                     }
                 }
                 return;
             } else {
-                // Tour introuvable dans l'historique → on cherche la dernière prédiction en attente
                 const lastPending = store.history.slice().reverse().find(h => h.actual === null);
                 if (lastPending) {
                     const { ok: ok2, msg: msg2 } = applyResult(store, lastPending.predictedTour, actualMx);
                     if (ok2) { await sendMessage(senderId, msg2); return; }
                 }
-                // Vraiment introuvable
                 store.awaitingResult = null;
                 await sendMessage(senderId, `🔍 Tour introuvable. Résultat non enregistré.\nContinuez avec une nouvelle prédiction.`);
                 return;
             }
         }
-        // fall-through : la réponse ressemble à une nouvelle prédiction
     }
 
     // ── 3. Nouvelle prédiction principale ─────────────────────────────────────
     const parsed = parseInput(input);
     if (!parsed) {
-        // Si on attendait un résultat et que l'input ne correspond à rien → rappel doux
         const reminder = store.awaitingResult
             ? `\n\n💬 Rappel : répondez avec le vrai résultat ou tapez "skip".`
             : `\n\nTapez "aide" pour le guide complet.`;
@@ -587,116 +767,71 @@ module.exports = async (senderId, prompt) => {
         return;
     }
 
-    // Annuler toute attente précédente silencieusement (nouvelle prédiction = l'user passe au round suivant)
     store.awaitingResult = null;
-
     const { mult, tour, time, hex } = parsed;
 
     // ── Message de chargement ──
-    const loadMsgs = [
-        '🔍 Déchiffrage du signal Hex en cours...',
-        '⚛️ Analyse du cycle de tour...',
-        '🧬 Calcul de l\'entropie binaire...',
-        '🪐 Modélisation de la fenêtre temporelle...',
-        '🚀 Algorithme prédictif actif...',
-    ];
+    const nPrev = store.history.filter(h => h.actual !== null).length;
+    const loadLine = nPrev > 0
+        ? `🧠 Groq analyse ${nPrev} tours historiques...`
+        : `🔍 Première analyse — Groq initialise le modèle...`;
+
     await sendMessage(senderId,
-        `🌌 CosmosX — Analyse en cours...\n` +
-        `${loadMsgs[Math.floor(Math.random() * loadMsgs.length)]}\n\n` +
+        `🌌 CosmosX — Analyse IA en cours...\n` +
+        `⚛️ Calcul algorithmique + ${loadLine}\n\n` +
         `🔑 Hex analysé : ${hex}\n` +
         `📍 Tour de référence : ${tour}` +
         (store.calibration !== 1.0 ? `\n🧬 Calibrage actif : ${store.calibration.toFixed(3)}` : '')
     );
-    await new Promise(r => setTimeout(r, 2200));
 
-    // ── Calcul ──
-    const result   = predictCosmosX(mult, tour, time, hex, store.calibration);
-    const multPred = result.predictedMult.toFixed(2);
+    // ── Calcul mathématique (synchrone) ──
+    const mathResult = predictCosmosX(mult, tour, time, hex, store.calibration);
 
-    // ── Sauvegarder dans l'historique et activer l'attente de résultat ──
+    // ── Appel Groq AI (asynchrone, en parallèle avec délai d'attente) ──
+    const [groqResult] = await Promise.all([
+        callGroqPrediction(store, { mult, tour, time, hex }, mathResult),
+        new Promise(r => setTimeout(r, 1500))
+    ]);
+
+    // ── Sauvegarder dans l'historique ──
+    const finalMult = groqResult ? groqResult.multPredit : mathResult.predictedMult;
+    const finalTour = groqResult ? groqResult.tourPredit : mathResult.predictedTour;
+
     const entry = {
         id: Date.now(), tour,
-        predictedTour: result.predictedTour,
-        predictedMult: result.predictedMult,
-        predictedTime: result.predictedTime,
+        predictedTour: finalTour,
+        predictedMult: finalMult,
+        predictedTime: groqResult ? groqResult.heurePredit : mathResult.predictedTime,
         actual: null,
         createdAt: new Date().toLocaleTimeString('fr-FR'),
     };
     store.history.push(entry);
     if (store.history.length > MAX_HISTORY) store.history.shift();
 
-    // Activer l'état d'attente de résultat
     store.awaitingResult = {
         entryIdx:      store.history.length - 1,
-        predictedTour: result.predictedTour,
-        predictedMult: result.predictedMult,
+        predictedTour: finalTour,
+        predictedMult: finalMult,
     };
 
-    // ── Top 3 fenêtres ≥ 5× (triées par multiplicateur décroissant) ──
-    const top3 = result.candidates
-        .filter(c => c.predictedMult >= TARGET_MIN_X)
-        .sort((a, b) => b.predictedMult - a.predictedMult)
-        .slice(0, 3);
-    let windowsBlock = '';
-    if (top3.length > 0) {
-        windowsBlock = `${D.sep}\n${D.ln}  📡 FENÊTRES DÉTECTÉES (≥ 5×)\n${D.ln}\n`;
-        top3.forEach((w, i) => {
-            const lbl = i === 0 ? '🎯 Priorité 1' : i === 1 ? '⚡ Priorité 2' : '📊 Priorité 3';
-            windowsBlock += `${D.ln}  ${lbl}\n${D.ln}  Tour : ${w.predictedTour}   Heure : ${w.predictedTime}\n${D.ln}  Multiplicateur : ${w.predictedMult.toFixed(2)}×\n` + (i < top3.length - 1 ? `${D.ln}\n` : '');
-        });
-    }
-
-    const calibLine = store.calibration !== 1.0 ? `${D.ln}  Calibrage actif : ${store.calibration.toFixed(3)}\n` : '';
-
-    const response =
-        `${D.top}\n` +
-        `${D.ln}  🌌 COSMOSX — PRÉDICTION PREMIUM\n` +
-        `${D.mid}\n` +
-        `${D.ln}  📥 DONNÉES REÇUES\n${D.ln}\n` +
-        `${D.ln}  Multiplicateur : ${mult.toFixed(2)}×\n` +
-        `${D.ln}  Tour           : ${tour}\n` +
-        `${D.ln}  Heure          : ${formatTime(time.ts)}\n` +
-        `${D.ln}  Hex            : ${hex}\n` +
-        `${D.sep}\n` +
-        `${D.ln}  🔬 ANALYSE MATHÉMATIQUE\n${D.ln}\n` +
-        `${D.ln}  Entropie hex   : ${result.entrRatio}%\n` +
-        `${D.ln}  Durée/round    : ~${result.roundDur} sec\n` +
-        calibLine +
-        `${D.ln}  Rounds scannés : 12 fenêtres\n` +
-        `${D.sep}\n` +
-        `${D.ln}  🎯 MEILLEURE PRÉDICTION\n${D.ln}\n` +
-        `${D.ln}  Tour prédit           : ${result.predictedTour}\n` +
-        `${D.ln}  Heure                 : ${result.predictedTime}\n` +
-        `${D.ln}  Multiplicateur prédit : ${multPred}×\n${D.ln}\n` +
-        `${D.ln}  ${result.multZone}\n` +
-        windowsBlock +
-        `${D.sep}\n` +
-        `${D.ln}  🛡️ SCORE DE CONFIANCE\n${D.ln}\n` +
-        `${D.ln}  ${result.confBar}  ${result.confidence}%\n` +
-        `${D.ln}  ${result.confLabel}\n` +
-        `${D.sep}\n` +
-        `${D.ln}  💡 STRATÉGIE\n` +
-        `${D.ln}  • Misez au tour prédit\n` +
-        `${D.ln}  • Encaissez dès la cible atteinte\n` +
-        `${D.ln}  • Mise conseillée : max 5% bankroll\n` +
-        D.bot;
-
+    // ── Construire et envoyer la réponse enrichie ──
+    const response = buildEnrichedResponse(parsed, mathResult, groqResult, store);
     await sendMessage(senderId, response);
 
-    // ── Question automatique de calibrage ─────────────────────────────────────
+    // ── Question automatique de calibrage ──
     await new Promise(r => setTimeout(r, 1000));
     await sendMessage(senderId,
         `╔════════════════════════════════════╗\n` +
         `║  🔔 CALIBRAGE EN TEMPS RÉEL        ║\n` +
         `╠════════════════════════════════════╣\n` +
         `║                                    ║\n` +
-        `║  Quand le tour ${String(result.predictedTour).padEnd(19)}║\n` +
+        `║  Quand le tour ${String(finalTour).padEnd(19)}║\n` +
         `║  se termine, quel était            ║\n` +
         `║  le multiplicateur ≥ 5× réel ?     ║\n` +
         `║                                    ║\n` +
         `║  Répondez avec :                   ║\n` +
         `║  [mult_réel] [tour_réel]           ║\n` +
-        `║  Exemple : 12.40 ${String(result.predictedTour).padEnd(18)}║\n` +
+        `║  Exemple : 12.40 ${String(finalTour).padEnd(18)}║\n` +
         `║  Ou juste : 12.40  (si même tour)  ║\n` +
         `║                                    ║\n` +
         `║  Tapez "skip" pour ignorer         ║\n` +
