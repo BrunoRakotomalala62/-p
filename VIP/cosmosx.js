@@ -165,6 +165,7 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
             predictedMult: pm,
             predictedTour: tour + k,
             predictedTime: formatTime(time.ts + k * kDur),
+            kDur,
         });
     }
 
@@ -174,6 +175,8 @@ function predictCosmosX(mult, tour, time, hexStr, calibFactor = 1.0) {
     const best     = above5.length > 0
         ? above5.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b)
         : candidates.reduce((a, b) => a.predictedMult > b.predictedMult ? a : b);
+
+    const roundDur = best.kDur;
 
     const calibBonus    = Math.round(Math.max(0, 10 - Math.abs(calibFactor - 1) * 30));
     const hexEntrBonus  = Math.round(entrRatio * 25);
@@ -629,8 +632,11 @@ module.exports = async (senderId, prompt) => {
         predictedMult: result.predictedMult,
     };
 
-    // ── Top 3 fenêtres ≥ 5× ──
-    const top3 = result.candidates.filter(c => c.predictedMult >= TARGET_MIN_X).slice(0, 3);
+    // ── Top 3 fenêtres ≥ 5× (triées par multiplicateur décroissant) ──
+    const top3 = result.candidates
+        .filter(c => c.predictedMult >= TARGET_MIN_X)
+        .sort((a, b) => b.predictedMult - a.predictedMult)
+        .slice(0, 3);
     let windowsBlock = '';
     if (top3.length > 0) {
         windowsBlock = `${D.sep}\n${D.ln}  📡 FENÊTRES DÉTECTÉES (≥ 5×)\n${D.ln}\n`;
