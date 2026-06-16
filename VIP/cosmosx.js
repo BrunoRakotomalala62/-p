@@ -351,46 +351,75 @@ RÈGLES :
 }
 
 // ─── Extraction image (Vision) ────────────────────────────────────────────────
+// Essai 1 : proxy Groq existant (pas de clé nécessaire)
+// Essai 2 : API Groq directe avec clé (si disponible)
 async function extractDataFromImage(imageUrl) {
-    if (!GROQ_API_KEY) return null;
-    try {
-        const resp = await axios.post(GROQ_URL, {
-            model: GROQ_VISION_MODEL,
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'image_url', image_url: { url: imageUrl } },
-                    { type: 'text', text: `Analyse cette capture d'écran CosmosX. Retourne UNIQUEMENT ce JSON:
-{"multiplicateur":<nombre>,"tour":<entier>,"heure":"<HH:MM:SS>","hex":"<code hex>"}
-- TOUR = grand numéro en haut (ex: TOUR 8420302)
-- MULTIPLICATEUR = nombre avec x (ex: 3.84x)
-- HEURE = heure affichée (ex: 15:03:58)
-- HEX = valeur HEX en bas (ex: 4098bf16)
-Si introuvable → null.` }
-                ]
-            }],
-            temperature: 0.1,
-            max_tokens: 150
-        }, {
-            headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-            timeout: 20000
-        });
+    const VISION_PROMPT = `Tu analyses une capture d'écran du jeu CosmosX.
+Extrait exactement ces 4 valeurs et retourne UNIQUEMENT ce JSON (rien d'autre) :
+{"multiplicateur":<nombre decimal>,"tour":<entier>,"heure":"<HH:MM:SS>","hex":"<code hex 8 chars>"}
 
-        const raw = resp.data.choices[0].message.content.trim();
-        const m = raw.match(/\{[\s\S]*\}/);
+Ce qu'il faut chercher :
+- "tour" = grand numéro après "TOUR" en haut à gauche (ex: TOUR 8420356 → 8420356)
+- "multiplicateur" = petit nombre avec x juste à côté du tour (ex: 6.34x → 6.34)
+- "heure" = heure à droite du tour (ex: 15:24:19)
+- "hex" = valeur sur la ligne "HEX" en bas de l'écran (ex: 272a02f4)
+Si une valeur est absente, mets null.`;
+
+    // ── Méthode 1 : proxy Groq existant (image_url param) ──
+    try {
+        const resp1 = await axios.get('https://groqapi--malalatianasay.replit.app/prompt', {
+            params: { prompt: VISION_PROMPT, uid: 'cosmosx_vision', image_url: imageUrl },
+            timeout: 25000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const txt1 = resp1.data?.response || resp1.data?.answer || resp1.data?.reply ||
+                     resp1.data?.text || resp1.data?.content ||
+                     (typeof resp1.data === 'string' ? resp1.data : null);
+        if (txt1) {
+            const parsed = tryParseVisionJson(txt1);
+            if (parsed) { console.log('[CosmoX Vision] Proxy OK'); return parsed; }
+        }
+    } catch (e) { console.error('[CosmoX Vision] Proxy échoué:', e.message); }
+
+    // ── Méthode 2 : API Groq directe (nécessite clé) ──
+    if (GROQ_API_KEY) {
+        try {
+            const resp2 = await axios.post(GROQ_URL, {
+                model: GROQ_VISION_MODEL,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'image_url', image_url: { url: imageUrl } },
+                        { type: 'text', text: VISION_PROMPT }
+                    ]
+                }],
+                temperature: 0.1,
+                max_tokens: 200
+            }, {
+                headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+                timeout: 22000
+            });
+            const txt2 = resp2.data.choices[0].message.content.trim();
+            const parsed2 = tryParseVisionJson(txt2);
+            if (parsed2) { console.log('[CosmoX Vision] API directe OK'); return parsed2; }
+        } catch (e) { console.error('[CosmoX Vision] API directe échouée:', e.message); }
+    }
+
+    return null;
+}
+
+function tryParseVisionJson(raw) {
+    try {
+        const m = raw.match(/\{[\s\S]*?\}/);
         if (!m) return null;
         const d = JSON.parse(m[0]);
-        if (!d.multiplicateur || !d.tour || !d.heure || !d.hex) return null;
-        return {
-            mult: parseFloat(d.multiplicateur),
-            tour: parseInt(d.tour),
-            time: parseTime(String(d.heure)),
-            hex:  String(d.hex).replace(/[^0-9a-fA-F]/g, '')
-        };
-    } catch (err) {
-        console.error('[CosmoX Vision]', err.message);
-        return null;
-    }
+        const mult = parseFloat(d.multiplicateur);
+        const tour = parseInt(d.tour);
+        const hex  = d.hex ? String(d.hex).replace(/[^0-9a-fA-F]/g, '') : null;
+        const time = d.heure ? parseTime(String(d.heure)) : null;
+        if (isNaN(mult) || isNaN(tour) || !hex || !time) return null;
+        return { mult, tour, time, hex };
+    } catch { return null; }
 }
 
 // ─── Formatage du résultat principal ─────────────────────────────────────────
