@@ -23,6 +23,16 @@ if (!fs.existsSync(vipDir)) {
 
 const vipCommandFiles = fs.readdirSync(vipDir).filter(file => file.endsWith('.js'));
 
+// Charger toutes les commandes du dossier 'Everyone' (accès libre pour tous)
+const everyoneDir = path.join(__dirname, '../Everyone');
+const everyoneCommands = {};
+
+if (!fs.existsSync(everyoneDir)) {
+    fs.mkdirSync(everyoneDir, { recursive: true });
+}
+
+const everyoneCommandFiles = fs.readdirSync(everyoneDir).filter(file => file.endsWith('.js'));
+
 // 状态 de pagination global pour être accessible dans ce module
 const userPaginationStates = {};
 
@@ -43,11 +53,19 @@ for (const file of vipCommandFiles) {
     vipCommands[commandName] = require(`../VIP/${file}`);
 }
 
+// Charger les commandes Everyone (accès libre)
+for (const file of everyoneCommandFiles) {
+    const commandName = file.replace('.js', '');
+    everyoneCommands[commandName] = require(`../Everyone/${file}`);
+}
+
 console.log('Les commandes suivantes ont été chargées :', Object.keys(commands));
 console.log('Les commandes VIP suivantes ont été chargées :', Object.keys(vipCommands));
+console.log('Les commandes Everyone (accès libre) chargées :', Object.keys(everyoneCommands));
 
 const activeCommands = {};
 const activeVIPCommands = {}; // Suivre les commandes VIP actives
+const activeEveryoneCommands = {}; // Suivre les commandes Everyone (accès libre)
 const imageHistory = {};
 const MAX_MESSAGE_LENGTH = 2000; // Limite de caractères pour chaque message envoyé
 
@@ -90,6 +108,54 @@ const handleMessage = async (event, api) => {
     const isCommandAllowed = message.text && (
         message.text.toLowerCase().startsWith('uid')
     );
+
+    // ── COMMANDES EVERYONE (accès libre, aucun abonnement requis) ──
+    // Vérifier si le texte correspond à une commande Everyone ou si une est déjà active
+    if (message.text) {
+        const everyoneTextLower = message.text.trim().toLowerCase();
+        const sortedEveryoneCommands = Object.keys(everyoneCommands).sort((a, b) => b.length - a.length);
+
+        // Détection d'une nouvelle commande Everyone
+        let everyoneCommandDetected = false;
+        let detectedEveryoneCmdName = null;
+        for (const cmdName of sortedEveryoneCommands) {
+            if (everyoneTextLower === cmdName || everyoneTextLower.startsWith(cmdName + ' ')) {
+                everyoneCommandDetected = true;
+                detectedEveryoneCmdName = cmdName;
+                break;
+            }
+        }
+
+        if (everyoneCommandDetected) {
+            // Désactiver toute autre commande active
+            activeCommands[senderId] = null;
+            activeVIPCommands[senderId] = null;
+            activeEveryoneCommands[senderId] = detectedEveryoneCmdName;
+            console.log(`Commande Everyone active pour ${senderId}: ${detectedEveryoneCmdName}`);
+            const cmdPrompt = message.text.trim().slice(detectedEveryoneCmdName.length).trim();
+            try {
+                await everyoneCommands[detectedEveryoneCmdName](senderId, cmdPrompt, api);
+            } catch (err) {
+                console.error(`Erreur commande Everyone ${detectedEveryoneCmdName}:`, err);
+                await sendMessage(senderId, `Une erreur s'est produite avec la commande ${detectedEveryoneCmdName}.`);
+            }
+            return;
+        }
+
+        // Suite d'une commande Everyone déjà active
+        if (activeEveryoneCommands[senderId]) {
+            const activeEvCmd = activeEveryoneCommands[senderId];
+            console.log(`Commande Everyone persistante pour ${senderId}: ${activeEvCmd}`);
+            try {
+                await everyoneCommands[activeEvCmd](senderId, message.text.trim(), api);
+            } catch (err) {
+                console.error(`Erreur commande Everyone persistante ${activeEvCmd}:`, err);
+                await sendMessage(senderId, `Une erreur s'est produite avec la commande ${activeEvCmd}.`);
+            }
+            return;
+        }
+    }
+    // ── FIN COMMANDES EVERYONE ──
 
     // NOUVELLE LOGIQUE D'ACCÈS:
     // - Si modeRestreint est désactivé (false) → tout le monde a accès
@@ -136,9 +202,10 @@ const handleMessage = async (event, api) => {
 
     // Commande "stop" pour désactiver toutes les commandes persistantes
     if (message.text && message.text.toLowerCase() === 'stop') {
-        const previousCommand = activeCommands[senderId] || activeVIPCommands[senderId];
+        const previousCommand = activeCommands[senderId] || activeVIPCommands[senderId] || activeEveryoneCommands[senderId];
         activeCommands[senderId] = null;
         activeVIPCommands[senderId] = null;
+        activeEveryoneCommands[senderId] = null;
         const responseMessage = previousCommand 
             ? `La commande ${previousCommand} a été désactivée. Vous pouvez maintenant utiliser d'autres commandes ou discuter librement.`
             : "Vous n'aviez pas de commande active. Vous pouvez continuer à discuter librement.";
