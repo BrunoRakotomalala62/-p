@@ -109,6 +109,19 @@ const handleMessage = async (event, api) => {
         message.text.toLowerCase().startsWith('uid')
     );
 
+    // Commande "stop" — vérifiée EN PREMIER avant tout bloc de commandes
+    if (message.text && message.text.toLowerCase() === 'stop') {
+        const previousCommand = activeEveryoneCommands[senderId] || activeCommands[senderId] || activeVIPCommands[senderId];
+        activeEveryoneCommands[senderId] = null;
+        activeCommands[senderId] = null;
+        activeVIPCommands[senderId] = null;
+        const responseMessage = previousCommand
+            ? `La commande ${previousCommand} a été désactivée. Vous pouvez maintenant utiliser d'autres commandes ou discuter librement.`
+            : "Vous n'aviez pas de commande active. Vous pouvez continuer à discuter librement.";
+        await sendMessage(senderId, responseMessage);
+        return;
+    }
+
     // ── COMMANDES EVERYONE (accès libre, aucun abonnement requis) ──
     // Vérifier si le texte correspond à une commande Everyone ou si une est déjà active
     if (message.text) {
@@ -200,18 +213,6 @@ const handleMessage = async (event, api) => {
         expirationAlertSent[`vip_${senderId}`] = true;
     }
 
-    // Commande "stop" pour désactiver toutes les commandes persistantes
-    if (message.text && message.text.toLowerCase() === 'stop') {
-        const previousCommand = activeCommands[senderId] || activeVIPCommands[senderId] || activeEveryoneCommands[senderId];
-        activeCommands[senderId] = null;
-        activeVIPCommands[senderId] = null;
-        activeEveryoneCommands[senderId] = null;
-        const responseMessage = previousCommand 
-            ? `La commande ${previousCommand} a été désactivée. Vous pouvez maintenant utiliser d'autres commandes ou discuter librement.`
-            : "Vous n'aviez pas de commande active. Vous pouvez continuer à discuter librement.";
-        await sendMessage(senderId, responseMessage);
-        return;
-    }
     
     // Commande "supprimer" pour réinitialiser la mémoire de la commande active sans la désactiver
     if (message.text && message.text.toLowerCase() === 'supprimer') {
