@@ -41,7 +41,8 @@ module.exports = async (senderId, userText, api) => {
         }
 
         const eleve = data.resultats[0];
-        const isAdmis = eleve.OBSERVATION && eleve.OBSERVATION.toLowerCase().includes('admis');
+        const obs = eleve.OBSERVATION ? eleve.OBSERVATION.toLowerCase().trim() : '';
+        const isAdmis = obs === 'admis' || (obs.includes('admis') && !obs.includes('non admis'));
 
         const medal = isAdmis ? '🏆' : '😔';
         const statusEmoji = isAdmis ? '✅' : '❌';
