@@ -74,18 +74,11 @@ async function sendImage(senderId, imageUrl) {
     });
 }
 
-async function sendPdfByUrl(senderId, pdfUrl, filename) {
+async function uploadBufferToFacebook(senderId, buffer, filename) {
     const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
     if (!PAGE_ACCESS_TOKEN) throw new Error('PAGE_ACCESS_TOKEN manquant');
 
-    const dlRes = await axios.get(pdfUrl, {
-        responseType: 'arraybuffer',
-        timeout: 120000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-    });
-
-    const stream = Readable.from(Buffer.from(dlRes.data));
+    const stream = Readable.from(Buffer.from(buffer));
     const form = new FormData();
     form.append('recipient', JSON.stringify({ id: senderId }));
     form.append('message', JSON.stringify({
@@ -107,6 +100,16 @@ async function sendPdfByUrl(senderId, pdfUrl, filename) {
         }
     );
     return res.data;
+}
+
+async function sendPdfByUrl(senderId, pdfUrl, filename) {
+    const dlRes = await axios.get(pdfUrl, {
+        responseType: 'arraybuffer',
+        timeout: 120000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+    });
+    return await uploadBufferToFacebook(senderId, dlRes.data, filename);
 }
 
 function sleep(ms) {
@@ -288,138 +291,194 @@ async function displayResults(senderId, docs, page, query) {
     await send(senderId, navLines.join('\n'));
 }
 
+async function fetchApercu(pdfIndex) {
+    try {
+        const res = await axios.get(`${API_BASE}/api/apercu`, {
+            params: { pdf: pdfIndex },
+            timeout: 30000
+        });
+        if (res.data && res.data.apercu && res.data.apercu.pages) {
+            return res.data.apercu;
+        }
+        return null;
+    } catch (e) {
+        console.error('[educmad] Erreur apercu:', e.message);
+        return null;
+    }
+}
+
+async function sendPageImages(senderId, apercu) {
+    if (!apercu || !apercu.pages || apercu.pages.length === 0) {
+        await send(senderId, [
+            DECORATIONS.dotline,
+            `ℹ️ Aucun aperçu image disponible pour ce document.`,
+            `🔄 Nouvelle recherche : educmad <matière>`,
+        ].join('\n'));
+        return;
+    }
+
+    const totalPages = apercu.total_pages || apercu.pages.length;
+
+    await send(senderId, [
+        `🖼️ 𝗔𝗣𝗘𝗥𝗖̧𝗨 𝗗𝗘𝗦 𝗣𝗔𝗚𝗘𝗦`,
+        DECORATIONS.line,
+        `📄 ${totalPages} page(s) — envoi en cours...`,
+    ].join('\n'));
+
+    await sleep(400);
+
+    for (let i = 0; i < apercu.pages.length; i++) {
+        const relPath = apercu.pages[i];
+        const imgUrl = relPath.startsWith('http') ? relPath : `${API_BASE}${relPath}`;
+
+        try {
+            await sendImage(senderId, imgUrl);
+            await sleep(300);
+            if ((i + 1) % 5 === 0 && (i + 1) < apercu.pages.length) {
+                await send(senderId, `📄 ${i + 1}/${totalPages} pages envoyées...`);
+                await sleep(200);
+            }
+        } catch (imgErr) {
+            console.error(`[educmad] Image page ${i + 1}:`, imgErr.message);
+            await send(senderId, `⚠️ Page ${i + 1} indisponible.`);
+        }
+    }
+
+    await send(senderId, [
+        `✅ 𝗧𝗘𝗥𝗠𝗜𝗡𝗘́`,
+        DECORATIONS.dotline,
+        `${totalPages} page(s) envoyée(s) avec succès.`,
+        ``,
+        `🔄 Nouvelle recherche : educmad <matière>`,
+        `📖 Guide : educmad aide`,
+    ].join('\n'));
+}
+
 async function handleDownload(senderId, doc) {
     const t = getTypeInfo(doc.type);
     const annee = doc.annee ? `${doc.annee}` : 'N/A';
+    const titre = doc.titre || 'document';
+    const filename = titre.replace(/[^a-zA-Z0-9À-ÿ _-]/g, '').trim().replace(/\s+/g, '_') + '.pdf';
 
     await send(senderId, [
         `⚡ 𝗧𝗘́𝗟𝗘́𝗖𝗛𝗔𝗥𝗚𝗘𝗠𝗘𝗡𝗧 𝗘𝗡 𝗖𝗢𝗨𝗥𝗦`,
         DECORATIONS.line,
         `${t.emoji} ${t.label}`,
-        `📝 ${doc.titre}`,
+        `📝 ${titre}`,
         `📅 Année : ${annee}`,
         ``,
-        `⏳ Préparation du fichier PDF...`,
+        `⏳ Récupération du fichier PDF...`,
     ].join('\n'));
 
+    let pdfSent = false;
+    let fallbackUrl = null;
+    let apercu = null;
+
+    // ── MÉTHODE 1 : /api/telecharger-pdf (binaire direct depuis EDUCMAD) ──
     try {
-        const dlRes = await axios.get(`${API_BASE}/api/download`, {
+        console.log(`[educmad] Tentative téléchargement direct: index=${doc.index}`);
+        const binRes = await axios.get(`${API_BASE}/api/telecharger-pdf`, {
             params: { pdf: doc.index },
-            timeout: 60000
+            responseType: 'arraybuffer',
+            timeout: 120000,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
         });
 
-        const dlData = dlRes.data;
-        if (!dlData.success) {
-            throw new Error('Réponse API invalide');
+        const contentType = binRes.headers['content-type'] || '';
+        if (contentType.includes('application/pdf') || contentType.includes('octet-stream')) {
+            await uploadBufferToFacebook(senderId, binRes.data, filename);
+            pdfSent = true;
+            console.log(`[educmad] ✅ PDF envoyé via /api/telecharger-pdf (${binRes.data.byteLength} bytes)`);
+        } else {
+            const body = JSON.parse(Buffer.from(binRes.data).toString('utf8'));
+            fallbackUrl = body.url_directe || null;
+            console.log(`[educmad] /api/telecharger-pdf: non-PDF (${contentType}), fallback URL:`, fallbackUrl);
         }
-
-        const pdfUrl = dlData.telechargement?.url_directe;
-        const apercu = dlData.apercu;
-        const titre = dlData.document?.titre || doc.titre || 'document';
-        const taille = dlData.document?.taille || '';
-        const filename = titre.replace(/[^a-zA-Z0-9À-ÿ _-]/g, '').trim().replace(/\s+/g, '_') + '.pdf';
-
-        let pdfSent = false;
-
-        if (pdfUrl) {
+    } catch (err1) {
+        const errBody = err1.response?.data;
+        if (errBody) {
             try {
-                await sendPdfByUrl(senderId, pdfUrl, filename);
-                pdfSent = true;
-            } catch (pdfErr) {
-                console.error('[educmad] Erreur envoi PDF upload:', pdfErr.message);
-                try {
-                    await sendMessage(senderId, {
-                        attachment: {
-                            type: 'file',
-                            payload: { url: pdfUrl, is_reusable: true }
+                const parsed = JSON.parse(Buffer.from(errBody).toString('utf8'));
+                fallbackUrl = parsed.url_directe || null;
+            } catch (_) {}
+        }
+        console.log(`[educmad] /api/telecharger-pdf échoué (${err1.message}), passage au fallback`);
+    }
+
+    // ── MÉTHODE 2 : /api/download → url_directe (si méthode 1 a échoué) ──
+    if (!pdfSent) {
+        try {
+            console.log(`[educmad] Fallback /api/download: index=${doc.index}`);
+            const dlRes = await axios.get(`${API_BASE}/api/download`, {
+                params: { pdf: doc.index },
+                timeout: 60000
+            });
+            const dlData = dlRes.data;
+
+            if (dlData.success) {
+                apercu = dlData.apercu || null;
+                const directUrl = dlData.telechargement?.url_directe || fallbackUrl;
+
+                if (directUrl) {
+                    try {
+                        await sendPdfByUrl(senderId, directUrl, filename);
+                        pdfSent = true;
+                        console.log(`[educmad] ✅ PDF envoyé via url_directe`);
+                    } catch (uploadErr) {
+                        console.log(`[educmad] Upload url_directe échoué:`, uploadErr.message);
+                        try {
+                            await sendMessage(senderId, {
+                                attachment: {
+                                    type: 'file',
+                                    payload: { url: directUrl, is_reusable: true }
+                                }
+                            });
+                            pdfSent = true;
+                            console.log(`[educmad] ✅ PDF envoyé via attachment URL`);
+                        } catch (attachErr) {
+                            console.error(`[educmad] Toutes les méthodes PDF ont échoué`);
+                            fallbackUrl = directUrl;
                         }
-                    });
-                    pdfSent = true;
-                } catch (fallbackErr) {
-                    console.error('[educmad] Fallback URL échoué:', fallbackErr.message);
-                }
-            }
-        }
-
-        if (pdfSent) {
-            await send(senderId, [
-                `✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦`,
-                DECORATIONS.top,
-                `${t.emoji} ${t.label}`,
-                `📝 ${titre}`,
-                `📅 Année : ${annee}`,
-                taille ? `📦 Taille : ${taille}` : '',
-                DECORATIONS.bottom,
-                ``,
-                `📱 Sauvegarde le PDF sur ton appareil !`,
-            ].filter(l => l !== '').join('\n'));
-        } else {
-            await send(senderId, [
-                `⚠️ Envoi PDF impossible`,
-                `Lien direct : ${pdfUrl || 'non disponible'}`,
-            ].join('\n'));
-        }
-
-        if (apercu && apercu.pages && apercu.pages.length > 0) {
-            await sleep(500);
-
-            const totalPages = apercu.total_pages || apercu.pages.length;
-
-            await send(senderId, [
-                `🖼️ 𝗔𝗣𝗘𝗥𝗖̧𝗨 𝗗𝗘𝗦 𝗣𝗔𝗚𝗘𝗦`,
-                DECORATIONS.line,
-                `📄 Ce document contient ${totalPages} page(s)`,
-                `📸 Envoi de chaque page en image...`,
-            ].join('\n'));
-
-            await sleep(400);
-
-            for (let i = 0; i < apercu.pages.length; i++) {
-                const relPath = apercu.pages[i];
-                const imgUrl = relPath.startsWith('http') ? relPath : `${API_BASE}${relPath}`;
-
-                try {
-                    await sendImage(senderId, imgUrl);
-                    await sleep(300);
-
-                    if ((i + 1) % 5 === 0 && (i + 1) < apercu.pages.length) {
-                        await send(senderId, `📄 Pages ${i + 1}/${totalPages} envoyées...`);
-                        await sleep(300);
                     }
-                } catch (imgErr) {
-                    console.error(`[educmad] Erreur image page ${i + 1}:`, imgErr.message);
-                    await send(senderId, `⚠️ Page ${i + 1} non disponible.`);
                 }
             }
-
-            await sleep(300);
-            await send(senderId, [
-                `✅ 𝗧𝗘𝗥𝗠𝗜𝗡𝗘́`,
-                DECORATIONS.dotline,
-                `Toutes les ${totalPages} page(s) ont été envoyées.`,
-                ``,
-                `🔄 Nouvelle recherche : educmad <matière>`,
-                `📖 Guide : educmad aide`,
-            ].join('\n'));
-        } else {
-            await send(senderId, [
-                DECORATIONS.dotline,
-                `ℹ️ Aucun aperçu image disponible pour ce document.`,
-                `🔄 Nouvelle recherche : educmad <matière>`,
-            ].join('\n'));
+        } catch (err2) {
+            console.error('[educmad] /api/download échoué:', err2.message);
         }
+    }
 
-    } catch (err) {
-        console.error('[educmad] Erreur téléchargement:', err.message);
+    // ── Confirmation d'envoi ──
+    if (pdfSent) {
         await send(senderId, [
-            `❌ 𝗘𝗿𝗿𝗲𝘂𝗿 𝗱𝗲 𝘁𝗲́𝗹𝗲́𝗰𝗵𝗮𝗿𝗴𝗲𝗺𝗲𝗻𝘁`,
+            `✅ 𝗣𝗗𝗙 𝗘𝗡𝗩𝗢𝗬𝗘́ 𝗔𝗩𝗘𝗖 𝗦𝗨𝗖𝗖𝗘̀𝗦`,
+            DECORATIONS.top,
+            `${t.emoji} ${t.label}`,
+            `📝 ${titre}`,
+            `📅 Année : ${annee}`,
+            DECORATIONS.bottom,
+            `📱 Sauvegarde le PDF sur ton appareil !`,
+        ].join('\n'));
+    } else {
+        await send(senderId, [
+            `⚠️ 𝗘𝗻𝘃𝗼𝗶 𝗣𝗗𝗙 𝗶𝗺𝗽𝗼𝘀𝘀𝗶𝗯𝗹𝗲`,
             DECORATIONS.line,
-            `Impossible de récupérer ce document.`,
-            `Réessaie dans quelques instants. ⏱️`,
+            fallbackUrl
+                ? `🔗 Lien direct :\n${fallbackUrl}`
+                : `Ce document n'est pas disponible en PDF.`,
             ``,
-            `🔄 educmad aide — pour relancer`,
+            `🔄 Nouvelle recherche : educmad <matière>`,
         ].join('\n'));
     }
+
+    // ── Aperçu des pages (images) ──
+    await sleep(500);
+
+    if (!apercu) {
+        apercu = await fetchApercu(doc.index);
+    }
+
+    await sendPageImages(senderId, apercu);
 }
 
 module.exports = async (senderId, prompt, api) => {
