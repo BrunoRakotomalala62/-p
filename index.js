@@ -192,6 +192,39 @@ app.post('/gemini/reset', async (req, res) => {
     }
 });
 
+// Route proxy pour téléchargement MP3 avec nom de fichier correct
+app.get('/audio-proxy', async (req, res) => {
+    try {
+        const { index, artiste, titre } = req.query;
+        if (index === undefined || !artiste) {
+            return res.status(400).json({ erreur: 'Paramètres manquants: index, artiste' });
+        }
+
+        const apiUrl = `https://mp3-juice.onrender.com/api/download?index=${index}&artiste=${encodeURIComponent(artiste)}`;
+        const safeTitle = (titre || artiste)
+            .replace(/[^a-zA-Z0-9À-ÿ \-_]/g, '')
+            .trim()
+            .substring(0, 80);
+        const filename = `${safeTitle}.mp3`;
+
+        const response = await axios.get(apiUrl, {
+            responseType: 'stream',
+            timeout: 60000
+        });
+
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        if (response.headers['content-length']) {
+            res.setHeader('Content-Length', response.headers['content-length']);
+        }
+
+        response.data.pipe(res);
+    } catch (error) {
+        console.error('Erreur proxy audio:', error.message);
+        res.status(500).json({ erreur: 'Erreur lors du téléchargement audio' });
+    }
+});
+
 // Route pour le téléchargement dynamique de vidéos avec qualité
 app.get('/download/:id', async (req, res) => {
     try {

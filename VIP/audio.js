@@ -109,26 +109,44 @@ module.exports = async (senderId, prompt, api) => {
 
                 await sendMessage(senderId, rand(DOWNLOAD_MSGS));
 
-                const downloadUrl = `${API_BASE}/download?index=${track.index}&artiste=${encodeURIComponent(artiste)}`;
+                const baseUrl = process.env.REPLIT_DEV_DOMAIN
+                    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+                    : `http://localhost:${process.env.PORT || 5000}`;
+
+                const proxyUrl = `${baseUrl}/audio-proxy?index=${track.index}&artiste=${encodeURIComponent(artiste)}&titre=${encodeURIComponent(track.titre)}`;
+                const directUrl = `${API_BASE}/download?index=${track.index}&artiste=${encodeURIComponent(artiste)}`;
 
                 await sendMessage(senderId, buildDownloadCard(track, artiste));
 
+                // 1️⃣ Fichier téléchargeable (carte comme PDF — clic = téléchargement .mp3)
+                try {
+                    await sendMessage(senderId, {
+                        attachment: {
+                            type: 'file',
+                            payload: {
+                                url: proxyUrl,
+                                is_reusable: true
+                            }
+                        }
+                    });
+                } catch (fileErr) {
+                    console.error('Erreur envoi fichier:', fileErr.message);
+                    await sendMessage(senderId, `📥 Lien de téléchargement :\n${directUrl}`);
+                }
+
+                // 2️⃣ Lecteur audio intégré (écoute directe dans Messenger)
                 try {
                     await sendMessage(senderId, {
                         attachment: {
                             type: 'audio',
                             payload: {
-                                url: downloadUrl,
+                                url: directUrl,
                                 is_reusable: true
                             }
                         }
                     });
-                } catch (attachErr) {
-                    console.error('Erreur envoi audio:', attachErr.message);
-                    await sendMessage(senderId,
-                        `⚠️ Impossible d'envoyer directement.\n` +
-                        `🔗 Lien direct :\n${downloadUrl}`
-                    );
+                } catch (audioErr) {
+                    console.error('Erreur envoi audio:', audioErr.message);
                 }
 
                 await sendMessage(senderId,
