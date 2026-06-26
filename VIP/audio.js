@@ -109,44 +109,43 @@ module.exports = async (senderId, prompt, api) => {
 
                 await sendMessage(senderId, rand(DOWNLOAD_MSGS));
 
-                const baseUrl = process.env.REPLIT_DEV_DOMAIN
-                    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-                    : `http://localhost:${process.env.PORT || 5000}`;
-
-                const proxyUrl = `${baseUrl}/audio-proxy?index=${track.index}&artiste=${encodeURIComponent(artiste)}&titre=${encodeURIComponent(track.titre)}`;
-                const directUrl = `${API_BASE}/download?index=${track.index}&artiste=${encodeURIComponent(artiste)}`;
+                // URL PDF-MP3 : envoyé comme fichier PDF cliquable dans Messenger
+                const pdfUrl  = `https://mp3-juice.onrender.com/api/mp3?pdf=1&artiste=${encodeURIComponent(artiste)}&index=${track.index}`;
+                // URL audio brut : pour le lecteur intégré Messenger
+                const audioUrl = `${API_BASE}/download?index=${track.index}&artiste=${encodeURIComponent(artiste)}`;
 
                 await sendMessage(senderId, buildDownloadCard(track, artiste));
 
-                // 1️⃣ Fichier téléchargeable (carte comme PDF — clic = téléchargement .mp3)
+                // 1️⃣ Fichier PDF-MP3 cliquable (carte comme PDF dans Messenger)
+                //    → clic = téléchargement direct, renommer en .mp3 après
                 try {
                     await sendMessage(senderId, {
                         attachment: {
                             type: 'file',
                             payload: {
-                                url: proxyUrl,
+                                url: pdfUrl,
                                 is_reusable: true
                             }
                         }
                     });
                 } catch (fileErr) {
-                    console.error('Erreur envoi fichier:', fileErr.message);
-                    await sendMessage(senderId, `📥 Lien de téléchargement :\n${directUrl}`);
+                    console.error('Erreur envoi fichier PDF-MP3:', fileErr.message);
+                    await sendMessage(senderId, `📥 Lien de téléchargement :\n${pdfUrl}`);
                 }
 
-                // 2️⃣ Lecteur audio intégré (écoute directe dans Messenger)
+                // 2️⃣ Lecteur audio intégré (écoute directe sans télécharger)
                 try {
                     await sendMessage(senderId, {
                         attachment: {
                             type: 'audio',
                             payload: {
-                                url: directUrl,
+                                url: audioUrl,
                                 is_reusable: true
                             }
                         }
                     });
                 } catch (audioErr) {
-                    console.error('Erreur envoi audio:', audioErr.message);
+                    console.error('Erreur envoi lecteur audio:', audioErr.message);
                 }
 
                 await sendMessage(senderId,
