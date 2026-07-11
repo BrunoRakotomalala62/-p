@@ -1,0 +1,85 @@
+M
+My Workspace
+
+
+B
+Ai-page-bot-vraie-by-Bruno
+
+Your free instance will spin down with inactivity, which can delay requests by 50 seconds or more.
+Upgrade now
+Newer logs may be unavailable because a recent deploy failed. View recent events.
+
+Application logs
+Search
+Search logs
+
+Last hour
+
+
+
+
+New logs in Live Tail
+
+  error: {
+    message: '(#100) Aucune correspondance trouvée pour cet utilisateur',
+    type: 'OAuthException',
+    code: 100,
+    error_subcode: 2018001,
+    fbtrace_id: 'AVl7DkEIujl-lh9sTQSBJaQ'
+  }
+}
+==> Running 'node index.js'
+Les commandes suivantes ont été chargées : [
+  'abreviation',  'action',         'admin',       'ai',
+  'aifree',       'alerte',         'ampinga',     'asta',
+  'audio',        'autodown',       'axtral',      'baiboly',
+  'bible',        'bien',           'binggen',     'bot',
+  'bruno',        'calendrier',     'cat',         'chanson',
+  'chat',         'check',          'checker',     'citation',
+  'claude',       'cocktail',       'cohere',      'combine',
+  'commandstore', 'conjugaison',    'correction',  'country',
+  'dalle',        'date',           'deepseek',    'define',
+  'definition',   'detector',       'dico',        'dictionnaire',
+  'dog',          'echange',        'espa',        'fbcover4',
+  'fbcreate',     'fbphp',          'fihirana',    'gangstock',
+  'gem29',        'gemini',         'gemma7',      'generation',
+  'geo',          'german',         'googletrans', 'gpt',
+  'gpt4',         'grok2',          'haiku',       'help',
+  'hentaivn',     'hermes',         'hira',        'historique',
+  'horoscope',    'humain',         'humanizer',   'image',
+  'imdb',         'irregularverbe', 'joke',        'kilody',
+  'learn',        'learnlm15',      'lily',        'liner',
+  'lingvanex',    'liquid',         'llama',       'llama3',
+  'luffy',        'lyrics',         'malagasy',    'math',
+  'midijourney',  'miko',           'miora',       'mistral',
+  'mistral3',     'mixtral',        'moltbook',    'moltcomment',
+  'music',        'nano',           'news',        'nhentai',
+  'ohab',         'ohabolana',      'online',      'openroute',
+  ... 49 more items
+]
+Les commandes VIP suivantes ont été chargées : [
+  'apk',         'audio',     'aviator',
+  'boost',       'clip',      'cosmosx',
+  'dailymotion', 'dynamique', 'education',
+  'educmad',     'film',      'github',
+  'jackpot',     'jetx',      'livre',
+  'master',      'movie',     'pdf',
+  'radio',       'scribd',    'secret',
+  'sujet',       'tour',      'x',
+  'xn',          'youtube'
+]
+Les commandes Everyone (accès libre) chargées : [ 'cepe' ]
+Serveur démarré sur http://0.0.0.0:10000
+0 services selected:
+
+Move
+
+
+GMT+3:
+Jul 11 07:03:40 PM
+UTC:
+Jul 11 04:03:40 PM
+Timestamp:
+1783785820603
+From previous:
+0s
