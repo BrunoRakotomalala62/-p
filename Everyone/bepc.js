@@ -1,7 +1,7 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-const API_URL = 'https://valina-cepe-2026.onrender.com/api/bepc';
+const API_URL = 'https://valina-cepe-2026-jt24.onrender.com/api/bepc';
 
 function isMatricule(text) {
     return /\d{5,}/.test(text);
