@@ -1,0 +1,1 @@
+- [Imported bot vs. live deployment](imported-bot-vs-live-deployment.md) — when a user reports a live Messenger/bot bug, verify whether this Replit project is even wired to the live endpoint before trusting the bug reproduces here.

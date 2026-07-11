@@ -10,7 +10,8 @@ Preferred communication style: Simple, everyday language.
 
 - Runtime: Node.js 20 (upgraded from the imported Node 14 config, which couldn't load modern dependencies like `node-cron`).
 - Start: `npm start` (runs `node index.js`), bound to port 5000 via the "Start application" workflow.
-- Everyone-access commands live in `Everyone/` and are auto-loaded by filename — no manual registration needed. `bepc.js` (BEPC 2026 results) mirrors `cepe.js`, calling `https://valina-cepe-2026.onrender.com/api/bepc`. Note: as of setup, that endpoint returns "Cannot GET /api/bepc" — the external API may not have deployed the BEPC route yet.
+- Everyone-access commands live in `Everyone/` and are auto-loaded by filename — no manual registration needed. `bepc.js` (BEPC 2026 results) mirrors `cepe.js`, now calling `https://valina-cepe-2026-jt24.onrender.com/api/bepc` (updated URL — the old `valina-cepe-2026.onrender.com/api/bepc` 404'd). Verified working: both the bare `bepc` prompt and `bepc <matricule/nom>` lookups route correctly through the Everyone-command handler and hit the live API.
+- No Facebook secrets (`PAGE_ACCESS_TOKEN`, `VERIFY_TOKEN`) are configured yet, so this Replit instance isn't wired up as the live Messenger webhook — it was only verified locally by invoking `handleMessage` directly. If Messenger tests still show Gemini answering instead of `bepc`/`cepe`, that traffic is likely still hitting a different deployment (e.g. Vercel) running older code, not this Replit project.
 
 # System Architecture
 
