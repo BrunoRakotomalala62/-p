@@ -6,6 +6,12 @@ This project is a Facebook Messenger bot built with Node.js and Express, designe
 
 Preferred communication style: Simple, everyday language.
 
+# Running on Replit
+
+- Runtime: Node.js 20 (upgraded from the imported Node 14 config, which couldn't load modern dependencies like `node-cron`).
+- Start: `npm start` (runs `node index.js`), bound to port 5000 via the "Start application" workflow.
+- Everyone-access commands live in `Everyone/` and are auto-loaded by filename — no manual registration needed. `bepc.js` (BEPC 2026 results) mirrors `cepe.js`, calling `https://valina-cepe-2026.onrender.com/api/bepc`. Note: as of setup, that endpoint returns "Cannot GET /api/bepc" — the external API may not have deployed the BEPC route yet.
+
 # System Architecture
 
 ## Backend Architecture
