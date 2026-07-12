@@ -1,10 +1,32 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
 
-const API_URL = 'https://valina-cepe-2026.onrender.com/api/cepe';
+const BASE_URL = 'https://valina-cepe-2026-ztym.onrender.com';
+const API_URL = `${BASE_URL}/api/cepe`;
+const CISCO_URL = `${BASE_URL}/api/cisco`;
 
 function isMatricule(text) {
     return /\d{5,}/.test(text);
+}
+
+async function getCiscoListMessage() {
+    try {
+        const response = await axios.get(CISCO_URL, {
+            params: { examen: 'cepe' },
+            timeout: 15000
+        });
+        const data = response.data;
+        if (!data || !Array.isArray(data.ciscos) || data.ciscos.length === 0) {
+            return '';
+        }
+        return (
+            `\n📍 *CISCO disponibles pour le CEPE (${data.total || data.ciscos.length})* :\n` +
+            data.ciscos.join(', ')
+        );
+    } catch (err) {
+        console.error('Erreur récupération liste CISCO CEPE:', err.message);
+        return '';
+    }
 }
 
 function buildResultMessage(eleve, examen) {
@@ -79,11 +101,13 @@ module.exports = async (senderId, userText, api) => {
         const data = response.data;
 
         if (!data || !data.resultats || data.resultats.length === 0) {
+            const ciscoList = await getCiscoListMessage();
             await sendMessage(senderId,
                 '❌ *Aucun résultat trouvé*\n\n' +
                 `🔍 ${searchLabel}\n\n` +
                 '⚠️ Aucun candidat trouvé avec cette information.\n' +
-                'Vérifiez l\'orthographe ou le numéro et réessayez.'
+                'Vérifiez l\'orthographe ou le numéro et réessayez.' +
+                ciscoList
             );
             return;
         }
@@ -119,11 +143,13 @@ module.exports = async (senderId, userText, api) => {
         console.error('Erreur commande cepe:', error.message);
 
         if (error.response && error.response.status === 404) {
+            const ciscoList = await getCiscoListMessage();
             await sendMessage(senderId,
                 '❌ *Introuvable*\n\n' +
                 `🔍 ${searchLabel}\n\n` +
                 '⚠️ Aucun candidat enregistré avec cette information.\n' +
-                'Vérifiez et réessayez.'
+                'Vérifiez et réessayez.' +
+                ciscoList
             );
         } else {
             await sendMessage(senderId,
