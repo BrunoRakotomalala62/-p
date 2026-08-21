@@ -3,9 +3,9 @@ const sendMessage = require('../handles/sendMessage');
 const qs = require('qs');
 
 const userImageMemory = new Map();
-
+const GROQ_API_BASE_URL = "https://groqapi--monsieurbruno0.replit.app";
 const API_CONFIG = {
-    GROQ_URL: "https://groqapi--monsieurbruno0.replit.app/prompt",
+    GROQ_URL: `${GROQ_API_BASE_URL}/prompt`,
     TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
