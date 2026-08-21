@@ -1,10 +1,11 @@
 const axios = require('axios');
 const sendMessage = require('../handles/sendMessage');
+const qs = require('qs');
 
 const userImageMemory = new Map();
 
 const API_CONFIG = {
-    GROQ_URL: "https://groqapi--malalatianasay.replit.app/prompt",
+    GROQ_URL: "https://groqapi--monsieurbruno0.replit.app/prompt",
     TIMEOUT: 90000,
     USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
@@ -238,7 +239,9 @@ function applyFinalStructure(responseBody) {
 
 async function callGeminiApi(params) {
     const rawPrompt = params.prompt || params.pro || "Décrivez bien cette photo.";
-    const image_url = params.image || null;
+    const imageUrls = params.images && params.images.length > 0
+        ? params.images
+        : (params.image ? [params.image] : []);
     const uid = params.uid || "123";
 
     const finalPrompt = `${SYSTEM_INSTRUCTION}\n\n---\n\n${rawPrompt}`;
@@ -251,12 +254,13 @@ async function callGeminiApi(params) {
             uid: uid
         };
 
-        if (image_url) {
-            queryParams.image_url = image_url;
+        if (imageUrls.length > 0) {
+            queryParams.image_url = imageUrls;
         }
 
         const response = await axios.get(API_CONFIG.GROQ_URL, {
             params: queryParams,
+            paramsSerializer: params => qs.stringify(params, { arrayFormat: 'repeat' }),
             timeout: API_CONFIG.TIMEOUT,
             headers: { 'User-Agent': API_CONFIG.USER_AGENT }
         });
@@ -308,7 +312,7 @@ async function chatWithMultipleImages(prompt, uid, imageUrls) {
         uid
     };
     if (imageUrls && imageUrls.length > 0) {
-        params.image = imageUrls[0];
+        params.images = imageUrls;
     }
     return await callGeminiApi(params);
 }

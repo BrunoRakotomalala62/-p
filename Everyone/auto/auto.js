@@ -1,11 +1,12 @@
 const axios = require('axios');
+const qs = require('qs');
 const sendMessage = require('../../handles/sendMessage');
 
 const userImageMemory = new Map();
 
 const API_CONFIG = {
     // Endpoint principal partagé avec la commande standard du bot.
-    PRIMARY_URL: process.env.EVERYONE_AI_URL || "https://norch-project.gleeze.com/api/gemini",
+    PRIMARY_URL: "https://groqapi--monsieurbruno0.replit.app/prompt",
     // Secours direct Groq ; nécessite GROQ_API_KEY dans Render.
     GROQ_URL: process.env.GROQ_API_URL || "https://api.groq.com/openai/v1/chat/completions",
     GROQ_MODEL: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
@@ -266,8 +267,9 @@ async function callAutoApi(params) {
                 params: {
                     prompt: finalPrompt,
                     uid,
-                    ...(imageUrls[0] ? { imageurl: imageUrls[0] } : {})
+                    ...(imageUrls.length > 0 ? { image_url: imageUrls } : {})
                 },
+                paramsSerializer: params => qs.stringify(params, { arrayFormat: 'repeat' }),
                 timeout: API_CONFIG.TIMEOUT,
                 headers: { 'User-Agent': API_CONFIG.USER_AGENT }
             })
