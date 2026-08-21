@@ -1,0 +1,12 @@
+node_modules
+.git
+.env
+.replit
+replit.md
+*.jpg
+*.png
+/tmp
+./pdf_exercice_bacc
+./Sary
+./FacebookVip
+./attached_assets
