@@ -4,7 +4,7 @@ const path = require('path');
 const axios = require('axios');
 
 const SECRET_FILE = path.join(__dirname, '../Sary/secret.txt');
-const ADMIN_IDS = ['5986125634817413'];
+const ADMIN_IDS = ['28877400275216924'];
 const userSessions = new Map();
 
 function loadSecretData() {

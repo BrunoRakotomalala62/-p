@@ -2,7 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const sendMessage = require('../handles/sendMessage');
 
-const ADMIN_IDS = ['5986125634817413'];
+const ADMIN_IDS = ['28877400275216924'];
 
 const uidFilePath = path.join(__dirname, '../Facebook/uid.txt');
 const vipUidFilePath = path.join(__dirname, '../FacebookVip/uidvip.txt');

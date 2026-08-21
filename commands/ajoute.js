@@ -4,7 +4,7 @@ const sendMessage = require('../handles/sendMessage');
 const { syncFileToGitHub } = require('../utils/githubSync');
 
 // Liste des administrateurs autorisés (même liste que admin.js)
-const ADMIN_IDS = ['5986125634817413'];
+const ADMIN_IDS = ['28877400275216924'];
 
 // Fichiers cibles
 const FACEBOOK_FILE = path.join(__dirname, '../Facebook/uid.txt');

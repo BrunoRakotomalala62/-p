@@ -15,7 +15,7 @@ if (!fs.existsSync(vipUidFilePath)) {
 }
 
 // Importer les IDs administrateurs (même liste que dans subscription.js)
-const ADMIN_IDS = ['5986125634817413'];
+const ADMIN_IDS = ['28877400275216924'];
 
 /**
  * Vérifie si un utilisateur est VIP
